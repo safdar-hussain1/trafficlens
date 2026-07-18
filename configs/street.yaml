@@ -1,0 +1,26 @@
+# Street-level camera: mixed traffic (people, bikes, cars).
+# Works out of the box with the fetched sample:
+#   trafficlens fetch-samples
+#   trafficlens run --config configs/street.yaml --save-video out.mp4
+
+source: data/samples/person-bicycle-car-detection.mp4
+
+detector:
+  model: yolo11s.pt
+  classes: [person, bicycle, car]
+  confidence: 0.4
+  imgsz: 960          # small objects at 768x432 need the bigger input
+
+gates:
+  - name: crossing
+    start: [0.02, 0.55]
+    end: [0.98, 0.55]
+    label_positive: approaching
+    label_negative: leaving
+
+# No calibration here on purpose: this camera's road geometry hasn't been
+# surveyed, and TrafficLens never invents speeds from pixels. Counts work
+# without calibration; add one for your own camera (docs/CALIBRATION.md).
+
+speed:
+  unit: kmh

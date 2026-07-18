@@ -1,0 +1,4 @@
+frame,timestamp_s,track_id,class,gate,direction,speed,violation
+64,5.333,1,person,crossing,leaving,,0
+217,18.083,5,car,crossing,leaving,,0
+564,47.000,16,car,crossing,leaving,,0

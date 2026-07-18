@@ -1,0 +1,63 @@
+# Motorway A40 (Dortmund) from a bridge — the flagship demo.
+# Footage: "Motorway A40 - on bridge above the traffic", Sounds of Changes,
+# CC BY 3.0, via Wikimedia Commons (fetched by `trafficlens fetch-samples`).
+#
+# Two gates: one per carriageway. The homography was surveyed from the
+# lane-divider dashes of the left (towards-camera) carriageway — German
+# autobahn dashes repeat every 18 m (6 m paint + 12 m gap) — plus the
+# parallel lane edge one 3.65 m lane away. Verified against a mid-corridor
+# car footprint (4.96 m measured; real cars are 4.5-5 m). Speeds on the
+# right carriageway are lateral extrapolation of the same road plane:
+# treat them as approximate.
+
+source: data/samples/motorway-a40.webm
+
+detector:
+  model: yolo11s.pt
+  classes: [car, truck, bus, motorcycle]
+  confidence: 0.35
+  imgsz: 960
+
+gates:
+  - name: inbound
+    start: [0.06, 0.80]
+    end: [0.55, 0.80]
+    label_positive: in
+    label_negative: out
+  - name: outbound
+    start: [0.60, 0.75]
+    end: [0.98, 0.75]
+    label_positive: in
+    label_negative: out
+
+calibration:
+  mode: homography
+  image_points:
+    # lane-divider dash starts, near -> far (18 m apart)
+    - [0.225, 0.965]
+    - [0.305, 0.855]
+    - [0.365, 0.765]
+    - [0.405, 0.695]
+    - [0.440, 0.640]
+    # lane edge line at the same depths, one lane (3.65 m) to the left
+    - [0.085, 0.965]
+    - [0.175, 0.855]
+    - [0.245, 0.765]
+    - [0.290, 0.695]
+    - [0.325, 0.640]
+  world_points:
+    - [0, 0]
+    - [0, 18]
+    - [0, 36]
+    - [0, 54]
+    - [0, 72]
+    - [-3.65, 0]
+    - [-3.65, 18]
+    - [-3.65, 36]
+    - [-3.65, 54]
+    - [-3.65, 72]
+
+speed:
+  unit: kmh
+  speed_limit: 80
+  window_seconds: 0.5

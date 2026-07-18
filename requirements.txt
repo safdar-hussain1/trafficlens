@@ -1,0 +1,12 @@
+ultralytics>=8.4
+opencv-python>=4.8
+numpy>=1.24
+pydantic>=2.5
+PyYAML>=6.0
+click>=8.1
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# dev
+pytest>=8.0
+httpx>=0.27

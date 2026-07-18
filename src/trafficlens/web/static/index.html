@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrafficLens — live traffic analytics</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23141619'/><path d='M14 62 L86 62' stroke='%23FFB020' stroke-width='7' stroke-dasharray='14 9'/><circle cx='50' cy='38' r='13' fill='none' stroke='%23E8E6DF' stroke-width='6'/></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <h1>TrafficLens</h1>
+    <span class="brand-sub">count &amp; speed, any camera</span>
+  </div>
+  <div class="run-state" id="run-state" data-state="idle">
+    <span class="run-dot" aria-hidden="true"></span>
+    <span id="run-label">standing by</span>
+  </div>
+</header>
+
+<main class="deck">
+  <!-- ══ video wall ══ -->
+  <section class="wall" aria-label="Live view">
+    <div class="viewport" id="viewport">
+      <img id="stream" alt="" draggable="false">
+      <svg id="overlay" preserveAspectRatio="none" viewBox="0 0 1000 562"></svg>
+      <div class="viewport-empty" id="viewport-empty">
+        <div class="empty-sign">
+          <span class="empty-glyph" aria-hidden="true"></span>
+          <p><strong>No camera connected.</strong></p>
+          <p>Pick a source on the right and press <em>Start analysis</em>.<br>
+             Then draw a counting gate straight onto the video.</p>
+        </div>
+      </div>
+      <div class="hint-strip" id="hint-strip" hidden></div>
+    </div>
+    <div class="wall-tools" id="wall-tools">
+      <button id="tool-gate" class="tool" disabled>+ Counting gate</button>
+      <button id="tool-calib" class="tool" disabled>Calibrate speed</button>
+      <button id="tool-clear-calib" class="tool ghost" disabled>Remove calibration</button>
+      <span class="tool-spacer"></span>
+      <a class="tool ghost" id="dl-events" href="/api/export/events.csv" download hidden>Download events CSV</a>
+      <a class="tool ghost" id="dl-summary" href="/api/export/summary.json" download hidden>Summary JSON</a>
+    </div>
+  </section>
+
+  <!-- ══ instrument rack ══ -->
+  <aside class="rack" aria-label="Controls">
+    <form id="start-form" class="module" autocomplete="off">
+      <h2 class="module-title">Source</h2>
+      <label class="field">
+        <span>Video file, webcam index, or RTSP URL</span>
+        <input id="f-source" name="source" placeholder="data/samples/motorway-a40.webm" required>
+      </label>
+      <div class="quick-row" id="quick-sources">
+        <button type="button" data-src="data/samples/motorway-a40.webm">sample: motorway</button>
+        <button type="button" data-src="data/samples/person-bicycle-car-detection.mp4">sample: street</button>
+        <button type="button" data-src="0">webcam 0</button>
+      </div>
+
+      <h2 class="module-title">Detector</h2>
+      <div class="field-row">
+        <label class="field">
+          <span>Model</span>
+          <select id="f-model"></select>
+        </label>
+        <label class="field">
+          <span>Confidence <output id="conf-out">0.35</output></span>
+          <input id="f-conf" type="range" min="0.05" max="0.9" step="0.05" value="0.35">
+        </label>
+      </div>
+      <fieldset class="field">
+        <legend>Count these classes</legend>
+        <div class="chip-row" id="class-chips"></div>
+        <div class="chip-add">
+          <input id="f-class-extra" list="all-classes" placeholder="add any COCO class…">
+          <datalist id="all-classes"></datalist>
+          <button type="button" id="btn-add-class">add</button>
+        </div>
+      </fieldset>
+
+      <h2 class="module-title">Speed</h2>
+      <div class="field-row">
+        <label class="field">
+          <span>Limit (blank = off)</span>
+          <input id="f-limit" type="number" min="1" step="1" placeholder="e.g. 60">
+        </label>
+        <label class="field">
+          <span>Unit</span>
+          <select id="f-unit">
+            <option value="kmh" selected>km/h</option>
+            <option value="mph">mph</option>
+          </select>
+        </label>
+      </div>
+      <p class="module-note">Speeds need a one-time calibration — draw it on the video after starting.</p>
+
+      <button class="go" id="btn-start" type="submit">Start analysis</button>
+      <button class="go stop" id="btn-stop" type="button" hidden>Stop session</button>
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+    </form>
+
+    <div class="module" id="gate-module" hidden>
+      <h2 class="module-title">Gates</h2>
+      <ul class="gate-list" id="gate-list"></ul>
+    </div>
+  </aside>
+
+  <!-- ══ telemetry strip ══ -->
+  <section class="telemetry" aria-label="Live counts">
+    <div class="tiles" id="count-tiles">
+      <div class="tile tile-idle" id="tile-placeholder">
+        <span class="tile-value">—</span>
+        <span class="tile-label">counts appear here</span>
+      </div>
+    </div>
+    <div class="tiles tiles-right">
+      <div class="tile" id="tile-tracks"><span class="tile-value">0</span><span class="tile-label">objects in view</span></div>
+      <div class="tile" id="tile-fps"><span class="tile-value">—</span><span class="tile-label">processing fps</span></div>
+      <div class="tile tile-alert" id="tile-violations"><span class="tile-value">0</span><span class="tile-label">speed violations</span></div>
+    </div>
+  </section>
+
+  <!-- ══ ledger: events + violations + speeds ══ -->
+  <section class="ledger">
+    <div class="board" aria-label="Crossing log">
+      <h2 class="module-title">Crossing log</h2>
+      <table class="board-table">
+        <thead><tr><th>time</th><th>gate</th><th>object</th><th>dir</th><th>speed</th></tr></thead>
+        <tbody id="event-rows">
+          <tr class="board-empty"><td colspan="5">Every counted crossing lands here, newest first.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="board" aria-label="Speed statistics">
+      <h2 class="module-title">Speeds by class <span class="unit-echo" id="unit-echo"></span></h2>
+      <table class="board-table">
+        <thead><tr><th>class</th><th>n</th><th>median</th><th>p85</th><th>max</th></tr></thead>
+        <tbody id="speed-rows">
+          <tr class="board-empty"><td colspan="5">Calibrate on the video to unlock real speeds.</td></tr>
+        </tbody>
+      </table>
+      <h2 class="module-title vgap">Violation snapshots</h2>
+      <div class="mugshots" id="mugshots"><p class="board-empty">Vehicles over the limit get photographed automatically.</p></div>
+    </div>
+  </section>
+</main>
+
+<!-- gate naming popover -->
+<div class="popover" id="gate-popover" hidden>
+  <label>Gate name <input id="gate-name" maxlength="24" placeholder="main road"></label>
+  <div class="popover-row">
+    <button id="gate-save">Save gate</button>
+    <button id="gate-cancel" class="ghost">Cancel</button>
+  </div>
+</div>
+
+<!-- calibration dialog -->
+<div class="popover" id="calib-popover" hidden>
+  <p class="popover-title">Real size of the marked rectangle</p>
+  <div class="popover-row">
+    <label>Width (m) <input id="calib-w" type="number" step="0.1" min="0.5" value="7.0"></label>
+    <label>Length (m) <input id="calib-l" type="number" step="0.1" min="1" value="30.0"></label>
+  </div>
+  <p class="popover-hint">Use something you know: a lane is ~3.5 m wide; lane-marking
+     dash-to-dash spacing is ~9 m on highways.</p>
+  <div class="popover-row">
+    <button id="calib-save">Apply calibration</button>
+    <button id="calib-cancel" class="ghost">Cancel</button>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

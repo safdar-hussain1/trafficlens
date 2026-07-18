@@ -1,0 +1,662 @@
+{
+  "scenarios": {
+    "motorway": {
+      "clip": "data/samples/motorway-a40.webm",
+      "model": "yolo11s.pt",
+      "imgsz": 960,
+      "effective_fps": 30.0,
+      "frames": 735,
+      "duration_s": 24.5,
+      "processing_fps": 17.4,
+      "gates": {
+        "inbound": {
+          "total": 18,
+          "by_direction": {
+            "in": 17,
+            "out": 1
+          },
+          "by_class": {
+            "car": {
+              "in": 14,
+              "out": 1
+            },
+            "truck": {
+              "in": 3
+            }
+          }
+        },
+        "outbound": {
+          "total": 6,
+          "by_direction": {
+            "out": 6
+          },
+          "by_class": {
+            "car": {
+              "out": 5
+            },
+            "truck": {
+              "out": 1
+            }
+          }
+        }
+      },
+      "total_all_gates": 24,
+      "gate_count": 18,
+      "gate_by_class": {
+        "car": {
+          "in": 14,
+          "out": 1
+        },
+        "truck": {
+          "in": 3
+        }
+      },
+      "gate_by_direction": {
+        "in": 17,
+        "out": 1
+      },
+      "naive_band_count": 19,
+      "naive_missed_ids": [],
+      "naive_phantom_ids": [
+        107
+      ],
+      "max_anchor_step_px_top5": [
+        15.211181640625,
+        12.9287109375,
+        11.39971923828125,
+        9.52734375,
+        9.508056640625
+      ],
+      "speed_by_class": {
+        "car": {
+          "n": 20,
+          "mean": 51.8,
+          "median": 37.6,
+          "p85": 84.5,
+          "max": 123.1
+        },
+        "truck": {
+          "n": 4,
+          "mean": 45.1,
+          "median": 41.8,
+          "p85": 49.7,
+          "max": 55.7
+        }
+      },
+      "violations": 5,
+      "events": [
+        {
+          "t": 0.27,
+          "class": "car",
+          "direction": "in",
+          "speed": 31.2,
+          "violation": false,
+          "track": 4
+        },
+        {
+          "t": 0.5,
+          "class": "car",
+          "direction": "in",
+          "speed": 48.5,
+          "violation": false,
+          "track": 3
+        },
+        {
+          "t": 2.53,
+          "class": "car",
+          "direction": "in",
+          "speed": 29.5,
+          "violation": false,
+          "track": 5
+        },
+        {
+          "t": 3.2,
+          "class": "car",
+          "direction": "in",
+          "speed": 41.4,
+          "violation": false,
+          "track": 7
+        },
+        {
+          "t": 4.53,
+          "class": "car",
+          "direction": "in",
+          "speed": 31.4,
+          "violation": false,
+          "track": 6
+        },
+        {
+          "t": 5.57,
+          "class": "car",
+          "direction": "in",
+          "speed": 42.2,
+          "violation": false,
+          "track": 11
+        },
+        {
+          "t": 6.53,
+          "class": "car",
+          "direction": "in",
+          "speed": 34.4,
+          "violation": false,
+          "track": 9
+        },
+        {
+          "t": 7.2,
+          "class": "car",
+          "direction": "out",
+          "speed": 84.1,
+          "violation": true,
+          "track": 38
+        },
+        {
+          "t": 8.67,
+          "class": "car",
+          "direction": "in",
+          "speed": 32.6,
+          "violation": false,
+          "track": 10
+        },
+        {
+          "t": 9.5,
+          "class": "car",
+          "direction": "out",
+          "speed": 78.0,
+          "violation": false,
+          "track": 53
+        },
+        {
+          "t": 10.6,
+          "class": "car",
+          "direction": "out",
+          "speed": 80.2,
+          "violation": true,
+          "track": 66
+        },
+        {
+          "t": 10.77,
+          "class": "car",
+          "direction": "in",
+          "speed": 33.4,
+          "violation": false,
+          "track": 24
+        },
+        {
+          "t": 12.33,
+          "class": "car",
+          "direction": "out",
+          "speed": 89.7,
+          "violation": true,
+          "track": 83
+        },
+        {
+          "t": 13.73,
+          "class": "car",
+          "direction": "in",
+          "speed": 33.9,
+          "violation": false,
+          "track": 14
+        },
+        {
+          "t": 13.9,
+          "class": "truck",
+          "direction": "in",
+          "speed": 41.4,
+          "violation": false,
+          "track": 17
+        },
+        {
+          "t": 15.8,
+          "class": "car",
+          "direction": "in",
+          "speed": 32.1,
+          "violation": false,
+          "track": 28
+        },
+        {
+          "t": 16.57,
+          "class": "car",
+          "direction": "out",
+          "speed": 87.1,
+          "violation": true,
+          "track": 98
+        },
+        {
+          "t": 17.67,
+          "class": "truck",
+          "direction": "in",
+          "speed": 41.2,
+          "violation": false,
+          "track": 43
+        },
+        {
+          "t": 20.0,
+          "class": "car",
+          "direction": "in",
+          "speed": 37.4,
+          "violation": false,
+          "track": 88
+        },
+        {
+          "t": 21.63,
+          "class": "truck",
+          "direction": "in",
+          "speed": 42.3,
+          "violation": false,
+          "track": 32
+        },
+        {
+          "t": 22.4,
+          "class": "car",
+          "direction": "in",
+          "speed": 37.7,
+          "violation": false,
+          "track": 93
+        },
+        {
+          "t": 22.4,
+          "class": "car",
+          "direction": "out",
+          "speed": 123.1,
+          "violation": true,
+          "track": 126
+        },
+        {
+          "t": 24.27,
+          "class": "truck",
+          "direction": "out",
+          "speed": 55.7,
+          "violation": false,
+          "track": 122
+        },
+        {
+          "t": 24.3,
+          "class": "car",
+          "direction": "in",
+          "speed": 28.5,
+          "violation": false,
+          "track": 61
+        }
+      ]
+    },
+    "motorway_10fps": {
+      "clip": "data/samples/motorway-a40.webm",
+      "model": "yolo11s.pt",
+      "imgsz": 960,
+      "effective_fps": 10.0,
+      "frames": 245,
+      "duration_s": 24.5,
+      "processing_fps": 20.0,
+      "gates": {
+        "inbound": {
+          "total": 18,
+          "by_direction": {
+            "in": 17,
+            "out": 1
+          },
+          "by_class": {
+            "car": {
+              "in": 14,
+              "out": 1
+            },
+            "truck": {
+              "in": 3
+            }
+          }
+        },
+        "outbound": {
+          "total": 6,
+          "by_direction": {
+            "out": 6
+          },
+          "by_class": {
+            "car": {
+              "out": 5
+            },
+            "truck": {
+              "out": 1
+            }
+          }
+        }
+      },
+      "total_all_gates": 24,
+      "gate_count": 18,
+      "gate_by_class": {
+        "car": {
+          "in": 14,
+          "out": 1
+        },
+        "truck": {
+          "in": 3
+        }
+      },
+      "gate_by_direction": {
+        "in": 17,
+        "out": 1
+      },
+      "naive_band_count": 18,
+      "naive_missed_ids": [],
+      "naive_phantom_ids": [],
+      "max_anchor_step_px_top5": [
+        26.22900390625,
+        24.6290283203125,
+        23.931640625,
+        23.928466796875,
+        23.5838623046875
+      ],
+      "speed_by_class": {
+        "car": {
+          "n": 20,
+          "mean": 52.3,
+          "median": 35.7,
+          "p85": 91.7,
+          "max": 104.7
+        },
+        "truck": {
+          "n": 4,
+          "mean": 44.7,
+          "median": 40.6,
+          "p85": 50.5,
+          "max": 58.2
+        }
+      },
+      "violations": 6,
+      "events": [
+        {
+          "t": 0.3,
+          "class": "car",
+          "direction": "in",
+          "speed": 29.1,
+          "violation": false,
+          "track": 4
+        },
+        {
+          "t": 0.5,
+          "class": "car",
+          "direction": "in",
+          "speed": 45.0,
+          "violation": false,
+          "track": 3
+        },
+        {
+          "t": 2.6,
+          "class": "car",
+          "direction": "in",
+          "speed": 29.3,
+          "violation": false,
+          "track": 5
+        },
+        {
+          "t": 3.2,
+          "class": "car",
+          "direction": "in",
+          "speed": 39.6,
+          "violation": false,
+          "track": 7
+        },
+        {
+          "t": 4.6,
+          "class": "car",
+          "direction": "in",
+          "speed": 31.4,
+          "violation": false,
+          "track": 6
+        },
+        {
+          "t": 5.6,
+          "class": "car",
+          "direction": "in",
+          "speed": 41.7,
+          "violation": false,
+          "track": 11
+        },
+        {
+          "t": 6.6,
+          "class": "car",
+          "direction": "in",
+          "speed": 34.0,
+          "violation": false,
+          "track": 9
+        },
+        {
+          "t": 7.2,
+          "class": "car",
+          "direction": "out",
+          "speed": 91.4,
+          "violation": true,
+          "track": 41
+        },
+        {
+          "t": 8.7,
+          "class": "car",
+          "direction": "in",
+          "speed": 32.5,
+          "violation": false,
+          "track": 10
+        },
+        {
+          "t": 9.5,
+          "class": "car",
+          "direction": "out",
+          "speed": 86.3,
+          "violation": true,
+          "track": 54
+        },
+        {
+          "t": 10.6,
+          "class": "car",
+          "direction": "out",
+          "speed": 86.7,
+          "violation": true,
+          "track": 63
+        },
+        {
+          "t": 10.8,
+          "class": "car",
+          "direction": "in",
+          "speed": 33.2,
+          "violation": false,
+          "track": 27
+        },
+        {
+          "t": 12.3,
+          "class": "car",
+          "direction": "out",
+          "speed": 102.9,
+          "violation": true,
+          "track": 72
+        },
+        {
+          "t": 13.8,
+          "class": "car",
+          "direction": "in",
+          "speed": 33.3,
+          "violation": false,
+          "track": 24
+        },
+        {
+          "t": 13.9,
+          "class": "truck",
+          "direction": "in",
+          "speed": 40.2,
+          "violation": false,
+          "track": 15
+        },
+        {
+          "t": 15.8,
+          "class": "car",
+          "direction": "in",
+          "speed": 31.3,
+          "violation": false,
+          "track": 25
+        },
+        {
+          "t": 16.6,
+          "class": "car",
+          "direction": "out",
+          "speed": 93.1,
+          "violation": true,
+          "track": 83
+        },
+        {
+          "t": 17.7,
+          "class": "truck",
+          "direction": "in",
+          "speed": 39.2,
+          "violation": false,
+          "track": 17
+        },
+        {
+          "t": 20.0,
+          "class": "car",
+          "direction": "in",
+          "speed": 35.8,
+          "violation": false,
+          "track": 32
+        },
+        {
+          "t": 21.7,
+          "class": "truck",
+          "direction": "in",
+          "speed": 41.1,
+          "violation": false,
+          "track": 42
+        },
+        {
+          "t": 22.4,
+          "class": "car",
+          "direction": "in",
+          "speed": 35.6,
+          "violation": false,
+          "track": 79
+        },
+        {
+          "t": 22.5,
+          "class": "car",
+          "direction": "out",
+          "speed": 104.7,
+          "violation": true,
+          "track": 127
+        },
+        {
+          "t": 24.3,
+          "class": "car",
+          "direction": "in",
+          "speed": 28.7,
+          "violation": false,
+          "track": 70
+        },
+        {
+          "t": 24.3,
+          "class": "truck",
+          "direction": "out",
+          "speed": 58.2,
+          "violation": false,
+          "track": 116
+        }
+      ]
+    },
+    "street": {
+      "clip": "data/samples/person-bicycle-car-detection.mp4",
+      "model": "yolo11s.pt",
+      "imgsz": 960,
+      "effective_fps": 12.0,
+      "frames": 647,
+      "duration_s": 53.9,
+      "processing_fps": 22.6,
+      "gates": {
+        "crossing": {
+          "total": 3,
+          "by_direction": {
+            "leaving": 3
+          },
+          "by_class": {
+            "person": {
+              "leaving": 1
+            },
+            "car": {
+              "leaving": 2
+            }
+          }
+        }
+      },
+      "total_all_gates": 3,
+      "gate_count": 3,
+      "gate_by_class": {
+        "person": {
+          "leaving": 1
+        },
+        "car": {
+          "leaving": 2
+        }
+      },
+      "gate_by_direction": {
+        "leaving": 3
+      },
+      "naive_band_count": 3,
+      "naive_missed_ids": [],
+      "naive_phantom_ids": [],
+      "max_anchor_step_px_top5": [
+        14.57696533203125,
+        13.116363525390625,
+        12.35687255859375,
+        12.015228271484375,
+        11.096839904785156
+      ],
+      "speed_by_class": {},
+      "violations": 0,
+      "events": [
+        {
+          "t": 5.33,
+          "class": "person",
+          "direction": "leaving",
+          "speed": null,
+          "violation": false,
+          "track": 1
+        },
+        {
+          "t": 18.08,
+          "class": "car",
+          "direction": "leaving",
+          "speed": null,
+          "violation": false,
+          "track": 5
+        },
+        {
+          "t": 47.0,
+          "class": "car",
+          "direction": "leaving",
+          "speed": null,
+          "violation": false,
+          "track": 16
+        }
+      ]
+    }
+  },
+  "fps": [
+    {
+      "model": "yolo26n.pt",
+      "frames": 120,
+      "fps": 38.1,
+      "device": "mps"
+    },
+    {
+      "model": "yolo11n.pt",
+      "frames": 120,
+      "fps": 39.4,
+      "device": "mps"
+    },
+    {
+      "model": "yolo11s.pt",
+      "frames": 120,
+      "fps": 29.4,
+      "device": "mps"
+    },
+    {
+      "model": "yolo11m.pt",
+      "frames": 120,
+      "fps": 20.8,
+      "device": "mps"
+    }
+  ]
+}

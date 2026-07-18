@@ -1,0 +1,19 @@
+# Point your webcam at anything and count people walking past.
+# Speeds stay off until you calibrate (easiest from the web UI).
+
+source: "0"
+
+detector:
+  model: yolo11n.pt
+  classes: [person]
+  confidence: 0.4
+
+gates:
+  - name: doorway
+    start: [0.5, 0.05]
+    end: [0.5, 0.95]
+    label_positive: entering
+    label_negative: exiting
+
+speed:
+  unit: kmh

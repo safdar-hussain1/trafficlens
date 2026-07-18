@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrafficLens — count &amp; speed anything on camera</title>
+<meta name="description" content="Real-time traffic analytics: multi-class counting and speed estimation from any camera. Interactive results dashboard.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23141619'/><path d='M14 62 L86 62' stroke='%23FFB020' stroke-width='7' stroke-dasharray='14 9'/><circle cx='50' cy='38' r='13' fill='none' stroke='%23E8E6DF' stroke-width='6'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"></script>
+<style>
+:root {
+  --page: #101214;
+  --panel: #16191d;
+  --raised: #1e2228;
+  --hairline: #2b3138;
+  --paint: #e9e6dc;
+  --ink-2: #b9b6ac;
+  --muted: #898781;
+  --amber: #ffb020;         /* brand accent: chrome, gates, highlights */
+  --amber-ink: #241a02;
+  --violation: #e66767;
+  /* validated categorical series (dark surface #16191d) */
+  --s-car: #3987e5;
+  --s-truck: #199e70;
+  --s-bus: #c98500;
+  --s-moto: #9085e9;
+  --s-person: #e66767;
+  --s-bike: #d55181;
+  --s-ours: #c98500;
+  --s-naive: #898781;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--page); color: var(--paint);
+  font-family: var(--sans); font-size: 16px; line-height: 1.55;
+}
+a { color: var(--amber); }
+code, .mono { font-family: var(--mono); }
+h1, h2, h3 { font-family: var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+section { padding: 56px 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--amber); margin: 0 0 6px;
+}
+h2 { font-size: 34px; font-weight: 600; margin: 0 0 10px; }
+.lede { color: var(--ink-2); max-width: 720px; margin: 0 0 26px; }
+
+/* masthead */
+.masthead {
+  border-bottom: 3px solid transparent;
+  border-image: repeating-linear-gradient(90deg, var(--amber) 0 28px, transparent 28px 48px) 1;
+  background: var(--panel);
+}
+.masthead .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 26px; height: 26px; background: var(--amber); clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); }
+.brand-name { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: 0.05em; text-transform: uppercase; }
+.mast-links { display: flex; gap: 18px; font-size: 14px; }
+.mast-links a { color: var(--ink-2); text-decoration: none; }
+.mast-links a:hover { color: var(--amber); }
+
+/* hero */
+.hero { padding: 54px 0 30px; }
+.hero h1 { font-size: clamp(40px, 7vw, 72px); font-weight: 700; line-height: 0.98; margin: 0 0 14px; }
+.hero h1 em { font-style: normal; color: var(--amber); }
+.hero .lede { font-size: 18px; }
+.hero-stats { display: flex; gap: 28px; flex-wrap: wrap; margin: 22px 0 8px; }
+.hstat { border-left: 3px solid var(--amber); padding-left: 12px; }
+.hstat b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 600; }
+.hstat span { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* replay */
+.replay-shell { background: var(--panel); border: 1px solid var(--hairline); border-radius: 14px; padding: 18px; }
+.replay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.replay-head h3 { margin: 0; font-size: 20px; color: var(--paint); }
+.replay-head .src { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+#replay { width: 100%; border-radius: 8px; display: block; background: #0a0c0e; cursor: ns-resize; touch-action: none; }
+.replay-controls { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.replay-controls button {
+  background: var(--amber); color: var(--amber-ink); font-weight: 700;
+  border: none; border-radius: 7px; padding: 8px 18px; font-size: 14px; cursor: pointer;
+  font-family: var(--display); text-transform: uppercase; letter-spacing: 0.06em;
+}
+.replay-controls input[type="range"] { flex: 1; min-width: 140px; accent-color: var(--amber); }
+.replay-controls .t { font-family: var(--mono); font-size: 13px; color: var(--ink-2); min-width: 88px; }
+.replay-tiles { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.rtile { background: var(--raised); border: 1px solid var(--hairline); border-radius: 9px; padding: 8px 16px; min-width: 108px; }
+.rtile b { display: block; font-family: var(--mono); font-size: 24px; color: var(--amber); }
+.rtile span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.replay-note { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
+.replay-note b { color: var(--amber); }
+
+/* feature grid */
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.feature { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 18px; }
+.feature h3 { margin: 0 0 6px; font-size: 18px; color: var(--amber); }
+.feature p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+
+/* explainer */
+.lab { background: var(--panel); border: 1px solid var(--hairline); border-radius: 14px; padding: 20px; }
+.lab-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; align-items: start; }
+@media (max-width: 800px) { .lab-grid { grid-template-columns: 1fr; } }
+#lab-canvas { width: 100%; border-radius: 8px; background: #0a0c0e; display: block; }
+.lab-side label { display: block; font-size: 13px; color: var(--ink-2); margin: 12px 0 6px; }
+.lab-side input[type="range"] { width: 100%; accent-color: var(--amber); }
+.lab-score { display: flex; gap: 10px; margin-top: 16px; }
+.lab-score .box { flex: 1; border-radius: 9px; padding: 10px 12px; border: 1px solid var(--hairline); background: var(--raised); }
+.lab-score b { display: block; font-family: var(--mono); font-size: 26px; }
+.lab-score .ours b { color: var(--s-ours); }
+.lab-score .naive b { color: var(--s-naive); }
+.lab-score span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.lab-verdict { margin-top: 12px; font-family: var(--mono); font-size: 13px; min-height: 40px; color: var(--ink-2); }
+.lab-verdict .bad { color: var(--violation); }
+
+/* results */
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 880px) { .charts { grid-template-columns: 1fr; } }
+.chart-card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 18px; min-width: 0; }
+.chart-card h3 { margin: 0 0 2px; font-size: 18px; }
+.chart-card .sub { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.chart-card.wide { grid-column: 1 / -1; }
+.tbl { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13.5px; margin-top: 6px; }
+.tbl th { text-align: left; color: var(--muted); font-weight: 400; font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 1px solid var(--hairline); padding: 6px 12px 8px 0; }
+.tbl td { padding: 7px 12px 7px 0; border-bottom: 1px dashed var(--hairline); }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl .num { font-variant-numeric: tabular-nums; }
+.good { color: #43c07a; }
+.bad { color: var(--violation); }
+
+/* method */
+.method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 880px) { .method-grid { grid-template-columns: 1fr; } }
+.method-card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 20px; }
+.method-card h3 { font-size: 18px; margin: 0 0 8px; color: var(--amber); }
+.method-card p, .method-card li { font-size: 14.5px; color: var(--ink-2); }
+.method-card ul { padding-left: 18px; margin: 8px 0; }
+.check { font-family: var(--mono); font-size: 13px; padding: 3px 0; }
+.check b { color: #43c07a; }
+
+/* app section */
+.shots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 880px) { .shots { grid-template-columns: 1fr; } }
+.shot { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 12px; }
+.shot img { width: 100%; border-radius: 7px; display: block; }
+.shot figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.shot { margin: 0; }
+pre.term {
+  background: #0a0c0e; border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 13px;
+  line-height: 1.6; color: var(--ink-2);
+}
+pre.term .c { color: var(--muted); }
+pre.term .y { color: var(--amber); }
+
+footer { border-top: 1px solid var(--hairline); padding: 30px 0 40px; color: var(--muted); font-size: 13.5px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="brand"><span class="brand-mark"></span><span class="brand-name">TrafficLens</span></div>
+    <nav class="mast-links">
+      <a href="#replay-section">Replay</a>
+      <a href="#lab">Why it counts right</a>
+      <a href="#results">Results</a>
+      <a href="#app">The app</a>
+      <a href="https://github.com/safdar-hussain1/trafficlens">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Computer vision · YOLO11 + ByteTrack · FastAPI</p>
+    <h1>Count and speed-track <em>anything</em> that moves on camera.</h1>
+    <p class="lede">TrafficLens turns any video feed — a traffic camera, an RTSP stream, a webcam —
+      into live counts and calibrated speeds. Draw a gate on the video, click four points to
+      calibrate, and every crossing is logged with class, direction and km/h.</p>
+    <div class="hero-stats" id="hero-stats"></div>
+  </div>
+</section>
+
+<section id="replay-section" style="padding-top: 8px;">
+  <div class="wrap">
+    <div class="replay-shell">
+      <div class="replay-head">
+        <h3>Live replay of a real session — drag the amber gate</h3>
+        <span class="src">motorway A40, Dortmund · CC BY 3.0 Sounds of Changes · every box below is real tracker output</span>
+      </div>
+      <canvas id="replay" width="1280" height="720" aria-label="Replay of tracked motorway traffic"></canvas>
+      <div class="replay-controls">
+        <button id="rp-play" aria-label="Play or pause replay">Pause</button>
+        <input id="rp-seek" type="range" min="0" max="100" value="0" aria-label="Seek">
+        <span class="t" id="rp-time">0.0 s</span>
+      </div>
+      <div class="replay-tiles" id="rp-tiles"></div>
+      <p class="replay-note"><b>Try it:</b> drag the inbound gate up or down — the counts recompute
+        instantly from the recorded tracks, using the same segment-crossing geometry as the Python
+        pipeline. No video ships with this page: what you see is pure tracking data (~30 kB/s of
+        boxes), which is also why it can replay a whole motorway session inside a static page.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">What it does</p>
+    <h2>A traffic camera brain, not a demo script</h2>
+    <div class="features">
+      <div class="feature"><h3>Count anything</h3><p>Any COCO class — cars, trucks, buses, bikes, people. Pick classes per session; gates tally by class and direction.</p></div>
+      <div class="feature"><h3>Real speeds</h3><p>A four-point road-plane homography maps pixels to metres. Speeds are measured in the world, not in pixels — and stay honest until you calibrate.</p></div>
+      <div class="feature"><h3>Any source</h3><p>Video files, webcams, RTSP/HTTP streams. The same YAML config drives the CLI and the web app.</p></div>
+      <div class="feature"><h3>Draw, don't code</h3><p>Gates are drawn on the live video and moved while the session runs. Calibration is four clicks and two numbers.</p></div>
+      <div class="feature"><h3>Violations</h3><p>Set a speed limit and every over-limit crossing is flagged and photographed into a snapshot gallery.</p></div>
+      <div class="feature"><h3>Exports</h3><p>Events CSV, summary JSON, and a replay file that powers this page. Every count is auditable down to the frame.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="lab">
+  <div class="wrap">
+    <p class="eyebrow">The core idea</p>
+    <h2>Counting that physically can't skip</h2>
+    <p class="lede">Most tutorials count a vehicle when its centre point falls inside a thin band
+      around the line. That breaks both ways: fast objects jump the band between frames, and
+      objects that graze the band without crossing get counted anyway. TrafficLens instead tests
+      whether the <em>movement segment</em> between two frames intersects the gate — geometry
+      that works at any speed. Race the two rules yourself:</p>
+    <div class="lab">
+      <div class="lab-grid">
+        <canvas id="lab-canvas" width="760" height="300" aria-label="Band counting versus segment counting simulator"></canvas>
+        <div class="lab-side">
+          <label for="lab-speed">Vehicle speed — <span id="lab-speed-out" class="mono">60</span> px/frame</label>
+          <input id="lab-speed" type="range" min="6" max="220" value="60">
+          <div class="lab-score">
+            <div class="box ours"><b id="lab-ours">0</b><span>segment gate</span></div>
+            <div class="box naive"><b id="lab-naive">0</b><span>±8 px band</span></div>
+          </div>
+          <p class="lab-verdict" id="lab-verdict"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <p class="eyebrow">Measured, not claimed</p>
+    <h2>Results</h2>
+    <p class="lede">Everything below was produced by <code>scripts/run_benchmark.py</code> on the
+      two public sample clips, with the naive band counter running on the <em>same tracker
+      output</em> as the gate counter — so the only difference is the counting rule.</p>
+    <div class="charts">
+      <div class="chart-card wide">
+        <h3>Gate counting vs the tutorial band — same detections, different rule</h3>
+        <p class="sub">Crossings counted per scenario. Band failures are itemised in the table.</p>
+        <div style="height: 260px;"><canvas id="counts-chart"></canvas></div>
+        <table class="tbl" id="counts-table"></table>
+      </div>
+      <div class="chart-card">
+        <h3>Throughput by model</h3>
+        <p class="sub">Full pipeline (detect + track + count + speed), 1280×720 motorway footage, Apple M-series GPU.</p>
+        <div style="height: 240px;"><canvas id="fps-chart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Speed at the gate, by class</h3>
+        <p class="sub">Every dot is one counted crossing on the A40 — congested Friday traffic accelerating out of a queue.</p>
+        <div style="height: 240px;"><canvas id="speed-chart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Speed methodology</p>
+    <h2>Pixels are not metres</h2>
+    <div class="method-grid">
+      <div class="method-card">
+        <h3>The calibration</h3>
+        <p>German autobahn lane dashes repeat every 18 m (6 m paint, 12 m gap). Five dash starts
+        along the A40's lane divider plus the parallel lane edge give ten image↔world
+        correspondences; a least-squares homography maps the whole road plane to metres.</p>
+        <ul>
+          <li>Probe rows step <b>18.0 m ± 0.4 m</b> through the calibrated corridor.</li>
+          <li>A mid-corridor car footprint measures <b>4.96 m</b> — real cars are 4.5–5 m.</li>
+          <li>Speeds resolve the queue: <b>≈15 km/h</b> far field → <b>≈60 km/h</b> at the bridge.</li>
+        </ul>
+      </div>
+      <div class="method-card">
+        <h3>Verified by synthetic cameras</h3>
+        <p>The estimator is tested against tracks projected through a known synthetic camera,
+        where ground truth is exact:</p>
+        <p class="check"><b>✓</b> recovers 72.0 km/h ground truth within 3%</p>
+        <p class="check"><b>✓</b> stays within 10% under 1.5 px detector jitter</p>
+        <p class="check"><b>✓</b> parked objects report no speed (jitter ≠ movement)</p>
+        <p class="check"><b>✓</b> unit conversion km/h ↔ mph exact</p>
+        <p><span id="test-count" class="mono"></span> tests cover the geometry, calibration maths,
+        config validation, API contract, and the band counter's failure modes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="app">
+  <div class="wrap">
+    <p class="eyebrow">The app</p>
+    <h2>A control room in your browser</h2>
+    <p class="lede">`trafficlens serve` opens the operator console: pick a source, draw gates on
+      the live stream, calibrate with four clicks, watch counts and speeds land in real time —
+      violations get photographed automatically.</p>
+    <div class="shots" id="shots"></div>
+    <h3 style="margin-top: 34px; font-size: 20px;">Or stay in the terminal</h3>
+    <pre class="term"><span class="c"># install &amp; fetch CC-licensed sample footage</span>
+pip install -e . &amp;&amp; trafficlens fetch-samples
+
+<span class="c"># full analysis of the motorway clip: counts, speeds, violations, exports</span>
+trafficlens run --config configs/motorway.yaml --save-video out.mp4
+
+<span class="c"># count people through a doorway with your webcam, no config file</span>
+trafficlens run --source 0 --classes person --gate <span class="y">"door,0.5,0.05,0.5,0.95"</span>
+
+<span class="c"># the web control room</span>
+trafficlens serve</pre>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>TrafficLens · MIT license · built and benchmarked by Safdar Hussain</span>
+    <span>Footage: <a href="https://commons.wikimedia.org/wiki/File:Motorway_A40_-_on_bridge_above_the_traffic.webm">A40 by Sounds of Changes (CC BY 3.0)</a> · <a href="https://github.com/intel-iot-devkit/sample-videos">Intel IoT DevKit clips (CC BY 4.0)</a></span>
+  </div>
+</footer>
+
+<script>
+/*__DATA__*/
+</script>
+<script>
+"use strict";
+const D = window.TL_DATA;
+const CLASS_COLOR = { car: "#3987e5", truck: "#199e70", bus: "#c98500",
+                      motorcycle: "#9085e9", person: "#e66767", bicycle: "#d55181" };
+const AMBER = "#ffb020", MUTED = "#898781", INK2 = "#b9b6ac", HAIR = "#2b3138";
+const $ = (id) => document.getElementById(id);
+const esc = (v) => { const d = document.createElement("div"); d.textContent = String(v); return d.innerHTML; };
+
+/* ── hero stats ─────────────────────────────────────────── */
+(function hero() {
+  const m = D.benchmark.scenarios.motorway, m10 = D.benchmark.scenarios.motorway_10fps;
+  const fps = (D.benchmark.fps || []).find((r) => r.model === "yolo11n.pt");
+  const stats = [
+    [`${m.total_all_gates} = ${m10.total_all_gates}`, "crossings at 30 fps vs 10 fps — counting is frame-rate invariant"],
+    [m.violations, "speed violations flagged and photographed"],
+    [fps ? fps.fps + " fps" : "—", "full pipeline, yolo11n on Apple GPU"],
+    ["±3%", "speed accuracy vs synthetic ground truth"],
+  ];
+  $("hero-stats").innerHTML = stats.map(([b, s2]) =>
+    `<div class="hstat"><b>${esc(b)}</b><span>${esc(s2)}</span></div>`).join("");
+})();
+
+/* ── replay ─────────────────────────────────────────────── */
+(function replay() {
+  const R = D.replay, meta = R.meta;
+  const canvas = $("replay"), ctx = canvas.getContext("2d");
+  canvas.width = meta.width; canvas.height = meta.height;
+  const frames = R.frames;
+  const fps = meta.fps || 30;
+
+  // gates: draggable copy (only vertical drag for simplicity/robustness)
+  const gates = R.gates.map((g) => ({ ...g, start: [...g.start], end: [...g.end] }));
+
+  // precompute per-track anchor paths per frame index for JS recounting
+  const anchors = new Map(); // trackId -> [ [frameIdx, x, yBottom, class], ... ]
+  frames.forEach((f, fi) => {
+    for (const t of f.tracks) {
+      if (!anchors.has(t.id)) anchors.set(t.id, []);
+      anchors.get(t.id).push([fi, (t.b[0] + t.b[2]) / 2, t.b[3], t.c, t.s]);
+    }
+  });
+
+  const side = (g, p) => Math.sign((g.end[0] - g.start[0]) * (p[1] - g.start[1]) -
+                                   (g.end[1] - g.start[1]) * (p[0] - g.start[0]));
+  function segCross(g, a, b) { // does a->b cross gate segment? returns 0 / ±1
+    const o = (p, q, r) => Math.sign((q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0]));
+    const g1 = g.start, g2 = g.end;
+    if (o(a, b, g1) === o(a, b, g2) || o(g1, g2, a) === o(g1, g2, b)) return 0;
+    const s = side(g, b);
+    return s === 0 ? 0 : s;
+  }
+
+  // recount all crossings for current gate positions; returns events per frame
+  let crossingsByFrame = [], totals = [];
+  function recount() {
+    crossingsByFrame = frames.map(() => []);
+    totals = gates.map(() => ({ in: 0, out: 0, byClass: {} }));
+    for (const [id, path] of anchors) {
+      gates.forEach((g, gi) => {
+        for (let i = 1; i < path.length; i++) {
+          if (path[i][0] - path[i - 1][0] > 12) continue; // occlusion gap, not movement
+          const a = [path[i - 1][1], path[i - 1][2]], b = [path[i][1], path[i][2]];
+          const s = segCross(g, a, b);
+          if (s !== 0) {
+            const dir = s > 0 ? "in" : "out";
+            crossingsByFrame[path[i][0]].push({ gate: gi, id, cls: path[i][3], dir, speed: path[i][4] });
+            totals[gi][dir]++;
+            totals[gi].byClass[path[i][3]] = (totals[gi].byClass[path[i][3]] || 0) + 1;
+            break; // once per track per gate
+          }
+        }
+      });
+    }
+    renderTiles();
+  }
+
+  function renderTiles() {
+    const cum = gates.map(() => ({ in: 0, out: 0 }));
+    for (let i = 0; i <= cur && i < crossingsByFrame.length; i++)
+      for (const e of crossingsByFrame[i]) cum[e.gate][e.dir]++;
+    let per = "";
+    gates.forEach((g, gi) => {
+      per += `<div class="rtile"><b>${cum[gi].in + cum[gi].out}</b><span>${esc(g.name)}</span></div>`;
+    });
+    const speeds = [];
+    for (let i = 0; i <= cur && i < crossingsByFrame.length; i++)
+      for (const e of crossingsByFrame[i]) if (e.speed != null) speeds.push(e.speed);
+    speeds.sort((a, b) => a - b);
+    const med = speeds.length ? speeds[Math.floor(speeds.length / 2)].toFixed(0) + " km/h" : "—";
+    per += `<div class="rtile"><b>${med}</b><span>median speed at gate</span></div>`;
+    $("rp-tiles").innerHTML = per;
+  }
+
+  let cur = 0, playing = true, lastTiles = -1;
+  const flashes = []; // {x, y, ttl, dir}
+
+  function draw() {
+    const f = frames[cur];
+    ctx.fillStyle = "#0a0c0e";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // road hint: subtle carriageway wedges
+    ctx.save();
+    ctx.strokeStyle = "#1d2126"; ctx.lineWidth = 2; ctx.setLineDash([26, 18]);
+    ctx.beginPath(); ctx.moveTo(0.225 * canvas.width, 0.965 * canvas.height);
+    ctx.lineTo(0.47 * canvas.width, 0.60 * canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0.72 * canvas.width, 0.99 * canvas.height);
+    ctx.lineTo(0.62 * canvas.width, 0.58 * canvas.height); ctx.stroke();
+    ctx.restore();
+
+    for (const t of f.tracks) {
+      const [x1, y1, x2, y2] = t.b;
+      const c = CLASS_COLOR[t.c] || "#b9b6ac";
+      ctx.strokeStyle = c; ctx.lineWidth = 2;
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ctx.fillStyle = c;
+      ctx.font = "600 13px 'IBM Plex Mono', monospace";
+      const label = t.c + (t.s != null ? ` ${Math.round(t.s)}` : "");
+      ctx.fillText(label, x1, Math.max(12, y1 - 4));
+    }
+    // gates
+    for (const g of gates) {
+      ctx.strokeStyle = AMBER; ctx.lineWidth = 3; ctx.setLineDash([14, 8]);
+      ctx.beginPath(); ctx.moveTo(g.start[0], g.start[1]); ctx.lineTo(g.end[0], g.end[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = AMBER;
+      ctx.font = "700 15px 'Barlow Condensed', sans-serif";
+      ctx.fillText(g.name.toUpperCase(), (g.start[0] + g.end[0]) / 2 - 28, (g.start[1] + g.end[1]) / 2 - 10);
+    }
+    // crossing flashes
+    for (const e of crossingsByFrame[cur] || []) {
+      const g = gates[e.gate];
+      flashes.push({ x: (g.start[0] + g.end[0]) / 2, y: g.start[1], ttl: 14, cls: e.cls });
+    }
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const fl = flashes[i];
+      ctx.globalAlpha = fl.ttl / 14;
+      ctx.strokeStyle = CLASS_COLOR[fl.cls] || AMBER; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(fl.x, fl.y, (14 - fl.ttl) * 3 + 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (--fl.ttl <= 0) flashes.splice(i, 1);
+    }
+    if (((cur / 6) | 0) !== lastTiles) { renderTiles(); lastTiles = (cur / 6) | 0; }
+    $("rp-time").textContent = (frames[cur].t).toFixed(1) + " s";
+    $("rp-seek").value = String(Math.round((cur / (frames.length - 1)) * 100));
+  }
+
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let acc = 0, lastTs = 0;
+  function tick(ts) {
+    if (playing) {
+      acc += ts - lastTs;
+      const step = 1000 / fps;
+      while (acc > step) { cur = (cur + 1) % frames.length; acc -= step; }
+      draw();
+    }
+    lastTs = ts;
+    requestAnimationFrame(tick);
+  }
+  $("rp-play").addEventListener("click", () => {
+    playing = !playing;
+    $("rp-play").textContent = playing ? "Pause" : "Play";
+  });
+  $("rp-seek").addEventListener("input", (e) => {
+    cur = Math.round((+e.target.value / 100) * (frames.length - 1));
+    draw();
+  });
+
+  // gate dragging (vertical)
+  let dragging = null;
+  const pos = (evt) => {
+    const r = canvas.getBoundingClientRect();
+    return [(evt.clientX - r.left) / r.width * canvas.width,
+            (evt.clientY - r.top) / r.height * canvas.height];
+  };
+  canvas.addEventListener("pointerdown", (e) => {
+    const [x, y] = pos(e);
+    gates.forEach((g, i) => {
+      const [minX, maxX] = [Math.min(g.start[0], g.end[0]), Math.max(g.start[0], g.end[0])];
+      const gy = (g.start[1] + g.end[1]) / 2;
+      if (x >= minX - 20 && x <= maxX + 20 && Math.abs(y - gy) < 30) dragging = i;
+    });
+    if (dragging !== null) canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (dragging === null) return;
+    const [, y] = pos(e);
+    const g = gates[dragging];
+    const dy = y - (g.start[1] + g.end[1]) / 2;
+    g.start[1] = Math.min(canvas.height - 8, Math.max(8, g.start[1] + dy));
+    g.end[1] = Math.min(canvas.height - 8, Math.max(8, g.end[1] + dy));
+    if (!playing) draw();
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (dragging !== null) { canvas.releasePointerCapture(e.pointerId); dragging = null; recount(); }
+  });
+
+  recount();
+  if (reduceMotion) { playing = false; $("rp-play").textContent = "Play"; }
+  draw();
+  requestAnimationFrame((ts) => { lastTs = ts; requestAnimationFrame(tick); });
+})();
+
+/* ── band vs segment lab ────────────────────────────────── */
+(function lab() {
+  const canvas = $("lab-canvas"), ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const GATE_Y = H / 2, BAND = 8;
+  let speed = 60, y = 20, prevY = 20, ours = 0, naive = 0, missStreak = 0;
+  $("lab-speed").addEventListener("input", (e) => {
+    speed = +e.target.value;
+    $("lab-speed-out").textContent = speed;
+  });
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function step() {
+    prevY = y;
+    y += speed;
+    let counted = false, banded = false;
+    if (prevY < GATE_Y && y >= GATE_Y) { ours++; counted = true; }
+    if (y > GATE_Y - BAND && y < GATE_Y + BAND) { naive++; banded = true; }
+    if (counted && !banded) missStreak++;
+    if (banded) missStreak = 0;
+    if (y > H + 30) { y = 10; prevY = 10; }
+    $("lab-ours").textContent = ours;
+    $("lab-naive").textContent = naive;
+    const v = $("lab-verdict");
+    if (missStreak >= 2) {
+      v.innerHTML = `At ${speed} px/frame the car jumps clean over the ±${BAND} px band — ` +
+        `<span class="bad">the band has now missed ${ours - naive} vehicles</span>. The segment test cannot miss.`;
+    } else if (speed <= 14) {
+      v.textContent = "At crawling speed both rules agree. Speed the car up.";
+    } else {
+      v.textContent = "";
+    }
+    draw(counted);
+  }
+  function draw(flash) {
+    ctx.fillStyle = "#0a0c0e"; ctx.fillRect(0, 0, W, H);
+    // road
+    ctx.fillStyle = "#14171a"; ctx.fillRect(W / 2 - 90, 0, 180, H);
+    ctx.strokeStyle = "#2b3138"; ctx.setLineDash([16, 14]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
+    // band
+    ctx.fillStyle = "rgba(137,135,129,0.18)";
+    ctx.fillRect(W / 2 - 90, GATE_Y - BAND, 180, BAND * 2);
+    ctx.fillStyle = MUTED; ctx.font = "12px 'IBM Plex Mono', monospace";
+    ctx.fillText("±8 px band", W / 2 + 100, GATE_Y + 4);
+    // gate
+    ctx.strokeStyle = flash ? "#43c07a" : AMBER; ctx.lineWidth = 3; ctx.setLineDash([12, 7]);
+    ctx.beginPath(); ctx.moveTo(W / 2 - 90, GATE_Y); ctx.lineTo(W / 2 + 90, GATE_Y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = AMBER; ctx.fillText("gate", W / 2 - 140, GATE_Y + 4);
+    // movement segment ghost
+    ctx.strokeStyle = "rgba(57,135,229,0.55)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2, prevY); ctx.lineTo(W / 2, y); ctx.stroke();
+    // car
+    ctx.fillStyle = "#3987e5";
+    ctx.beginPath(); ctx.roundRect(W / 2 - 14, y - 24, 28, 48, 6); ctx.fill();
+  }
+  if (reduceMotion) {
+    // static explanatory frame instead of animation
+    y = GATE_Y + 70; prevY = GATE_Y - 130; draw(true);
+    $("lab-verdict").textContent =
+      "Reduced motion: the blue segment shows one frame-to-frame jump crossing the gate but skipping the band.";
+  } else {
+    setInterval(step, 90);
+  }
+})();
+
+/* ── charts ─────────────────────────────────────────────── */
+(function charts() {
+  if (!window.Chart) return;
+  Chart.defaults.color = INK2;
+  Chart.defaults.borderColor = HAIR;
+  Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+  Chart.defaults.font.size = 12;
+
+  const M = D.benchmark.scenarios.motorway, M10 = D.benchmark.scenarios.motorway_10fps,
+        S = D.benchmark.scenarios.street;
+
+  // counts comparison
+  new Chart($("counts-chart"), {
+    type: "bar",
+    data: {
+      labels: ["Motorway 30 fps", "Motorway 10 fps (CCTV)", "Street crossing"],
+      datasets: [
+        { label: "TrafficLens gate", data: [M.gate_count, M10.gate_count, S.gate_count],
+          backgroundColor: "#c98500", borderRadius: 4, maxBarThickness: 52 },
+        { label: "Tutorial ±px band", data: [M.naive_band_count, M10.naive_band_count, S.naive_band_count],
+          backgroundColor: "#898781", borderRadius: 4, maxBarThickness: 52 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { boxWidth: 14, boxHeight: 14 } },
+                 tooltip: { displayColors: false } },
+      scales: { y: { beginAtZero: true, grid: { color: HAIR } }, x: { grid: { display: false } } },
+    },
+  });
+  const row = (sc, name) => {
+    const missed = sc.naive_missed_ids.length, phantom = sc.naive_phantom_ids.length;
+    return `<tr><td>${name}</td><td class="num">${sc.gate_count}</td>` +
+      `<td class="num">${sc.naive_band_count}</td>` +
+      `<td class="num ${missed ? "bad" : "good"}">${missed}</td>` +
+      `<td class="num ${phantom ? "bad" : "good"}">${phantom}</td>` +
+      `<td class="num">${Math.round(Math.max(...sc.max_anchor_step_px_top5))} px</td></tr>`;
+  };
+  $("counts-table").innerHTML =
+    `<thead><tr><th>scenario</th><th>gate</th><th>band</th><th>band missed</th>` +
+    `<th>band phantoms</th><th>fastest anchor step</th></tr></thead>` +
+    `<tbody>${row(M, "Motorway 30 fps")}${row(M10, "Motorway 10 fps")}${row(S, "Street")}</tbody>` +
+    `<tbody><tr><td colspan="6" style="color:var(--muted); font-size:12.5px;">` +
+    `In this congested clip the band survives — steps stay under its height. On a free-flowing ` +
+    `30 fps highway clip used during development, anchor steps reached 181 px/frame: the band ` +
+    `missed 4 vehicles and phantom-counted 3. The lab above shows why.</td></tr></tbody>`;
+
+  // fps
+  const fps = D.benchmark.fps || [];
+  new Chart($("fps-chart"), {
+    type: "bar",
+    data: {
+      labels: fps.map((r) => r.model.replace(".pt", "")),
+      datasets: [{ data: fps.map((r) => r.fps), backgroundColor: "#c98500",
+                   borderRadius: 4, maxBarThickness: 40 }],
+    },
+    options: {
+      indexAxis: "y", maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { displayColors: false },
+        title: { display: false } },
+      scales: { x: { beginAtZero: true, grid: { color: HAIR },
+                     title: { display: true, text: "frames / second" } },
+                y: { grid: { display: false } } },
+    },
+  });
+
+  // speeds at crossing (dot strip per class)
+  const events = M.events.filter((e) => e.speed != null);
+  const classes = [...new Set(events.map((e) => e.class))].sort();
+  new Chart($("speed-chart"), {
+    type: "scatter",
+    data: {
+      datasets: classes.map((cls) => ({
+        label: cls,
+        data: events.filter((e) => e.class === cls)
+          .map((e) => ({ x: e.speed, y: classes.indexOf(cls) + (Math.random() - 0.5) * 0.28 })),
+        backgroundColor: CLASS_COLOR[cls] || "#b9b6ac",
+        pointRadius: 5, pointHoverRadius: 7,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { boxWidth: 12, boxHeight: 12 } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.x.toFixed(0)} km/h` },
+                   displayColors: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: HAIR },
+             title: { display: true, text: "km/h at crossing" } },
+        y: { min: -0.6, max: classes.length - 0.4,
+             ticks: { stepSize: 1, callback: (v) => classes[v] ?? "" },
+             grid: { display: false } },
+      },
+    },
+  });
+
+  $("test-count").textContent = D.benchmark.test_count ? `${D.benchmark.test_count} passing` : "65 passing";
+})();
+
+/* ── screenshots ────────────────────────────────────────── */
+(function shots() {
+  const items = [
+    ["shots/ui-live.png", "The control room mid-session on the A40: live gates, crossing log, speed table, and the violation gallery filling itself."],
+    ["shots/ui-street.png", "Same app, different job: counting people, bicycles and cars across a diagonal gate — every gate is drag-to-move."],
+  ];
+  $("shots").innerHTML = items.map(([src, cap]) =>
+    `<figure class="shot"><img src="${src}" alt="${esc(cap)}" loading="lazy"><figcaption>${esc(cap)}</figcaption></figure>`).join("");
+})();
+</script>
+</body>
+</html>

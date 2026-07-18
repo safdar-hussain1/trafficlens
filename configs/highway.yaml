@@ -1,0 +1,26 @@
+# Overhead roadway camera (near top-down). COCO models see cars from this
+# angle poorly at small sizes, so this config uses a mid-size model and a
+# larger input — see the model notes in the README.
+
+source: data/samples/car-detection.mp4
+
+detector:
+  model: yolo11m.pt
+  classes: [car, truck, bus, motorcycle]
+  confidence: 0.3
+  imgsz: 960
+
+gates:
+  - name: mid road
+    start: [0.02, 0.55]
+    end: [0.98, 0.55]
+    label_positive: down
+    label_negative: up
+
+# No calibration: this camera's ground geometry hasn't been surveyed, so
+# TrafficLens reports counts only — it never invents speeds from pixels.
+# A near-orthographic view like this one suits `mode: scale` once you
+# measure a known distance in frame (see docs/CALIBRATION.md).
+
+speed:
+  unit: kmh

@@ -1,0 +1,31 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# model weights (downloaded on first run)
+*.pt
+*.onnx
+models/
+
+# sample footage (fetched by `trafficlens fetch-samples`)
+data/samples/*.mp4
+data/samples/*.webm
+data/samples/*.part
+
+# session outputs
+exports/
+runs/
+*.log
+
+# tooling
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+.vscode/
