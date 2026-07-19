@@ -101,6 +101,13 @@ h2 { font-size: 34px; font-weight: 600; margin: 0 0 10px; }
 .replay-note { margin-top: 12px; font-size: 13.5px; color: var(--muted); }
 .replay-note b { color: var(--amber); }
 
+/* pipeline output videos */
+.vids { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 880px) { .vids { grid-template-columns: 1fr; } }
+.vid { margin: 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 12px; }
+.vid video { width: 100%; border-radius: 8px; display: block; background: #0a0c0e; }
+.vid figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
 /* feature grid */
 .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .feature { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 18px; }
@@ -209,10 +216,35 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
         <span class="t" id="rp-time">0.0 s</span>
       </div>
       <div class="replay-tiles" id="rp-tiles"></div>
-      <p class="replay-note"><b>Try it:</b> drag the inbound gate up or down — the counts recompute
+      <p class="replay-note"><b>Try it:</b> drag either gate up or down — the counts recompute
         instantly from the recorded tracks, using the same segment-crossing geometry as the Python
-        pipeline. No video ships with this page: what you see is pure tracking data (~30 kB/s of
-        boxes), which is also why it can replay a whole motorway session inside a static page.</p>
+        pipeline. Everything that moves here is pure tracking data (~30 kB/s of boxes) drawn over a
+        single still frame — which is why a whole motorway session replays inside a static page.</p>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top: 12px;">
+  <div class="wrap">
+    <p class="eyebrow">Straight from the pipeline</p>
+    <h2>The actual annotated output</h2>
+    <p class="lede">These are the videos TrafficLens wrote during the benchmark runs —
+      <code>trafficlens run --save-video</code>, no editing. Gates tally live on the frame,
+      every object carries its ID, class and speed, and over-limit vehicles flash red.</p>
+    <div class="vids">
+      <figure class="vid">
+        <video src="media/motorway_annotated.mp4" autoplay muted loop playsinline controls
+               preload="metadata" aria-label="Annotated motorway analysis video"></video>
+        <figcaption>A40 motorway, both carriageways: 24 crossings counted, per-vehicle speeds
+          resolving the congestion, five 80 km/h violations flagged red.</figcaption>
+      </figure>
+      <figure class="vid">
+        <video src="media/street_annotated.mp4" muted loop playsinline controls
+               preload="metadata" aria-label="Annotated street analysis video"></video>
+        <figcaption>Same pipeline, different config: person + bicycle + car classes on a street
+          camera — counts without speeds, because this camera has no calibration and TrafficLens
+          never guesses.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
@@ -447,28 +479,35 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = St
   let cur = 0, playing = true, lastTiles = -1;
   const flashes = []; // {x, y, ttl, dir}
 
+  // Backplate: the camera is static, so one real frame stands in for the
+  // scene; every moving element on top is recorded tracking data.
+  const backplate = new Image();
+  backplate.src = "media/motorway-still.jpg";
+
   function draw() {
     const f = frames[cur];
     ctx.fillStyle = "#0a0c0e";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // road hint: subtle carriageway wedges
-    ctx.save();
-    ctx.strokeStyle = "#1d2126"; ctx.lineWidth = 2; ctx.setLineDash([26, 18]);
-    ctx.beginPath(); ctx.moveTo(0.225 * canvas.width, 0.965 * canvas.height);
-    ctx.lineTo(0.47 * canvas.width, 0.60 * canvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0.72 * canvas.width, 0.99 * canvas.height);
-    ctx.lineTo(0.62 * canvas.width, 0.58 * canvas.height); ctx.stroke();
-    ctx.restore();
+    if (backplate.complete && backplate.naturalWidth) {
+      ctx.drawImage(backplate, 0, 0, canvas.width, canvas.height);
+      // dim the still so the live data reads as the foreground
+      ctx.fillStyle = "rgba(10, 12, 14, 0.45)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
+    ctx.font = "600 13px 'IBM Plex Mono', monospace";
     for (const t of f.tracks) {
       const [x1, y1, x2, y2] = t.b;
       const c = CLASS_COLOR[t.c] || "#b9b6ac";
       ctx.strokeStyle = c; ctx.lineWidth = 2;
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      const label = t.c + (t.s != null ? ` ${Math.round(t.s)} km/h` : "");
+      const tw = ctx.measureText(label).width;
+      const ly = Math.max(15, y1 - 5);
+      ctx.fillStyle = "rgba(10, 12, 14, 0.82)";
+      ctx.fillRect(x1 - 2, ly - 12, tw + 8, 17);
       ctx.fillStyle = c;
-      ctx.font = "600 13px 'IBM Plex Mono', monospace";
-      const label = t.c + (t.s != null ? ` ${Math.round(t.s)}` : "");
-      ctx.fillText(label, x1, Math.max(12, y1 - 4));
+      ctx.fillText(label, x1 + 2, ly + 1);
     }
     // gates
     for (const g of gates) {
