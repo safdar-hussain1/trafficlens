@@ -179,6 +179,7 @@ function enterRunning() {
   state.running = true;
   state.gates = [];
   state.eventSeq = 0;
+  state.incidentSeq = 0;
   $("stream").src = "/api/stream?" + Date.now();
   $("stream").style.display = "block";
   $("viewport-empty").hidden = true;
@@ -253,7 +254,30 @@ async function poll() {
       appendEvents(ev.events);
     }
   } catch { /* session raced away */ }
+  try {
+    const inc = await api(`/api/incidents?after=${state.incidentSeq || 0}`);
+    if (inc.incidents.length) {
+      state.incidentSeq = inc.latest;
+      appendIncidents(inc.incidents);
+    }
+  } catch { /* session raced away */ }
   if (++violationTick % 4 === 0) refreshViolations();
+}
+
+function appendIncidents(incidents) {
+  const body = $("incident-rows");
+  body.querySelector(".board-empty")?.remove();
+  for (const inc of incidents.slice().reverse()) {
+    const tr = document.createElement("tr");
+    tr.className = "fresh";
+    const kindCls = inc.kind === "wrong_way" ? "flag" : "flag-warn";
+    tr.innerHTML =
+      `<td>${inc.t.toFixed(1)}s</td>` +
+      `<td><span class="${kindCls}">${esc(inc.kind.replace("_", " ").toUpperCase())}</span></td>` +
+      `<td>${esc(inc.class)} #${inc.track}</td><td>${esc(inc.detail)}</td>`;
+    body.prepend(tr);
+  }
+  while (body.children.length > 24) body.lastChild.remove();
 }
 
 function renderCountTiles(summary) {

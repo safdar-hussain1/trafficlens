@@ -17,6 +17,7 @@ from trafficlens.config import AppConfig
 from trafficlens.counting import CrossingEvent, Gate, GateCounter
 from trafficlens.detection import Detector, Observation
 from trafficlens.geometry import Point
+from trafficlens.incidents import Incident, StoppedVehicleDetector, wrong_way_incident
 from trafficlens.speed import PlaneCalibration, SpeedEstimator
 
 # Frames a track may vanish for before its state is retired. ByteTrack
@@ -35,6 +36,7 @@ class TrackView:
     anchor: Point
     speed: float | None
     trail: list[Point]
+    stopped: bool = False
 
 
 @dataclass
@@ -45,6 +47,7 @@ class FrameResult:
     timestamp: float
     tracks: list[TrackView]
     events: list[CrossingEvent]
+    incidents: list[Incident]
     counts: dict[str, dict[str, dict[str, int]]]  # gate -> class -> direction -> n
     process_ms: float
 
@@ -88,7 +91,17 @@ class Pipeline:
                 unit=config.speed.unit,
                 min_travel_m=config.speed.min_travel_m,
             )
+        self.stopped_detector: StoppedVehicleDetector | None = None
+        if config.incidents.stopped_enabled and self.speed_estimator is not None:
+            # Stopped detection needs real speeds; without calibration it
+            # would be guessing, so it stays off.
+            self.stopped_detector = StoppedVehicleDetector(
+                speed_threshold=config.incidents.stopped_speed_threshold,
+                min_duration_s=config.incidents.stopped_min_duration_s,
+            )
+        self._expected_direction = {g.name: g.expected_direction for g in config.gates}
         self.events: list[CrossingEvent] = []
+        self.incidents: list[Incident] = []
         self.speed_samples: dict[str, list[float]] = {}
         self._tracks: dict[int, _TrackState] = {}
         self._frame_index = 0
@@ -110,6 +123,7 @@ class Pipeline:
         observations = self.detector.track(frame)
         views: list[TrackView] = []
         events: list[CrossingEvent] = []
+        incidents: list[Incident] = []
 
         for obs in observations:
             state = self._tracks.get(obs.track_id)
@@ -138,6 +152,20 @@ class Pipeline:
                     events.append(event)
                     if event.speed is not None:
                         self.speed_samples.setdefault(event.class_name, []).append(event.speed)
+                    ww = wrong_way_incident(
+                        event, self._expected_direction.get(event.gate), anchor
+                    )
+                    if ww is not None:
+                        incidents.append(ww)
+
+            stopped = False
+            if self.stopped_detector is not None:
+                incident = self.stopped_detector.update(
+                    obs.track_id, obs.class_name, speed, anchor, idx, timestamp
+                )
+                if incident is not None:
+                    incidents.append(incident)
+                stopped = self.stopped_detector.is_stopped(obs.track_id)
 
             state.prev_anchor = anchor
             state.trail.append(anchor)
@@ -152,16 +180,19 @@ class Pipeline:
                     anchor=anchor,
                     speed=speed,
                     trail=list(state.trail),
+                    stopped=stopped,
                 )
             )
 
         self.events.extend(events)
+        self.incidents.extend(incidents)
         self._reap_stale(idx)
         return FrameResult(
             frame_index=idx,
             timestamp=timestamp,
             tracks=views,
             events=events,
+            incidents=incidents,
             counts=self.counts(),
             process_ms=(time.perf_counter() - t0) * 1000.0,
         )
@@ -175,6 +206,8 @@ class Pipeline:
             del self._tracks[tid]
             if self.speed_estimator is not None:
                 self.speed_estimator.forget(tid)
+            if self.stopped_detector is not None:
+                self.stopped_detector.forget(tid)
             # Deliberately NOT forgetting in counters: a track that
             # crossed and left must stay counted even if the ID is reaped.
 
@@ -193,6 +226,8 @@ class Pipeline:
             counter.reset_tracks()
         if self.speed_estimator is not None:
             self.speed_estimator.reset()
+        if self.stopped_detector is not None:
+            self.stopped_detector.reset_tracks()
 
     def counts(self) -> dict[str, dict[str, dict[str, int]]]:
         return {c.gate.name: {k: dict(v) for k, v in c.totals.items()} for c in self.counters}
@@ -216,11 +251,15 @@ class Pipeline:
                 "p85": round(float(np.percentile(arr, 85)), 1),
                 "max": round(float(arr.max()), 1),
             }
+        by_kind: dict[str, int] = {}
+        for inc in self.incidents:
+            by_kind[inc.kind] = by_kind.get(inc.kind, 0) + 1
         return {
             "frames": self._frame_index,
             "gates": per_gate,
             "events": len(self.events),
             "violations": sum(1 for e in self.events if e.is_violation),
+            "incidents": by_kind,
             "speed_unit": self.config.speed.unit,
             "speed_by_class": speed_stats,
         }

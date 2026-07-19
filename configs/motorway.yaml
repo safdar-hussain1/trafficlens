@@ -24,11 +24,13 @@ gates:
     end: [0.55, 0.80]
     label_positive: in
     label_negative: out
+    expected_direction: in     # this carriageway flows toward the camera
   - name: outbound
     start: [0.60, 0.75]
     end: [0.98, 0.75]
     label_positive: in
     label_negative: out
+    expected_direction: out    # this one flows away
 
 calibration:
   mode: homography
@@ -61,3 +63,9 @@ speed:
   unit: kmh
   speed_limit: 80
   window_seconds: 0.5
+
+# Friday-afternoon congestion: anything sitting under 3 km/h for 6+ seconds
+# is raised as a stopped-vehicle incident (queue head / obstacle).
+incidents:
+  stopped_speed_threshold: 3
+  stopped_min_duration_s: 6

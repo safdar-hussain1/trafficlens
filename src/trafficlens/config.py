@@ -39,6 +39,8 @@ class GateConfig(_StrictModel):
     end: NormPoint
     label_positive: str = "in"
     label_negative: str = "out"
+    # When set, crossings in the other direction raise a wrong-way incident.
+    expected_direction: str | None = None
 
     @field_validator("start", "end")
     @classmethod
@@ -49,6 +51,13 @@ class GateConfig(_StrictModel):
     def _not_degenerate(self) -> "GateConfig":
         if self.start == self.end:
             raise ValueError(f"gate '{self.name}' has zero length (start == end)")
+        if self.expected_direction is not None and self.expected_direction not in (
+            self.label_positive, self.label_negative,
+        ):
+            raise ValueError(
+                f"gate '{self.name}': expected_direction {self.expected_direction!r} "
+                f"must be one of its labels ({self.label_positive!r}, {self.label_negative!r})"
+            )
         return self
 
 
@@ -119,6 +128,14 @@ class SpeedConfig(_StrictModel):
     min_travel_m: float = Field(default=0.4, ge=0.0)
 
 
+class IncidentsConfig(_StrictModel):
+    """Stopped-vehicle detection settings (wrong-way lives on each gate)."""
+
+    stopped_enabled: bool = True
+    stopped_speed_threshold: float = Field(default=3.0, gt=0)
+    stopped_min_duration_s: float = Field(default=5.0, gt=0)
+
+
 class AppConfig(_StrictModel):
     """Top-level config: what to detect, where to count, how to calibrate."""
 
@@ -127,6 +144,7 @@ class AppConfig(_StrictModel):
     gates: list[GateConfig] = Field(default_factory=list)
     calibration: CalibrationConfig | None = None
     speed: SpeedConfig = Field(default_factory=SpeedConfig)
+    incidents: IncidentsConfig = Field(default_factory=IncidentsConfig)
 
     @model_validator(mode="after")
     def _unique_gate_names(self) -> "AppConfig":

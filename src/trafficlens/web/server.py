@@ -228,6 +228,31 @@ def violation_image(seq: int) -> Response:
     raise HTTPException(status_code=404, detail=f"no violation snapshot with seq {seq}")
 
 
+@app.get("/api/incidents")
+def incidents(after: int = 0) -> dict:
+    session = _require_session()
+    items = []
+    for rec in session.incidents:
+        if rec.seq <= after:
+            continue
+        inc = rec.incident
+        items.append({
+            "seq": rec.seq, "kind": inc.kind, "track": inc.track_id,
+            "class": inc.class_name, "t": round(inc.timestamp, 2),
+            "detail": inc.detail, "has_image": rec.jpeg is not None,
+        })
+    return {"incidents": items, "latest": items[-1]["seq"] if items else after}
+
+
+@app.get("/api/incidents/{seq}.jpg", include_in_schema=False)
+def incident_image(seq: int) -> Response:
+    session = _require_session()
+    for rec in session.incidents:
+        if rec.seq == seq and rec.jpeg is not None:
+            return Response(content=rec.jpeg, media_type="image/jpeg")
+    raise HTTPException(status_code=404, detail=f"no incident snapshot with seq {seq}")
+
+
 @app.get("/api/export/events.csv")
 def export_events() -> Response:
     session = _require_session()

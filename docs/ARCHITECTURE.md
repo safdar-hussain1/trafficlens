@@ -14,6 +14,7 @@ only ever talks to the pipeline through thread-safe snapshots.
                  │     │                                          │
                  │     ▼                                          │
                  │  GateCounter(s) ── segment × gate ▶ events     │
+                 │  Incidents ── stopped / wrong-way ▶ alerts     │
                  └────────────────┬───────────────────────────────┘
                                   │ FrameResult (tracks, events, counts)
               ┌───────────────────┼──────────────────┐
@@ -37,6 +38,7 @@ only ever talks to the pipeline through thread-safe snapshots.
 | `detection.py` | YOLO + ByteTrack wrapper, class-name resolution | counting, speed |
 | `counting.py` | gates, crossing events, per-class/direction tallies | pixels-to-metres |
 | `speed.py` | homography / scale calibration, windowed speed + EMA | detection |
+| `incidents.py` | stopped-vehicle detection, wrong-way crossing checks | video, models |
 | `baseline.py` | the naive band counter (benchmark reference) | production paths |
 | `pipeline.py` | orchestration, per-track state, stale-track reaping | HTTP, drawing |
 | `annotate.py` | all OpenCV drawing | analysis decisions |

@@ -17,6 +17,7 @@ import cv2
 from trafficlens.annotate import draw_frame
 from trafficlens.config import AppConfig, CalibrationConfig, GateConfig
 from trafficlens.counting import CrossingEvent, Gate, GateCounter
+from trafficlens.incidents import Incident
 from trafficlens.pipeline import Pipeline
 from trafficlens.speed import PlaneCalibration, SpeedEstimator
 from trafficlens.video import VideoSource
@@ -24,6 +25,7 @@ from trafficlens.video import VideoSource
 _JPEG_QUALITY = 82
 _MAX_EVENTS_KEPT = 500
 _MAX_VIOLATION_SNAPSHOTS = 24
+_MAX_INCIDENTS_KEPT = 200
 
 
 @dataclass
@@ -31,6 +33,13 @@ class ViolationSnapshot:
     seq: int
     event: CrossingEvent
     jpeg: bytes
+
+
+@dataclass
+class IncidentRecord:
+    seq: int
+    incident: Incident
+    jpeg: bytes | None
 
 
 class AnalysisSession(threading.Thread):
@@ -48,7 +57,9 @@ class AnalysisSession(threading.Thread):
         self.finished = False
         self.events: deque[tuple[int, CrossingEvent]] = deque(maxlen=_MAX_EVENTS_KEPT)
         self.violations: deque[ViolationSnapshot] = deque(maxlen=_MAX_VIOLATION_SNAPSHOTS)
+        self.incidents: deque[IncidentRecord] = deque(maxlen=_MAX_INCIDENTS_KEPT)
         self._event_seq = 0
+        self._incident_seq = 0
         self.pipeline: Pipeline | None = None
         self.source_info: dict = {}
         self._ready = threading.Event()
@@ -103,6 +114,13 @@ class AnalysisSession(threading.Thread):
                             self.events.append((self._event_seq, event))
                             if event.is_violation:
                                 self._capture_violation(frame, result, event)
+                        for incident in result.incidents:
+                            self._incident_seq += 1
+                            self.incidents.append(IncidentRecord(
+                                seq=self._incident_seq,
+                                incident=incident,
+                                jpeg=self._crop_track(frame, result, incident.track_id),
+                            ))
                         elapsed = time.perf_counter() - tick
                         ema_fps = 0.9 * ema_fps + 0.1 * (1.0 / max(elapsed, 1e-6)) if ema_fps else 1.0 / max(elapsed, 1e-6)
                         ok, buf = cv2.imencode(".jpg", annotated,
@@ -143,19 +161,24 @@ class AnalysisSession(threading.Thread):
             self.finished = True
             self._ready.set()
 
-    def _capture_violation(self, frame, result, event: CrossingEvent) -> None:
+    def _crop_track(self, frame, result, track_id: int) -> bytes | None:
+        """JPEG crop of one track's box on this frame, if it is visible."""
         for tv in result.tracks:
-            if tv.track_id == event.track_id:
+            if tv.track_id == track_id:
                 x1, y1, x2, y2 = (max(0, int(v)) for v in tv.box)
                 crop = frame[y1:y2, x1:x2]
                 if crop.size == 0:
-                    return
+                    return None
                 ok, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
-                if ok:
-                    self.violations.append(
-                        ViolationSnapshot(seq=self._event_seq, event=event, jpeg=buf.tobytes())
-                    )
-                return
+                return buf.tobytes() if ok else None
+        return None
+
+    def _capture_violation(self, frame, result, event: CrossingEvent) -> None:
+        jpeg = self._crop_track(frame, result, event.track_id)
+        if jpeg is not None:
+            self.violations.append(
+                ViolationSnapshot(seq=self._event_seq, event=event, jpeg=jpeg)
+            )
 
     # -- live re-configuration --------------------------------------------
 

@@ -100,6 +100,11 @@ def run(config_path, source, model, classes, conf, gates, save_video,
                         f"[{result.timestamp:7.2f}s] {event.gate}: {event.class_name} "
                         f"#{event.track_id} {event.direction}{speed}{flag}"
                     )
+                for inc in result.incidents:
+                    click.echo(
+                        f"[{result.timestamp:7.2f}s] INCIDENT {inc.kind.upper()}: "
+                        f"{inc.class_name} #{inc.track_id} — {inc.detail}"
+                    )
                 if writer or show:
                     annotated = draw_frame(
                         frame, result, pipeline.counters,
@@ -142,6 +147,9 @@ def run(config_path, source, model, classes, conf, gates, save_video,
             )
     if summary["violations"]:
         click.echo(f"violations: {summary['violations']}")
+    if summary.get("incidents"):
+        click.echo("incidents: " + "  ".join(
+            f"{kind}: {n}" for kind, n in sorted(summary["incidents"].items())))
     click.echo(f"exports written to {out}/")
 
 

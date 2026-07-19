@@ -7,7 +7,7 @@
       "effective_fps": 30.0,
       "frames": 735,
       "duration_s": 24.5,
-      "processing_fps": 17.4,
+      "processing_fps": 17.6,
       "gates": {
         "inbound": {
           "total": 18,
@@ -84,6 +84,18 @@
         }
       },
       "violations": 5,
+      "incidents": {
+        "wrong_way": 1
+      },
+      "incident_log": [
+        {
+          "kind": "wrong_way",
+          "track": 126,
+          "class": "car",
+          "t": 22.4,
+          "detail": "crossed 'inbound' out \u2014 expected in"
+        }
+      ],
       "events": [
         {
           "t": 0.27,
@@ -286,7 +298,7 @@
       "effective_fps": 10.0,
       "frames": 245,
       "duration_s": 24.5,
-      "processing_fps": 20.0,
+      "processing_fps": 19.7,
       "gates": {
         "inbound": {
           "total": 18,
@@ -361,6 +373,18 @@
         }
       },
       "violations": 6,
+      "incidents": {
+        "wrong_way": 1
+      },
+      "incident_log": [
+        {
+          "kind": "wrong_way",
+          "track": 127,
+          "class": "car",
+          "t": 22.5,
+          "detail": "crossed 'inbound' out \u2014 expected in"
+        }
+      ],
       "events": [
         {
           "t": 0.3,
@@ -563,7 +587,7 @@
       "effective_fps": 12.0,
       "frames": 647,
       "duration_s": 53.9,
-      "processing_fps": 22.6,
+      "processing_fps": 22.7,
       "gates": {
         "crossing": {
           "total": 3,
@@ -605,6 +629,8 @@
       ],
       "speed_by_class": {},
       "violations": 0,
+      "incidents": {},
+      "incident_log": [],
       "events": [
         {
           "t": 5.33,
@@ -637,25 +663,25 @@
     {
       "model": "yolo26n.pt",
       "frames": 120,
-      "fps": 38.1,
+      "fps": 36.1,
       "device": "mps"
     },
     {
       "model": "yolo11n.pt",
       "frames": 120,
-      "fps": 39.4,
+      "fps": 38.4,
       "device": "mps"
     },
     {
       "model": "yolo11s.pt",
       "frames": 120,
-      "fps": 29.4,
+      "fps": 28.9,
       "device": "mps"
     },
     {
       "model": "yolo11m.pt",
       "frames": 120,
-      "fps": 20.8,
+      "fps": 20.0,
       "device": "mps"
     }
   ]

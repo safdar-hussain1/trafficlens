@@ -61,6 +61,10 @@ def draw_frame(
         text = f"#{tv.track_id} {tv.class_name}"
         if tv.speed is not None:
             text += f" {tv.speed:.0f} {unit_label}"
+        if tv.stopped:
+            text += "  STOPPED"
+            color = (30, 130, 255)  # incident orange
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 3, cv2.LINE_AA)
         _label(img, text, (x1, max(18, y1 - 6)), bg=color)
 
         if show_trails and len(tv.trail) > 1:

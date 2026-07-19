@@ -117,6 +117,12 @@ def run_scenario(name: str, config_path: Path, snapshot_frames: list[int],
         "max_anchor_step_px_top5": sorted(max_step.values(), reverse=True)[:5],
         "speed_by_class": summary["speed_by_class"],
         "violations": summary["violations"],
+        "incidents": summary["incidents"],
+        "incident_log": [
+            {"kind": i.kind, "track": i.track_id, "class": i.class_name,
+             "t": round(i.timestamp, 2), "detail": i.detail}
+            for i in pipeline.incidents
+        ],
         "events": [
             {"t": round(e.timestamp, 2), "class": e.class_name, "direction": e.direction,
              "speed": round(e.speed, 1) if e.speed is not None else None,

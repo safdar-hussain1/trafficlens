@@ -21,6 +21,7 @@ you drag the counting gate to recompute counts live.
 | **Any source** | Video files, webcam indices, RTSP/HTTP streams. One YAML config drives both the CLI and the web app. |
 | **Draw, don't code** | Gates are drawn on the live video and dragged while the session runs. Calibration is four clicks and two numbers. |
 | **Violations** | Set a speed limit; every over-limit crossing is flagged, logged, and photographed into a snapshot gallery. |
+| **Incidents** | Stopped-vehicle detection (a stalled car, an obstacle, a forming queue: sustained near-zero calibrated speed) and wrong-way alerts on any gate with an expected flow direction. |
 | **Exports** | Events CSV, summary JSON, and a replay JSON that powers the dashboard. Every count is auditable down to the frame. |
 
 ## Quick start
@@ -154,11 +155,12 @@ trafficlens/
 │   ├── video.py           # fail-fast VideoSource / VideoWriter
 │   ├── annotate.py        # boxes, trails, gates, HUD
 │   ├── export.py          # events CSV, summary JSON, dashboard replay
+│   ├── incidents.py       # stopped-vehicle + wrong-way incident detection
 │   ├── baseline.py        # the naive band counter, kept for benchmarking
 │   ├── config.py          # pydantic models — YAML in, validated config out
 │   ├── cli.py             # trafficlens run / serve / fetch-samples
 │   └── web/               # FastAPI backend + control-room UI (no JS deps)
-├── tests/                 # 66 tests: geometry, counting, speed, config, API
+├── tests/                 # 79 tests: geometry, counting, speed, incidents, config, API
 ├── configs/               # motorway / street / highway / webcam examples
 ├── notebooks/             # executed methodology notebook
 ├── scripts/               # run_benchmark.py, build_dashboard.py
@@ -188,6 +190,7 @@ gates:
     end: [0.55, 0.80]
     label_positive: in
     label_negative: out
+    expected_direction: in                 # optional; opposite crossings raise wrong-way incidents
 
 calibration:                               # omit → counts only, no speeds
   mode: homography
@@ -197,6 +200,10 @@ calibration:                               # omit → counts only, no speeds
 speed:
   unit: kmh                                # or mph
   speed_limit: 80                          # optional; enables violations
+
+incidents:                                 # stopped-vehicle detection (needs calibration)
+  stopped_speed_threshold: 3
+  stopped_min_duration_s: 6
 ```
 
 Configs are validated by pydantic with `extra: forbid` — a typo'd key, a pixel
@@ -206,14 +213,16 @@ immediately with a message that says what to fix.
 ## Tests
 
 ```bash
-python -m pytest        # 66 tests, ~2 s
+python -m pytest        # 79 tests, ~2 s
 ```
 
 The suite covers the intersection geometry (including collinear and on-the-line
 edge cases), the counter's once-per-track and direction semantics, the band
 baseline's failure modes, homography and scale calibration maths, speed recovery
-against synthetic ground truth, jitter robustness, config validation, the export
-formats, and the web API contract.
+against synthetic ground truth, jitter robustness, stopped-vehicle detection
+(sustained stops fire once, creeping queues don't re-fire, unknown speeds make
+no claim), wrong-way semantics, config validation, the export formats, and the
+web API contract.
 
 ## Limitations
 

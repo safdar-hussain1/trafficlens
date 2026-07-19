@@ -85,7 +85,9 @@ h2 { font-size: 34px; font-weight: 600; margin: 0 0 10px; }
 .replay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .replay-head h3 { margin: 0; font-size: 20px; color: var(--paint); }
 .replay-head .src { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-#replay { width: 100%; border-radius: 8px; display: block; background: #0a0c0e; cursor: ns-resize; touch-action: none; }
+.replay-stage { position: relative; border-radius: 8px; overflow: hidden; background: #0a0c0e; }
+.replay-stage video { width: 100%; display: block; }
+#replay { position: absolute; inset: 0; width: 100%; height: 100%; cursor: ns-resize; touch-action: none; }
 .replay-controls { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .replay-controls button {
   background: var(--amber); color: var(--amber-ink); font-weight: 700;
@@ -209,7 +211,10 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
         <h3>Live replay of a real session — drag the amber gate</h3>
         <span class="src">motorway A40, Dortmund · CC BY 3.0 Sounds of Changes · every box below is real tracker output</span>
       </div>
-      <canvas id="replay" width="1280" height="720" aria-label="Replay of tracked motorway traffic"></canvas>
+      <div class="replay-stage">
+        <video id="rp-video" src="media/motorway-raw.mp4" muted loop playsinline preload="auto"></video>
+        <canvas id="replay" width="1280" height="720" aria-label="Replay of tracked motorway traffic"></canvas>
+      </div>
       <div class="replay-controls">
         <button id="rp-play" aria-label="Play or pause replay">Pause</button>
         <input id="rp-seek" type="range" min="0" max="100" value="0" aria-label="Seek">
@@ -218,8 +223,9 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
       <div class="replay-tiles" id="rp-tiles"></div>
       <p class="replay-note"><b>Try it:</b> drag either gate up or down — the counts recompute
         instantly from the recorded tracks, using the same segment-crossing geometry as the Python
-        pipeline. Everything that moves here is pure tracking data (~30 kB/s of boxes) drawn over a
-        single still frame — which is why a whole motorway session replays inside a static page.</p>
+        pipeline. The boxes, speeds and counts aren't burnt into the video: they're the session's
+        recorded tracking data, drawn live on a canvas synced to the clip — which is what makes the
+        gate draggable and every count re-computable in your browser.</p>
     </div>
   </div>
 </section>
@@ -259,6 +265,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
       <div class="feature"><h3>Any source</h3><p>Video files, webcams, RTSP/HTTP streams. The same YAML config drives the CLI and the web app.</p></div>
       <div class="feature"><h3>Draw, don't code</h3><p>Gates are drawn on the live video and moved while the session runs. Calibration is four clicks and two numbers.</p></div>
       <div class="feature"><h3>Violations</h3><p>Set a speed limit and every over-limit crossing is flagged and photographed into a snapshot gallery.</p></div>
+      <div class="feature"><h3>Incidents</h3><p>Stopped-vehicle alerts — a stall, an obstacle, a forming queue — plus wrong-way detection on any gate with an expected flow direction.</p></div>
       <div class="feature"><h3>Exports</h3><p>Events CSV, summary JSON, and a replay file that powers this page. Every count is auditable down to the frame.</p></div>
     </div>
   </div>
@@ -479,21 +486,14 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = St
   let cur = 0, playing = true, lastTiles = -1;
   const flashes = []; // {x, y, ttl, dir}
 
-  // Backplate: the camera is static, so one real frame stands in for the
-  // scene; every moving element on top is recorded tracking data.
-  const backplate = new Image();
-  backplate.src = "media/motorway-still.jpg";
+  // The real clip plays underneath; this canvas only draws the recorded
+  // tracking data on top, synced to the video clock — so every box sits
+  // on the vehicle it tracked.
+  const video = $("rp-video");
 
   function draw() {
     const f = frames[cur];
-    ctx.fillStyle = "#0a0c0e";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (backplate.complete && backplate.naturalWidth) {
-      ctx.drawImage(backplate, 0, 0, canvas.width, canvas.height);
-      // dim the still so the live data reads as the foreground
-      ctx.fillStyle = "rgba(10, 12, 14, 0.45)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.font = "600 13px 'IBM Plex Mono', monospace";
     for (const t of f.tracks) {
@@ -537,22 +537,28 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = St
   }
 
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let acc = 0, lastTs = 0;
-  function tick(ts) {
-    if (playing) {
-      acc += ts - lastTs;
-      const step = 1000 / fps;
-      while (acc > step) { cur = (cur + 1) % frames.length; acc -= step; }
-      draw();
-    }
-    lastTs = ts;
+  const hasVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  function syncTo(t) {
+    const idx = Math.min(frames.length - 1, Math.round(t * fps));
+    if (idx !== cur) { cur = idx; draw(); }
+  }
+  function vfcLoop(_now, meta) {
+    // Frame-exact: fires once per presented video frame with its media time.
+    syncTo(meta.mediaTime);
+    video.requestVideoFrameCallback(vfcLoop);
+  }
+  function tick() {
+    // rAF fallback: the video is still the clock, at worst one frame behind.
+    syncTo(video.currentTime);
     requestAnimationFrame(tick);
   }
   $("rp-play").addEventListener("click", () => {
     playing = !playing;
+    if (playing) video.play(); else video.pause();
     $("rp-play").textContent = playing ? "Pause" : "Play";
   });
   $("rp-seek").addEventListener("input", (e) => {
+    video.currentTime = (+e.target.value / 100) * ((frames.length - 1) / fps);
     cur = Math.round((+e.target.value / 100) * (frames.length - 1));
     draw();
   });
@@ -587,9 +593,19 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = St
   });
 
   recount();
-  if (reduceMotion) { playing = false; $("rp-play").textContent = "Play"; }
+  if (reduceMotion) {
+    playing = false;
+    $("rp-play").textContent = "Play";
+    video.currentTime = 4.0;  // a representative moment instead of autoplay
+  } else {
+    video.play().catch(() => {
+      playing = false;
+      $("rp-play").textContent = "Play";
+    });
+  }
   draw();
-  requestAnimationFrame((ts) => { lastTs = ts; requestAnimationFrame(tick); });
+  if (hasVFC) video.requestVideoFrameCallback(vfcLoop);
+  else requestAnimationFrame(tick);
 })();
 
 /* ── band vs segment lab ────────────────────────────────── */

@@ -259,6 +259,7 @@ output { font-family: var(--mono); color: var(--paint); }
 .board-table .dir-in { color: var(--go); }
 .board-table .dir-out { color: var(--guide); }
 .board-table .flag { color: var(--halt); font-weight: 700; }
+.board-table .flag-warn { color: var(--amber); font-weight: 700; }
 .board-empty { color: var(--paint-dim); font-size: 13px; }
 td.board-empty, .board-empty td { font-family: var(--sans); }
 tbody#event-rows tr.fresh { animation: land 0.6s ease-out; }
