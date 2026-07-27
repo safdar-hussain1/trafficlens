@@ -108,16 +108,28 @@ CC-licensed footage; every number is reproducible from a clean clone. Model:
 
 | metric | 30 fps native | 10 fps (CCTV-like, every 3rd frame) |
 |---|---|---|
-| crossings, both gates | **24** | **24** |
-| inbound gate breakdown | 14 car in, 1 car out, 3 truck in | identical |
-| naive band on the same tracks | 19 (1 phantom) | 18 |
-| speed violations (80 km/h limit) | 5 | 6 |
-| median car speed at gate | 37.6 km/h | 35.7 km/h |
+| crossings, both gates | **28** | **28** |
+| inbound gate | 14 car + 3 truck, all inbound | identical |
+| outbound gate | 10 car + 1 truck, all outbound | identical |
+| naive band on the inbound gate | 18 (1 phantom) | 17 |
+| speed violations (80 km/h limit) | 9 | 10 |
+| median car speed at gate | 41.8 km/h | 40.6 km/h |
+| wrong-way incidents | 0 | 0 |
 
-The count is **invariant to frame rate** — same 24 crossings, same class breakdown,
-at 30 and 10 fps. The speeds tell the traffic story honestly: congested flow
-resolving out of a queue (≈15 km/h far field → ≈60 km/h at the bridge, with free-lane
-outliers above 100 km/h).
+The count is **invariant to frame rate** — same 28 crossings, same per-class
+breakdown, at 30 and 10 fps. Every gate reads a single direction, which is what a
+divided carriageway should produce. The speeds tell the traffic story honestly:
+congested flow resolving out of a queue (≈15 km/h far field → ≈60 km/h at the
+bridge, with free-lane outliers above 100 km/h).
+
+**The incident detector caught my own misconfiguration.** The first run of these
+gates reported a wrong-way car. It wasn't one: the inbound gate had been drawn 0.09
+of the frame too far right, overhanging the median into the outbound carriageway, so
+correctly-driving outbound traffic crossed it backwards. Measuring where the median
+actually sits at each gate's height (inbound ends at x=0.46, outbound starts at
+x=0.55) removed the false alarm — and revealed that the outbound gate had been
+missing its left lane entirely, four vehicles that were never counted. A counting
+line that overhangs a median is invisible in a demo and wrong in production.
 
 ### Scenario: street crossing (person + bicycle + car classes)
 
@@ -128,10 +140,10 @@ calibration is shipped for this camera, so it reports counts only, by design.
 
 | model | fps |
 |---|---|
-| yolo11n | **39.4** |
-| yolo26n | 38.1 |
-| yolo11s | 29.4 |
-| yolo11m | 20.8 |
+| yolo11n | **45.6** |
+| yolo11s | 41.5 |
+| yolo26n | 38.4 |
+| yolo11m | 25.8 |
 
 ### On band counters and frame rate
 

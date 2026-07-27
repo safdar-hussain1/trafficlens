@@ -342,6 +342,19 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
         </ul>
       </div>
       <div class="method-card">
+        <h3>The incident detector caught my own bug</h3>
+        <p>The first run of these gates reported a wrong-way car. It wasn't one — the
+        inbound gate had been drawn 0.09 of the frame too far right, overhanging the
+        median, so correctly-driving outbound traffic crossed it backwards.</p>
+        <p>Measuring where the median actually sits at each gate's height (inbound ends
+        at x&nbsp;=&nbsp;0.46, outbound starts at x&nbsp;=&nbsp;0.55) removed the false
+        alarm — and revealed the outbound gate had been missing its left lane entirely:
+        <b>four vehicles that were never counted</b>. Every gate now reads a single
+        direction, which is what a divided carriageway should produce.</p>
+        <p class="check"><b>✓</b> a counting line that overhangs a median is invisible in
+        a demo and wrong in production</p>
+      </div>
+      <div class="method-card">
         <h3>Verified by synthetic cameras</h3>
         <p>The estimator is tested against tracks projected through a known synthetic camera,
         where ground truth is exact:</p>
@@ -717,9 +730,12 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = St
     `<th>band phantoms</th><th>fastest anchor step</th></tr></thead>` +
     `<tbody>${row(M, "Motorway 30 fps")}${row(M10, "Motorway 10 fps")}${row(S, "Street")}</tbody>` +
     `<tbody><tr><td colspan="6" style="color:var(--muted); font-size:12.5px;">` +
-    `In this congested clip the band survives — steps stay under its height. On a free-flowing ` +
-    `30 fps highway clip used during development, anchor steps reached 181 px/frame: the band ` +
-    `missed 4 vehicles and phantom-counted 3. The lab above shows why.</td></tr></tbody>`;
+    `The gate column counts the inbound gate only — that's the geometry the band ` +
+    `counter is built on. In this congested clip the band mostly survives: steps stay ` +
+    `under its height, though it still phantom-counted one vehicle at 30 fps. On a ` +
+    `free-flowing 30 fps highway clip used during development, anchor steps reached ` +
+    `181 px/frame — the band missed 4 vehicles and phantom-counted 3. The lab above ` +
+    `shows why.</td></tr></tbody>`;
 
   // fps
   const fps = D.benchmark.fps || [];

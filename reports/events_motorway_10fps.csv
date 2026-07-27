@@ -7,7 +7,10 @@ frame,timestamp_s,track_id,class,gate,direction,speed,violation
 56,5.600,11,car,inbound,in,41.7,0
 66,6.600,9,car,inbound,in,34.0,0
 72,7.200,41,car,outbound,out,91.4,1
+79,7.900,47,car,outbound,out,98.4,1
+84,8.400,49,car,outbound,out,107.8,1
 87,8.700,10,car,inbound,in,32.5,0
+92,9.200,56,car,outbound,out,103.2,1
 95,9.500,54,car,outbound,out,86.3,1
 106,10.600,63,car,outbound,out,86.7,1
 108,10.800,27,car,inbound,in,33.2,0
@@ -18,8 +21,9 @@ frame,timestamp_s,track_id,class,gate,direction,speed,violation
 166,16.600,83,car,outbound,out,93.1,1
 177,17.700,17,truck,inbound,in,39.2,0
 200,20.000,32,car,inbound,in,35.8,0
+216,21.600,112,car,outbound,out,151.6,1
 217,21.700,42,truck,inbound,in,41.1,0
 224,22.400,79,car,inbound,in,35.6,0
-225,22.500,127,car,inbound,out,104.7,1
+229,22.900,127,car,outbound,out,97.0,1
 243,24.300,70,car,inbound,in,28.7,0
 243,24.300,116,truck,outbound,out,58.2,0
