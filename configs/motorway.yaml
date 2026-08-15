@@ -13,41 +13,72 @@ detector:
 # gate drawn across both carriageways would count the opposing
 # carriageway's ordinary flow as wrong-way traffic, so each gate covers
 # exactly the lanes whose expected direction it names.
+#
+# Direction labels are named for the geometry, not left at the "in"/"out"
+# defaults. Both gates run left to right at a constant image y, so
+# core.geometry.side_of_line puts the side up the frame -- away from the
+# camera -- at +1, and the side down the frame -- toward the camera -- at
+# -1. Both gates therefore share one convention, label_positive: away and
+# label_negative: toward, and each gate names the direction its own
+# carriageway actually flows. Taking the defaults instead labelled every
+# ordinary approach "out" while the gate expected "in", so every single
+# crossing on both carriageways fired a wrong-way incident.
 gates:
   - name: inbound            # left carriageway, traffic toward the camera
     start: [0.06, 0.80]
     end: [0.46, 0.80]
-    expected_direction: in
+    label_positive: away
+    label_negative: toward
+    expected_direction: toward
   - name: outbound           # right carriageway, traffic away from the camera
     start: [0.52, 0.80]
     end: [0.69, 0.80]
-    expected_direction: out
+    label_positive: away
+    label_negative: toward
+    expected_direction: away
 
 # Surveyed from lane-divider dash geometry on the inbound carriageway.
 #
 # Along-road scale: ASSUMED, an 18 m period between consecutive dash
-# centroids on each divider line. The nine surveyed centroids fit one
-# homography with a 0.12 m mean residual (max 0.18 m), which supports the
-# period being uniform -- it says nothing about its absolute value. Note
-# that the paint itself does not match the standard German autobahn
-# marking of a 6 m stroke in an 18 m period: the measured stroke fills
-# about half of each period (stroke:period 0.49-0.51), i.e. roughly 1:1
-# stroke to gap, so which marking standard this road uses is unknown and
-# no standard is being assumed beyond the 18 m period itself. The
-# along-road scale -- the axis every reported speed depends on -- has NO
-# independent corroboration yet; establishing one (for example a two-gate
-# time-of-flight cross-check over a known ground distance) is outstanding
-# work.
+# centroids on each divider line.
+#
+# Where the 18 m came from: it is the period of the standard German
+# autobahn marking, a 6 m stroke repeating every 18 m. That standard
+# does not describe this road. The paint was measured off the clip and
+# its stroke fills about half of each period -- stroke:period 0.44 to
+# 0.50 across the runs measured -- where a 6 m stroke in an 18 m period
+# requires 0.333. The ratio is scale-free, so that refutation does not
+# depend on the 18 m figure itself. The 18 m is kept anyway, because the
+# survey needs some absolute along-road scale and this is the one number
+# it took from that standard. It is a working assumption. It is
+# unverified.
+#
+# What a wrong period costs: the relationship is linear and unbounded.
+# Every reported speed scales directly with the assumed period, so if
+# the true period were 15 m, every km/h reported here would be 20 %
+# high. Scale error transfers to speeds one for one.
+#
+# What the fit does and does not show: the nine surveyed centroids
+# (7 fit + 2 holdout) fit one homography with a 0.12 m mean residual
+# (max 0.18 m), which supports the period being uniform -- it says
+# nothing about its absolute value. Out of sample is markedly worse:
+# RoadPlane.validate() on the two held-out dashes measures a 0.377 m
+# mean and a 0.607 m max, the max at the 90 m point, about 3x the
+# self-fit figure. The along-road scale -- the axis every reported speed
+# depends on -- has NO independent corroboration; establishing one (for
+# example a two-gate time-of-flight cross-check over a known ground
+# distance) is outstanding work.
 #
 # Cross-road scale: a separate assumption, 3.75 m lane width between the
-# two dashed divider lines. This one is corroborated by a
-# vehicle-footprint check: passenger-car front-base spans project to
-# 1.5-1.6 m, the right order for a ~1.8 m car. A front-base span is a
-# cross-road measurement, so this check validates only the lane-width
-# assumption, not the 18 m period. The second divider's dash phase along
-# the road is not observable from dash landmarks alone and is fixed at
-# zero, which shears cross-road coordinates slightly but leaves
-# along-lane distances -- and therefore speeds -- unchanged.
+# two dashed divider lines. It has no reproducible corroboration either.
+# A vehicle-footprint check made off the clip read 1.5-1.6 m for
+# passenger-car front-base spans, about 15 % under the ~1.8 m such a car
+# should measure; the image points it used are not committed anywhere in
+# this repository, so it cannot be re-derived from tracked data and it
+# is not treated as evidence. The second divider's dash phase along the
+# road is not observable from dash landmarks alone and is fixed at zero,
+# which shears cross-road coordinates slightly but leaves along-lane
+# distances -- and therefore speeds -- unchanged.
 #
 # World frame: x is metres across the road (0 on the first divider line),
 # y is metres along the road, away from the camera. Image points are

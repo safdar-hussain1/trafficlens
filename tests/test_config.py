@@ -276,8 +276,14 @@ def test_motorway_config_gates_stop_at_the_median():
     assert len(config.gates) == 2
     by_name = {g.name: g for g in config.gates}
     assert set(by_name) == {"inbound", "outbound"}
-    assert by_name["inbound"].expected_direction == "in"
-    assert by_name["outbound"].expected_direction == "out"
+    # Both gates run left to right at constant y, so +1 is the far side
+    # (away from the camera) for both; each names the direction its own
+    # carriageway flows. See tests/test_motorway_gates.py for the
+    # end-to-end check that ordinary flow fires no wrong-way incident.
+    for gate in by_name.values():
+        assert (gate.label_positive, gate.label_negative) == ("away", "toward")
+    assert by_name["inbound"].expected_direction == "toward"
+    assert by_name["outbound"].expected_direction == "away"
     # the two gates never overlap horizontally: each stays on its own
     # carriageway side of the median
     inbound_max_x = max(by_name["inbound"].start[0], by_name["inbound"].end[0])
