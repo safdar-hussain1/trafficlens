@@ -194,6 +194,20 @@ TRACK_MAX_AGE = 30
 # double-counted NMS artefact, three in a row almost never are.
 TRACK_MIN_HITS = 3
 
+# Tolerance under which two assignment totals in
+# trafficlens.track.associate.assign count as the SAME optimum, so the
+# canonical lexicographic tie rule (not the solver's internals) picks
+# between them. This defines the cost granularity of the association: two
+# candidate assignments whose (1 - IoU) totals differ by less than 1e-6
+# are treated as tied -- an IoU distinction that small has no physical
+# meaning at pixel scale -- and any genuine difference at or above it is
+# always respected. 1e-6 sits well clear on both sides: accumulated
+# float64 summation rounding across candidate totals stays below ~1e-8
+# even with barred stand-in entries (1e4 each, see associate.py) in the
+# sums, while meaningful IoU-cost differences are orders of magnitude
+# above it.
+TRACK_ASSIGN_TIE_TOL = 1e-06
+
 # --- Speed estimation (trafficlens.analytics.speed) ---------------------------
 # All tunables of the plane-space speed estimator live here so the later
 # TypeScript mirror reads the exact same values; speed.py itself contains

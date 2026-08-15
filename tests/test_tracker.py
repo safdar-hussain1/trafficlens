@@ -109,6 +109,33 @@ def test_assign_handles_barred_inf_pairs():
     assert u_cols == [0, 1, 2]
 
 
+def test_assign_breaks_exact_ties_toward_lowest_indices():
+    # With tied costs the optimal match SET is not unique, and which
+    # optimum a solver returns is implementation-internal -- the TS mirror
+    # cannot inherit scipy's choice. assign() therefore canonicalizes: the
+    # returned assignment is the lexicographically-(row,col)-least among
+    # (near-)optimal assignments, independent of the solver used.
+    matches, u_rows, u_cols = assign(np.full((2, 2), 0.5), max_cost=0.6)
+    assert matches == [(0, 0), (1, 1)]
+    assert u_rows == [] and u_cols == []
+
+    # Three-way tie: canonical result is the identity pairing, which a
+    # 2-swap rule alone could not guarantee (rotations tie pairwise).
+    matches, _, _ = assign(np.full((3, 3), 0.5), max_cost=0.6)
+    assert matches == [(0, 0), (1, 1), (2, 2)]
+
+    # Rectangular ties: WHICH column (or row) goes unmatched is part of
+    # the optimum and must be canonical too -- lowest indices match first.
+    matches, u_rows, u_cols = assign(np.full((1, 2), 0.5), max_cost=0.6)
+    assert matches == [(0, 0)] and u_cols == [1]
+    matches, u_rows, u_cols = assign(np.full((2, 1), 0.5), max_cost=0.6)
+    assert matches == [(0, 0)] and u_rows == [1]
+
+    # A genuine cost difference is never overridden by the tie rule.
+    matches, _, _ = assign(np.array([[0.5, 0.4], [0.4, 0.5]]), max_cost=0.6)
+    assert matches == [(0, 1), (1, 0)]
+
+
 # -- Tracker: construction contract ------------------------------------------
 
 
@@ -220,12 +247,59 @@ def test_crossing_paths_keep_identities():
     assert seen_ids == {1, 2}
 
 
+def test_mahalanobis_gate_bars_a_floor_eligible_displaced_detection(monkeypatch):
+    # The chi-square gate needs a discriminator the IoU floor cannot
+    # provide, and a symmetric crossing cannot either (a swap preferred by
+    # predicted-box IoU implies the swapped pairs are CLOSER to the
+    # predictions, so IoU and Mahalanobis agree there). The case that
+    # separates them: a mature track whose velocity is established, given a
+    # single detection displaced from the prediction by an amount that
+    # still clears the IoU floor but exceeds the gate.
+    #
+    # Geometry (identical to the crossing test's boxes): a 100x30 box at
+    # cx = 100 + 10t for t = 0..9, then at t = 10 the only detection sits
+    # at cx = 190 instead of the predicted ~198.89 -- displaced ~8.9 px.
+    # Measured with the real filter on this exact sequence:
+    #   IoU(predicted box, displaced box) ~ (100-8.89)/(100+8.89) = 0.8368
+    #     -> clears the 0.8 floor (cost 0.1632 <= max_cost 0.2), so the
+    #        IoU cost alone would happily match it;
+    #   squared Mahalanobis distance = 11.49 > 9.4877
+    #     -> the gate bars the pair.
+    # (Warm-up frames all pass the gate; the worst is ~8.39 at t=2, while
+    # the velocity prior is still settling.)
+    w, h, cy = 100.0, 30.0, 300.0
+
+    def det_at(cx: float) -> Detection:
+        return _det(cx - w / 2, cy - h / 2, 0.9, w=w, h=h)
+
+    def run() -> list[Track]:
+        tracker = Tracker()  # defaults; min_hits=3 keeps the new track internal
+        for t in range(10):
+            tracker.update([det_at(100.0 + 10.0 * t)], t)
+        return tracker.update([det_at(190.0)], 10)
+
+    # Gate active: the displaced detection must NOT continue track 1. It
+    # starts a tentative track instead (internal), and track 1 coasts, so
+    # the frame's detector-backed output is empty.
+    assert run() == []
+
+    # Same sequence with the gate widened to infinity: now nothing bars
+    # the pair, the IoU floor alone accepts it, and track 1 IS continued.
+    # This half proves the assertion above really is the gate's doing and
+    # not the floor's.
+    import trafficlens.track.tracker as tracker_module
+
+    monkeypatch.setattr(tracker_module, "KALMAN_GATING_CHI2_95_4DOF", float("inf"))
+    assert [tr.track_id for tr in run()] == [1]
+
+
 # -- Tracker: dropout on both sides of max_age -------------------------------
 
 
-def _run_dropout(gap: int) -> tuple[int, int]:
+def _run_dropout(gap: int) -> tuple[int, Track]:
     """Track one object for 5 frames, hide it for ``gap`` frames, then show
-    it again on its constant-velocity path. Returns (id_before, id_after).
+    it again on its constant-velocity path. Returns (id_before, the single
+    track present on the reappearance frame).
     """
     tracker = Tracker(min_hits=1, max_age=5)
 
@@ -242,17 +316,32 @@ def _run_dropout(gap: int) -> tuple[int, int]:
     f = 5 + gap
     tracks = tracker.update([det_at(f)], f)
     assert len(tracks) == 1
-    return id_before, tracks[0].track_id
+    return id_before, tracks[0]
 
 
 def test_dropout_of_max_age_minus_one_frames_keeps_id():
-    id_before, id_after = _run_dropout(gap=4)  # max_age - 1
-    assert id_after == id_before
+    id_before, track = _run_dropout(gap=4)  # max_age - 1
+    assert track.track_id == id_before
+    # History grows only on real-detection updates: 5 before the gap plus
+    # the reappearance frame. An append-during-coast bug would make it
+    # 6 + gap instead.
+    assert len(track.history) == 6
+
+
+def test_dropout_of_exactly_max_age_frames_keeps_id():
+    # The death rule is time_since_update > max_age, strictly: a gap of
+    # exactly max_age frames must still survive on prediction alone. This
+    # pins the boundary a wrong `>=` rule would get past the +/-1 tests.
+    id_before, track = _run_dropout(gap=5)  # == max_age
+    assert track.track_id == id_before
+    assert len(track.history) == 6
 
 
 def test_dropout_of_max_age_plus_one_frames_issues_new_id():
-    id_before, id_after = _run_dropout(gap=6)  # max_age + 1
-    assert id_after != id_before
+    id_before, track = _run_dropout(gap=6)  # max_age + 1
+    assert track.track_id != id_before
+    # A brand-new track: its history starts over with one anchor.
+    assert len(track.history) == 1
 
 
 # -- Tracker: second association stage ---------------------------------------
