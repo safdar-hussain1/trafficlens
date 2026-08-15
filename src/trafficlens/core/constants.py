@@ -35,3 +35,33 @@ HOMOGRAPHY_MAX_CONDITION_NUMBER = 10000.0
 # speed -- cannot be trusted to better than half a metre, which is too
 # coarse for confident lane-level speed enforcement.
 HOMOGRAPHY_MAX_MEAN_ERROR_M = 0.5
+
+# Default minimum per-class confidence score trafficlens.detect.base.decode_yolo
+# keeps a raw prediction at, before NMS runs. 0.25 is the long-standing YOLO
+# default (YOLOv3 through ultralytics' own predict CLI), low enough to leave
+# real-but-uncertain detections in for NMS and downstream tracking to sort
+# out, high enough to drop the long tail of near-zero background scores.
+DETECT_DEFAULT_CONF = 0.25
+
+# Default IoU threshold trafficlens.detect.base.nms uses to suppress a
+# lower-score duplicate box in favour of a higher-score one for the same
+# class. 0.45 is the classic YOLO NMS default (YOLOv5 through v8): tight
+# enough to collapse near-duplicate boxes on one vehicle, loose enough not
+# to merge two genuinely distinct, closely-spaced vehicles into one.
+DETECT_DEFAULT_NMS_IOU = 0.45
+
+# Default square side, in pixels, trafficlens.detect.base.letterbox resizes
+# and pads a frame to before it is handed to a YOLO11 model. 640 is the
+# input resolution yolo11n.pt/yolo11s.pt/yolo11m.pt in this repo were
+# trained and exported at -- confirmed by the ONNX export's own reported
+# output shape (1, 84, 8400) for imgsz=640, since 8400 = (640/8)^2 +
+# (640/16)^2 + (640/32)^2, the three detection-head stride grids summed.
+DETECT_DEFAULT_INPUT_SIZE = 640
+
+# Grey value trafficlens.detect.base.letterbox pads a frame's borders with,
+# so padding never biases a detection toward any class. 114 is the value
+# YOLOv5 introduced and ultralytics (and therefore YOLO11) has used ever
+# since -- the same value every checkpoint in this repo was trained
+# against, so padding with anything else would shift the input distribution
+# the model actually saw during training.
+LETTERBOX_PAD_VALUE = 114
