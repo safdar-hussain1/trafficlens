@@ -245,3 +245,28 @@ SPEED_MIN_SAMPLES = 5
 # that one lands within threshold of the first; measuring against the last
 # accepted sample rejects the whole burst.
 SPEED_MAX_STEP_M = 7.0
+
+# --- Incident detection (trafficlens.analytics.incidents) ---------------------
+# All tunables of the stopped-vehicle detector live here so the later
+# TypeScript mirror reads the exact same values; incidents.py itself
+# contains no numeric tunables.
+
+# Speed, in km/h, below which (strictly) a calibrated track counts as
+# stationary for stopped-vehicle detection. The speed estimator's per-axis
+# least-squares fit gives a genuinely stopped vehicle a measured noise
+# floor below 1.0 km/h at 2 cm of plane-space anchor jitter (see
+# tests/test_speed.py: the stopped-vehicle jitter test asserts < 1.0), so
+# 3.0 sits a 3x margin above that floor -- anchor noise alone can never
+# push a stopped vehicle over the threshold and suppress its incident --
+# while staying below even the slowest genuine creep (walking pace is
+# ~5 km/h), so a queue inching forward does not read as stopped.
+INCIDENT_STOPPED_SPEED_KMH = 3.0
+
+# Continuous seconds a track's calibrated speed must stay below
+# INCIDENT_STOPPED_SPEED_KMH before ONE stopped-vehicle incident fires.
+# 10 s clears ordinary give-way pauses, queue creep gaps, and hesitation
+# stops -- which last a few seconds -- while catching a breakdown or
+# obstruction well before it has held traffic for a full signal cycle.
+# Deliberately user-tunable per deployment: a motorway operator may want
+# less, a junction camera more.
+INCIDENT_MIN_STOPPED_S = 10.0
