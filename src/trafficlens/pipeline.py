@@ -62,6 +62,19 @@ annotated video, calling the progress callback -- happens after the
 ``frame`` bracket closes, so it is charged to no stage and does not
 distort the total either.
 
+``frame`` is therefore the per-frame ANALYSIS total, not wall-clock
+throughput: decoding the frame from its container happens in the source's
+iterator, before the bracket opens, and is charged to nothing at all. On
+a real motorway run that is a small share next to a 75 ms detector, but
+it is not zero, and anything that prints this number must say what it
+leaves out rather than let it read as frames-per-second.
+
+The partition check alone cannot prove the stages were measured
+separately -- any three numbers that sum to the total satisfy it. So the
+tests also inject a KNOWN per-stage cost (a sleeping detector, a sleeping
+tracker) and assert each stage recovers its own injected number, which no
+redistribution of a single whole-frame measurement can fake.
+
 Statistics are computed from the full per-frame sample list, so ``p95``
 is an exact nearest-rank percentile rather than a running approximation.
 That costs one float per stage per frame (a few megabytes for a
@@ -75,6 +88,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from time import perf_counter
 
+from trafficlens import annotate
 from trafficlens.analytics.incidents import Incident, IncidentDetector
 from trafficlens.analytics.speed import SpeedEstimator
 from trafficlens.analytics.violations import ViolationPolicy
@@ -88,10 +102,23 @@ from trafficlens.track.tracker import Tracker
 # The three separately measured stages of one frame, in execution order.
 STAGES: tuple[str, ...] = ("detect", "track", "analytics")
 
-# The measured total of the per-frame body. Deliberately NOT one of
-# STAGES: it is the yardstick the stage means are checked against, not a
+# The measured total of the per-frame ANALYSIS body. Deliberately NOT one
+# of STAGES: it is the yardstick the stage means are checked against, not a
 # fourth stage, and summing it with them would double-count the frame.
+#
+# What it does NOT include, and what therefore must never be read off it as
+# end-to-end throughput: decoding the frame from the container (that
+# happens in the source's iterator, before this bracket opens), writing
+# violation snapshots, building replay records, encoding the annotated
+# video, and the progress callback (all after it closes). Every caller
+# that prints this number is responsible for saying so.
 TOTAL = "frame"
+
+# Container extensions ``_open_writer``'s MJPG encoder is verified to open.
+# Checked, not assumed: .webm and any extension OpenCV does not recognise
+# fail to open at all, which is why ``trafficlens run`` refuses them up
+# front rather than after a model load and a frame of work.
+SAVE_VIDEO_SUFFIXES: tuple[str, ...] = (".avi", ".mkv", ".mov", ".mp4", ".m4v")
 
 # Frame rate assumed when a source reports none of its own (webcams, some
 # streams). It is used ONLY to bound the speed estimator's per-track
@@ -245,7 +272,6 @@ def run_session(
     evidence JPEG per speed-limit violation. ``save_video`` -- when given
     -- receives an annotated copy of the footage.
     """
-    counters: dict[str, GateCounter] = {}
     events: list[CrossingEvent] = []
     incidents: list[Incident] = []
     speeds: dict[int, float | None] = {}
@@ -379,8 +405,6 @@ def run_session(
                 if save_video is not None:
                     if writer is None:
                         writer = _open_writer(save_video, fps, width, height)
-                    from trafficlens import annotate
-
                     writer.write(
                         annotate.draw_frame(
                             frame,
@@ -442,9 +466,13 @@ def run_session(
 def _open_writer(path, fps: float, width: int, height: int):
     """Open an MJPG AVI writer at ``path``, creating its parent directory.
 
-    MJPG in an AVI container is the one encoder every ``opencv-python``
-    wheel ships with on every platform, so an annotated video always
-    writes; the container is chosen by the caller's filename either way.
+    The CONTAINER is chosen by the caller's filename -- OpenCV reads the
+    extension -- while the codec is always MJPG, the one encoder every
+    ``opencv-python`` wheel ships with on every platform. Not every
+    container accepts an MJPG stream: ``SAVE_VIDEO_SUFFIXES`` lists the
+    ones verified to open, and ``trafficlens run`` refuses anything else
+    before it loads a model. This check stays as a backstop, because the
+    set can differ with the platform's OpenCV build.
     """
     import cv2
 
@@ -454,7 +482,11 @@ def _open_writer(path, fps: float, width: int, height: int):
         str(out), cv2.VideoWriter_fourcc(*"MJPG"), float(fps), (int(width), int(height))
     )
     if not writer.isOpened():
-        raise OSError(f"could not open a video writer for {out}")
+        raise OSError(
+            f"could not open a video writer for {out}: this OpenCV build "
+            f"will not put an MJPG stream in a {out.suffix or '(no extension)'} "
+            f"container. Supported: {', '.join(SAVE_VIDEO_SUFFIXES)}."
+        )
     return writer
 
 

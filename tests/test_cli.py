@@ -29,6 +29,7 @@ from test_pipeline import (
 from trafficlens import cli as cli_module
 from trafficlens import samples
 from trafficlens.cli import cli
+from trafficlens.pipeline import SAVE_VIDEO_SUFFIXES
 
 ROOT = Path(__file__).resolve().parents[1]
 YOLO11N = ROOT / "yolo11n.pt"
@@ -243,12 +244,42 @@ def test_run_writes_the_export_artifacts(session, scripted, tmp_path):
 
 
 def test_run_honours_max_frames(session, scripted):
+    """The CLI -> pipeline `max_frames` wiring, which nothing else covers:
+    `test_max_frames_stops_the_session_early` drives `run_session` directly.
+
+    Asserting the exact reported line matters -- a bare `"5" in output` is
+    satisfied by any timing digit, so making the flag a complete no-op would
+    still pass it. The clip is 60 frames, so `Frames: 5` can only appear if
+    the option really reached the pipeline.
+    """
     config, _ = session
     result = CliRunner().invoke(
         cli, ["run", "--config", str(config), "--max-frames", "5"]
     )
     assert result.exit_code == 0, result.output
-    assert "5" in result.output
+    assert "Frames: 5" in result.output
+
+
+def test_run_without_max_frames_processes_the_whole_clip(session, scripted):
+    config, _ = session
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code == 0, result.output
+    assert "Frames: 60" in result.output
+
+
+def test_run_states_what_the_frame_timing_excludes(session, scripted):
+    """`frame` totals the analysis stages only -- video decode happens in the
+    source's iterator, outside the bracket. Printed without that caveat it
+    reads as end-to-end throughput, which it is not."""
+    config, _ = session
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--max-frames", "5"]
+    )
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.lower().split())
+    assert "'frame' totals the analysis stages only" in flat
+    assert "decode" in flat
+    assert "not end-to-end throughput" in flat
 
 
 def test_run_source_override_replaces_the_config_source(tmp_path, scripted):
@@ -332,6 +363,49 @@ def test_a_malformed_gate_spec_exits_non_zero_with_a_readable_message(
     assert "--gate" in result.output or "gate" in result.output
 
 
+def test_a_gate_rejected_by_the_model_gets_a_readable_one_line_reason(
+    session, scripted
+):
+    """A zero-length gate passes `parse_gate` (five fields, numeric, in
+    range) and is caught by the model instead. The user must get the reason,
+    not pydantic's multi-line developer dump with its documentation URL."""
+    config, _ = session
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--gate", "stuck,0.5,0.5,0.5,0.5"]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "errors.pydantic.dev" not in result.output
+    assert "For further information" not in result.output
+    assert "zero-length" in result.output or "identical start and end" in result.output
+    assert "stuck" in result.output
+    # One readable line, not a dump: the whole message is the Error: line.
+    error_lines = [
+        line for line in result.output.splitlines() if line.startswith("Error:")
+    ]
+    assert len(error_lines) == 1
+
+
+def test_duplicate_gate_names_get_a_readable_one_line_reason(session, scripted):
+    config, _ = session
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--config",
+            str(config),
+            "--gate",
+            "same,0.0,0.4,1.0,0.4",
+            "--gate",
+            "same,0.0,0.6,1.0,0.6",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "errors.pydantic.dev" not in result.output
+    assert "duplicate gate name" in result.output
+
+
 def test_run_writes_an_annotated_video_when_asked(session, scripted, tmp_path):
     config, _ = session
     video = tmp_path / "annotated.avi"
@@ -341,6 +415,81 @@ def test_run_writes_an_annotated_video_when_asked(session, scripted, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert video.is_file() and video.stat().st_size > 0
+
+
+@pytest.mark.parametrize("suffix", list(SAVE_VIDEO_SUFFIXES))
+def test_every_advertised_save_video_container_actually_writes(
+    session, scripted, tmp_path, suffix
+):
+    """The refusal list is only honest if everything NOT on it works."""
+    config, _ = session
+    video = tmp_path / f"annotated{suffix}"
+    result = CliRunner().invoke(
+        cli,
+        ["run", "--config", str(config), "--save-video", str(video), "--max-frames", "10"],
+    )
+    assert result.exit_code == 0, result.output
+    assert video.is_file() and video.stat().st_size > 0
+
+
+@pytest.mark.parametrize("name", ["annotated.webm", "annotated.txt", "annotated"])
+def test_an_unwritable_save_video_container_is_refused_before_the_model_loads(
+    session, tmp_path, monkeypatch, name
+):
+    """Whether a container can hold the MJPG stream is knowable from the
+    filename, so it must be refused up front -- not as an OSError traceback
+    after a model has loaded and a frame has been analysed. `.webm` matters
+    especially: it is the extension of this project's own flagship sample.
+    """
+    config, _ = session
+
+    def must_not_be_called(_config):
+        raise AssertionError(
+            "the detector was built before --save-video was validated"
+        )
+
+    monkeypatch.setattr(cli_module, "build_detector", must_not_be_called)
+    video = tmp_path / name
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--save-video", str(video)]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "--save-video" in result.output
+    for suffix in SAVE_VIDEO_SUFFIXES:
+        assert suffix in result.output, suffix
+    assert not video.exists()
+
+
+def test_a_writer_failure_is_reported_without_a_traceback(
+    session, scripted, tmp_path, monkeypatch
+):
+    """Backstop for what the up-front check cannot know -- a platform whose
+    OpenCV refuses a container the list allows, a full disk. `_open_writer`
+    raises OSError; `run` must turn that into one readable line."""
+    from trafficlens import pipeline as pipeline_module
+
+    config, _ = session
+
+    def refuse(path, fps, width, height):
+        raise OSError(f"could not open a video writer for {path}")
+
+    monkeypatch.setattr(pipeline_module, "_open_writer", refuse)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--config",
+            str(config),
+            "--save-video",
+            str(tmp_path / "annotated.avi"),
+            "--max-frames",
+            "5",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "could not open a video writer" in result.output
 
 
 # --- serve / bench stubs ------------------------------------------------------
@@ -373,9 +522,13 @@ def test_calibrate_reports_the_error_in_metres(tmp_path):
     )
     result = CliRunner().invoke(cli, ["calibrate", "--config", str(config)])
     assert result.exit_code == 0, result.output
-    assert "m" in result.output
-    assert "mean error" in result.output.lower()
-    assert "5" in result.output  # five surveyed correspondences
+    # The actual numbers, not merely the presence of the letter "m": this
+    # calibration is an exact pixel -> metre scaling, so both errors are
+    # 0.000 m, and replacing the line with prose would fail here.
+    flat = " ".join(result.output.lower().split())
+    assert "fit correspondences: 5" in flat
+    assert "fit mean error: 0.000 m" in flat
+    assert "fit max error: 0.000 m" in flat
 
 
 def test_calibrate_reports_held_out_error_when_a_holdout_is_surveyed(tmp_path):

@@ -12,6 +12,7 @@ exercises the real ``VideoSource`` open/iterate path rather than a stub.
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -19,12 +20,14 @@ import numpy as np
 import pytest
 
 from trafficlens import pipeline
-from trafficlens.analytics.incidents import Incident
+from trafficlens.analytics.incidents import Incident, IncidentDetector
+from trafficlens.analytics.speed import SpeedEstimator
 from trafficlens.config import AppConfig
 from trafficlens.core.gate import CrossingEvent, Gate, GateCounter
 from trafficlens.detect.base import Detection
 from trafficlens.io.export import validate_session_dict
 from trafficlens.pipeline import SessionResult, build_session, run_session
+from trafficlens.track.tracker import Tracker
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,6 +72,22 @@ def write_clip(path: Path, frames: int, fps: float = 30.0) -> Path:
     return path
 
 
+def spin(seconds: float) -> None:
+    """Burn exactly ``seconds`` of wall clock, then return.
+
+    Deliberately a busy-wait rather than ``time.sleep``: a 5 ms sleep
+    measured 7.13 ms on this machine (43% over, the OS timer's wake-up
+    latency), which would force the timing assertions out to a ~50%
+    tolerance and blunt them. A ``perf_counter`` spin lands inside a
+    fraction of a percent, so an injected cost of 5 ms can be asserted at
+    5 ms and a stage bracket that accidentally swallowed part of another
+    one would show.
+    """
+    deadline = time.perf_counter() + seconds
+    while time.perf_counter() < deadline:
+        pass
+
+
 class ScriptedDetector:
     """A ``Detector`` that returns canned detections per frame index.
 
@@ -76,13 +95,22 @@ class ScriptedDetector:
     ``detect`` call is one frame, exactly as the pipeline drives it. ``calls``
     records how many frames were actually handed to it, which is how the
     max_frames tests observe that the pipeline really stopped early.
+
+    ``cost_s`` injects a KNOWN per-call duration (see ``spin``). That is what
+    makes the timing tests able to fail: a pipeline that measured the frame
+    once and split the total across three stages by some fixed ratio can
+    satisfy any partition check, but it cannot make ``timings["detect"]``
+    come out at an independently chosen 5 ms.
     """
 
-    def __init__(self, script) -> None:
+    def __init__(self, script, cost_s: float = 0.0) -> None:
         self._script = script
+        self._cost_s = cost_s
         self.calls = 0
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
+        if self._cost_s:
+            spin(self._cost_s)
         index = self.calls
         self.calls += 1
         if callable(self._script):
@@ -136,6 +164,33 @@ def make_config(source: Path, **overrides) -> AppConfig:
 @pytest.fixture
 def clip(tmp_path) -> Path:
     return write_clip(tmp_path / "clip.avi", frames=60)
+
+
+# Known per-frame costs injected into two different stages so the timing
+# tests have an independent yardstick per stage rather than only a
+# self-consistent partition. Chosen to be the same order of magnitude as
+# each other -- if one stage dominated, a mis-nested total could hide
+# inside the partition check's 25% band.
+DETECT_COST_MS = 5.0
+TRACK_COST_MS = 4.0
+TIMED_FRAMES = 15
+
+
+@pytest.fixture
+def timed_session(tmp_path, monkeypatch):
+    """A short session in which the detector and the tracker each cost a
+    KNOWN amount of time, so every stage can be checked against a number
+    the pipeline did not choose."""
+    clip = write_clip(tmp_path / "timed.avi", frames=TIMED_FRAMES)
+
+    class SlowTracker(Tracker):
+        def update(self, detections, frame_index):
+            spin(TRACK_COST_MS / 1000.0)
+            return super().update(detections, frame_index)
+
+    monkeypatch.setattr(pipeline, "Tracker", SlowTracker)
+    detector = ScriptedDetector(two_vehicles, cost_s=DETECT_COST_MS / 1000.0)
+    return run_session(make_config(clip), detector)
 
 
 # --- counting: the scripted trajectory ----------------------------------------
@@ -245,12 +300,47 @@ def test_timings_carry_one_entry_per_stage(clip):
         assert entry["p95_ms"] >= entry["mean_ms"] * 0.5
 
 
-def test_stage_means_sum_to_the_measured_total_frame_time(clip):
-    """Each stage must be measured by its OWN perf_counter bracket. A pipeline
-    that timed one region running everything and attributed the total to a
-    single stage would make this sum roughly N times the real frame time; this
-    asserts the three stage means genuinely partition the frame."""
-    result = run_session(make_config(clip), ScriptedDetector(two_vehicles))
+def test_each_stage_reports_its_own_independently_known_cost(timed_session):
+    """The load-bearing timing test.
+
+    A partition check alone cannot prove the stages were measured
+    separately: ANY three numbers summing to the total satisfy it, so a
+    pipeline that timed the whole frame body once and split the result by a
+    fixed ratio (detect 2%, track 94%, analytics 4%) passes it with a ratio
+    of exactly 1.0000. What such a pipeline cannot do is make two different
+    stages come out at two independently chosen numbers.
+
+    So the detector sleeps a known DETECT_COST_MS and the tracker a known
+    TRACK_COST_MS, and each stage is asserted against its own injected cost.
+    The only way to satisfy both is to have actually bracketed each stage.
+    """
+    result = timed_session
+
+    assert result.timings["detect"]["mean_ms"] == pytest.approx(
+        DETECT_COST_MS, rel=0.3
+    ), "the detect bracket does not contain the detector's own known cost"
+    assert result.timings["track"]["mean_ms"] == pytest.approx(
+        TRACK_COST_MS, rel=0.3
+    ), "the track bracket does not contain the tracker's own known cost"
+    # Analytics has no injected cost, so it must stay far below both of the
+    # stages that do. A fabricated split would hand it a fixed share of a
+    # total dominated by the two sleeps.
+    assert result.timings["analytics"]["mean_ms"] < DETECT_COST_MS / 5.0
+
+
+def test_stage_means_sum_to_the_measured_total_frame_time(timed_session):
+    """Each stage must be measured by its OWN perf_counter bracket, and the
+    three together must account for the frame.
+
+    This is the over-counting half of the guarantee (a stage that contains
+    another's work makes the sum exceed the total) and the wrong-nesting
+    half (a total that starts after a stage the parts still include makes
+    the sum exceed it too). It runs on the same injected-cost profile as the
+    test above deliberately: with detect and track both large, neither
+    mistake can hide inside the 25% band the way it could when one stage was
+    94% of the frame.
+    """
+    result = timed_session
 
     stage_sum = sum(result.timings[stage]["mean_ms"] for stage in pipeline.STAGES)
     total = result.timings[pipeline.TOTAL]["mean_ms"]
@@ -429,23 +519,38 @@ def test_the_reaper_forgets_a_track_that_reappears():
     assert reaper.reap(11) == [1]
 
 
+# A convoy of vehicles crossing one after another, each vanishing well
+# before the next appears -- so at most one track is ever alive, and any
+# per-track state that is not forgotten grows to CONVOY_VEHICLES.
+CONVOY_VEHICLES = 20
+CONVOY_VISIBLE = 40  # frames each vehicle is on screen
+CONVOY_GAP = 40  # frames of empty footage between vehicles (> max_age)
+
+
+def convoy_script(index: int) -> list[Detection]:
+    slot, offset = divmod(index, CONVOY_VISIBLE + CONVOY_GAP)
+    if offset >= CONVOY_VISIBLE or slot >= CONVOY_VEHICLES:
+        return []
+    # Descends from y = 160 to y = 316, crossing the gate at y = 240.
+    return [box(200.0, 160.0 + 4.0 * offset, "car")]
+
+
+def write_convoy_clip(path: Path) -> Path:
+    return write_clip(
+        path,
+        frames=CONVOY_VEHICLES * (CONVOY_VISIBLE + CONVOY_GAP),
+        fps=30.0,
+    )
+
+
 def test_dead_tracks_are_reaped_so_gate_state_stays_bounded(tmp_path, monkeypatch):
     """A long session in which 20 vehicles cross one after another, each
     vanishing before the next appears. The GateCounter remembers every track it
     has counted, so without reaping its internal sets would grow to 20; with
     reaping at most one track's state is ever live at once."""
-    per_vehicle = 40  # frames each vehicle is visible for
-    gap = 40  # frames of empty video between vehicles
-    vehicles = 20
-    frames = vehicles * (per_vehicle + gap)
-    clip = write_clip(tmp_path / "long.avi", frames=frames, fps=30.0)
-
-    def script(index: int) -> list[Detection]:
-        slot, offset = divmod(index, per_vehicle + gap)
-        if offset >= per_vehicle or slot >= vehicles:
-            return []
-        # Descends from y = 160 to y = 316, crossing the gate at y = 240.
-        return [box(200.0, 160.0 + 4.0 * offset, "car")]
+    vehicles = CONVOY_VEHICLES
+    clip = write_convoy_clip(tmp_path / "long.avi")
+    script = convoy_script
 
     created: list["SpyCounter"] = []
 
@@ -490,6 +595,90 @@ def test_dead_tracks_are_reaped_so_gate_state_stays_bounded(tmp_path, monkeypatc
     # The counts themselves are unaffected by all that forgetting.
     assert len(result.counts["mid"]["car"]) == 1
     assert result.counts["mid"]["car"]["out"] == vehicles
+
+
+def test_dead_tracks_are_reaped_so_speed_estimator_state_stays_bounded(
+    tmp_path, monkeypatch
+):
+    """The gate counter is not the only per-track state holder, and guarding
+    only it left the other two ``forget`` calls unprotected: deleting
+    ``speed_estimator.forget(dead_id)`` used to pass every test. The speed
+    estimator keeps a sample deque per track, so this pins it with the same
+    high-water-mark technique.
+
+    The session must be CALIBRATED: an uncalibrated estimator short-circuits
+    in ``observe`` and buffers nothing, so it would have no state to leak and
+    the test would have no teeth.
+    """
+    clip = write_convoy_clip(tmp_path / "long_speed.avi")
+    created: list["SpyEstimator"] = []
+
+    class SpyEstimator(SpeedEstimator):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.peak = 0
+            created.append(self)
+
+        def observe(self, *args, **kwargs):
+            result = super().observe(*args, **kwargs)
+            self.peak = max(self.peak, len(self._tracks))
+            return result
+
+    monkeypatch.setattr(pipeline, "SpeedEstimator", SpyEstimator)
+    config = make_config(clip, calibration=dict(SCALE_CALIBRATION))
+    result = run_session(config, ScriptedDetector(convoy_script))
+
+    assert len(created) == 1
+    estimator = created[0]
+    assert result.counts["mid"]["car"]["out"] == CONVOY_VEHICLES
+    # Sanity: the estimator really was buffering, so a peak of 1 means
+    # "forgotten as they died", not "never used".
+    assert estimator.peak >= 1
+    assert estimator.peak <= 2, (
+        f"per-track speed buffers peaked at {estimator.peak}; without "
+        f"forgetting this climbs to {CONVOY_VEHICLES}"
+    )
+    assert estimator._tracks == {}
+
+
+def test_dead_tracks_are_reaped_so_incident_state_stays_bounded(
+    tmp_path, monkeypatch
+):
+    """Same guarantee for the incident detector, whose ``_stops`` map gains an
+    entry for every track it is ever shown. Deleting
+    ``incident_detector.forget(dead_id)`` used to pass every test."""
+    clip = write_convoy_clip(tmp_path / "long_incident.avi")
+    created: list["SpyIncidents"] = []
+
+    class SpyIncidents(IncidentDetector):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.peak = 0
+            created.append(self)
+
+        def update(self, *args, **kwargs):
+            incident = super().update(*args, **kwargs)
+            self.peak = max(
+                self.peak, len(self._stops), len(self._wrong_way_fired)
+            )
+            return incident
+
+    monkeypatch.setattr(pipeline, "IncidentDetector", SpyIncidents)
+    # expected_direction makes every crossing a wrong_way, so the
+    # (track, gate) memo is exercised alongside the stopped-vehicle state.
+    config = make_config(clip, gates=[{**MID_GATE, "expected_direction": "in"}])
+    result = run_session(config, ScriptedDetector(convoy_script))
+
+    assert len(created) == 1
+    detector = created[0]
+    assert len(result.incidents) == CONVOY_VEHICLES
+    assert detector.peak >= 1
+    assert detector.peak <= 2, (
+        f"per-track incident state peaked at {detector.peak}; without "
+        f"forgetting this climbs to {CONVOY_VEHICLES}"
+    )
+    assert detector._stops == {}
+    assert detector._wrong_way_fired == set()
 
 
 def test_speeds_keep_the_last_known_value_after_a_track_is_reaped(tmp_path):

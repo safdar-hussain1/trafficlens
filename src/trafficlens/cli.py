@@ -128,8 +128,9 @@ def apply_overrides(
     would leave a user unable to say "just this one gate" without editing
     the file.
     """
-    from trafficlens.config import AppConfig, ConfigError
     from pydantic import ValidationError
+
+    from trafficlens.config import AppConfig, ConfigError
 
     data = config.model_dump()
     if source is not None:
@@ -151,10 +152,31 @@ def apply_overrides(
         return AppConfig.model_validate(data)
     except ValidationError as error:
         raise click.ClickException(
-            f"the command-line overrides do not validate: {error}"
+            f"the command-line overrides do not validate -- "
+            f"{compact_validation_error(error)}"
         ) from error
     except ConfigError as error:  # pragma: no cover - defensive
         raise click.ClickException(str(error)) from error
+
+
+def compact_validation_error(error) -> str:
+    """One readable line per pydantic error: ``where: what``.
+
+    ``str(ValidationError)`` is a multi-line developer dump ending in a
+    ``errors.pydantic.dev`` documentation URL -- correct for a stack trace,
+    wrong for someone who mistyped a ``--gate``. This keeps the location
+    and the reason and drops the rest, including pydantic's ``Value
+    error,`` prefix on custom validator messages.
+    """
+    parts = []
+    for entry in error.errors():
+        where = ".".join(str(item) for item in entry["loc"]) or "config"
+        message = entry["msg"]
+        prefix = "Value error, "
+        if message.startswith(prefix):
+            message = message[len(prefix) :]
+        parts.append(f"{where}: {message}")
+    return "; ".join(parts)
 
 
 def build_detector(config):
@@ -260,7 +282,7 @@ def run(
     """Analyse a video source and report what crossed each gate."""
     from trafficlens.core.homography import CalibrationError
     from trafficlens.io.video import SourceError
-    from trafficlens.pipeline import run_session
+    from trafficlens.pipeline import SAVE_VIDEO_SUFFIXES, run_session
 
     config = load_or_fail(config_path)
     config = apply_overrides(
@@ -271,6 +293,21 @@ def run(
         limit=limit,
         gate_specs=gate_specs,
     )
+
+    # Checked BEFORE the model is loaded: whether a container can hold the
+    # annotated video is knowable from the filename alone, so failing on it
+    # after a model load and a frame of work would waste the user's time on
+    # a typo -- and .webm, which fails, is the extension of this project's
+    # own flagship sample clip.
+    if save_video is not None:
+        suffix = Path(save_video).suffix.lower()
+        if suffix not in SAVE_VIDEO_SUFFIXES:
+            raise click.ClickException(
+                f"--save-video {save_video}: annotated video is written as "
+                f"MJPG, which a {suffix or '(no extension)'} container "
+                f"cannot hold. Use one of: "
+                f"{', '.join(SAVE_VIDEO_SUFFIXES)}."
+            )
 
     detector = build_detector(config)
 
@@ -295,7 +332,11 @@ def run(
             snapshot_dir=snapshot_dir,
             save_video=save_video,
         )
-    except (SourceError, CalibrationError) as error:
+    except (SourceError, CalibrationError, OSError) as error:
+        # OSError is the backstop for anything the up-front checks cannot
+        # know: a writer this platform's OpenCV build refuses, a full disk,
+        # a directory that turns unwritable mid-run. A traceback is for a
+        # bug in this program, not for the environment saying no.
         raise click.ClickException(str(error)) from error
 
     _print_report(result)
@@ -353,10 +394,15 @@ def _print_report(result) -> None:
     else:
         click.echo("Incidents: 0")
 
-    timings = " ".join(
+    timings = "  ".join(
         f"{stage} {values['mean_ms']:.2f}" for stage, values in result.timings.items()
     )
-    click.echo(f"Timings (mean ms/frame): {timings}")
+    click.echo(f"\nTimings (mean ms/frame): {timings}")
+    click.echo(
+        "  'frame' totals the analysis stages only -- video decode, export "
+        "and annotated-video encoding sit outside it, so it is not "
+        "end-to-end throughput."
+    )
 
 
 def _write_exports(result, export_dir: Path) -> None:
