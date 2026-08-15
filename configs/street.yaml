@@ -1,0 +1,20 @@
+# Street-level sample: an open paved area filmed from above; a car, a
+# cyclist and a pedestrian cross the central aisle. Fetch the clip with
+# `trafficlens fetch-samples`.
+source: data/samples/person-bicycle-car-detection.mp4
+
+detector:
+  model: yolo11s.pt
+  classes: [person, bicycle, car]
+  confidence: 0.25
+  imgsz: 640
+
+# One gate across the aisle in the middle of the view, where all three
+# subjects pass. No expected_direction: both directions are ordinary here.
+gates:
+  - name: aisle
+    start: [0.02, 0.55]
+    end: [0.98, 0.55]
+
+# No calibration block: this camera has not been surveyed, so the session
+# reports no speeds -- the engine never derives a speed from bare pixels.

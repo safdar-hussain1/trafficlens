@@ -1,0 +1,18 @@
+# Live webcam: device index 0 (the first attached camera).
+source: "0"
+
+detector:
+  model: yolo11s.pt
+  classes: [person]
+  confidence: 0.25
+  imgsz: 640
+
+# One full-width gate across the middle of the view: counts people moving
+# past the camera in either direction.
+gates:
+  - name: midline
+    start: [0.0, 0.5]
+    end: [1.0, 0.5]
+
+# No calibration: an arbitrary webcam view has no surveyed geometry, so
+# no speeds are reported.

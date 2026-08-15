@@ -1,0 +1,71 @@
+# Motorway sample: a German autobahn filmed from an overpass, three lanes
+# per carriageway, dense afternoon traffic. Fetch the clip with
+# `trafficlens fetch-samples`.
+source: data/samples/motorway-a40.webm
+
+detector:
+  model: yolo11s.pt
+  classes: [car, truck, bus, motorcycle]
+  confidence: 0.25
+  imgsz: 640
+
+# One gate per carriageway; both stop at the median on purpose. A single
+# gate drawn across both carriageways would count the opposing
+# carriageway's ordinary flow as wrong-way traffic, so each gate covers
+# exactly the lanes whose expected direction it names.
+gates:
+  - name: inbound            # left carriageway, traffic toward the camera
+    start: [0.06, 0.80]
+    end: [0.46, 0.80]
+    expected_direction: in
+  - name: outbound           # right carriageway, traffic away from the camera
+    start: [0.52, 0.80]
+    end: [0.69, 0.80]
+    expected_direction: out
+
+# Surveyed from lane-divider dash geometry on the inbound carriageway
+# (German autobahn marking: 6 m painted dash, 12 m gap, 18 m period). The
+# 18 m period is an assumption, corroborated by a vehicle-footprint check
+# (passenger-car front-base spans project to 1.5-1.6 m -- the right order
+# for a ~1.8 m car) and by internal consistency: the nine surveyed dash
+# centroids fit one homography with a 0.08 m mean residual, which a
+# miscounted gap would inflate to metres. Cross-road scale assumes a
+# 3.75 m lane width between the two dashed divider lines; the second
+# line's dash phase along the road is not observable from dash landmarks
+# alone and is fixed at zero, which shears cross-road coordinates
+# slightly but leaves along-lane distances -- and therefore speeds --
+# unchanged.
+#
+# World frame: x is metres across the road (0 on the first divider line),
+# y is metres along the road, away from the camera. Image points are
+# normalized dash centroids; the two holdout points are surveyed dashes
+# kept out of the fit for the out-of-sample validation check.
+calibration:
+  image_points:
+    - [0.1598, 0.8833]   # divider 1, dash centroid, y = 0 m
+    - [0.2576, 0.8132]   # divider 1, next dash,    y = 18 m
+    - [0.3729, 0.7304]   # divider 1,               y = 54 m
+    - [0.4087, 0.7047]   # divider 1,               y = 72 m
+    - [0.3069, 0.8419]   # divider 2, dash centroid, y = 0 m (phase fixed)
+    - [0.3930, 0.7660]   # divider 2, next dash,    y = 18 m
+    - [0.4472, 0.7185]   # divider 2,               y = 36 m
+  world_points:
+    - [0.0, 0.0]
+    - [0.0, 18.0]
+    - [0.0, 54.0]
+    - [0.0, 72.0]
+    - [3.75, 0.0]
+    - [3.75, 18.0]
+    - [3.75, 36.0]
+  holdout_image_points:
+    - [0.3241, 0.7654]   # divider 1, y = 36 m
+    - [0.4363, 0.6849]   # divider 1, y = 90 m
+  holdout_world_points:
+    - [0.0, 36.0]
+    - [0.0, 90.0]
+
+# No limit set: a limit sign is visible on the median in this clip but
+# its value is not legible at this resolution, and an invented limit
+# would flag invented violations.
+speed:
+  unit: kmh
