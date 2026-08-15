@@ -118,6 +118,23 @@ def test_none_speed_neither_fires_nor_accumulates_stopped_time():
     assert fired_at == pytest.approx(3.6)
 
 
+def test_none_gap_after_firing_does_not_rearm():
+    # Losing calibration is not evidence the vehicle moved: a track that
+    # fires, goes through a None-speed gap, and is STILL sub-threshold
+    # afterwards for another full min_stopped_s is one continuing stop
+    # episode -- exactly one incident across the whole sequence. Only a
+    # genuine at-or-above-threshold speed re-arms.
+    det = IncidentDetector(min_stopped_s=2.0, stopped_speed_kmh=3.0)
+    samples = [(0.5, i * 0.1, i) for i in range(21)]  # t=0.0..2.0, fires
+    samples += [(None, i * 0.1, i) for i in range(21, 26)]  # uncalibrated gap
+    # Sub-threshold again from t=2.6 to t=5.0: a fresh continuous run far
+    # longer than min_stopped_s, which must NOT fire a second time.
+    samples += [(0.5, i * 0.1, i) for i in range(26, 51)]
+    incidents = feed(det, samples)
+    assert len(incidents) == 1
+    assert incidents[0].timestamp == pytest.approx(2.0)
+
+
 def test_rearm_stop_move_stop_fires_twice():
     # A car that stops twice fires twice: the detector re-arms only after
     # the track moves above the threshold again.

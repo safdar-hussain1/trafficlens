@@ -10,9 +10,13 @@ is the ordinary unconfigured state and reports no violations, ever.
 
 Snapshot handling is split so path logic stays testable without OpenCV:
 
-- ``snapshot_path`` is pure computation -- a deterministic, collision-free
-  filename built from the event's gate name (sanitised for filesystem
-  safety), track ID, and frame index. No I/O of any kind.
+- ``snapshot_path`` is pure computation -- a deterministic filename built
+  from the event's gate name (sanitised for filesystem safety), track ID,
+  and frame index. No I/O of any kind. Distinct crossings get distinct
+  paths provided sanitised gate names are unique per deployment: two gate
+  display names that differ only in punctuation (e.g. "M40 J3" and
+  "M40_J3") sanitise to the same token, so gates must not be named that
+  closely.
 - ``save_snapshot`` does the I/O: it imports ``cv2`` lazily inside the
   function -- the ONLY place this module touches OpenCV, so the module
   imports cleanly without it -- annotates a COPY of the frame minimally
@@ -58,8 +62,9 @@ class ViolationPolicy:
     def snapshot_path(self, event: CrossingEvent, out_dir: Path) -> Path:
         """Deterministic snapshot filename for this event under
         ``out_dir``. Pure computation: no directories are created and no
-        filesystem is touched. (gate, track_id, frame_index) makes the
-        name collision-free across distinct crossings."""
+        filesystem is touched. (gate, track_id, frame_index) keeps names
+        distinct across distinct crossings, assuming sanitised gate names
+        are unique per deployment (see the module docstring)."""
         gate = _sanitise(event.gate)
         return out_dir / (
             f"violation_{gate}_track{event.track_id}_frame{event.frame_index}.jpg"

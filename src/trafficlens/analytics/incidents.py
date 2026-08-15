@@ -34,7 +34,7 @@ This module imports nothing beyond the standard library and
 tracker present.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from trafficlens.core.constants import (
     INCIDENT_MIN_STOPPED_S,
