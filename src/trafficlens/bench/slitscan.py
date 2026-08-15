@@ -26,8 +26,11 @@ Sampling rule, stated exactly so review images are reproducible:
   offsets centred on the line -- an even thickness straddles the line, an
   odd one includes it -- then averaged.
 - Each pixel is read by NEAREST NEIGHBOUR: the sample coordinate is
-  rounded half away from zero and clamped to the frame bounds, so an
-  offset that leaves the frame repeats the edge pixel.
+  rounded HALF UP (``floor(v + 0.5)``, so 3.5 -> 4 and -3.5 -> -3) and
+  clamped to the frame bounds, so an offset that leaves the frame
+  repeats the edge pixel. Clamped, never wrapped and never reflected: a
+  wrap would splice the far edge of the frame into a strip sampled at
+  the near edge.
 - Nearest neighbour rather than bilinear, deliberately: the review image
   should show the pixels the camera recorded, not a blend of them.
   Bilinear interpolation dims and smears a small, fast, high-contrast
@@ -36,7 +39,8 @@ Sampling rule, stated exactly so review images are reproducible:
   needs. Integer indexing is also exactly reproducible, so the same clip
   yields byte-identical review images on any platform and any OpenCV
   build.
-- The average is rounded half up and cast back to the frame's own dtype
+- The average is rounded HALF UP (``floor(v + 0.5)``, not numpy's
+  half-to-even ``np.round``) and cast back to the frame's own dtype
   (integer dtypes only; a float frame keeps its floats), so a strip is
   directly writable as an image.
 
@@ -156,7 +160,7 @@ def gate_strip(
     sample_x = along_x[:, None] + offsets[None, :] * normal_x
     sample_y = along_y[:, None] + offsets[None, :] * normal_y
 
-    # Nearest neighbour, rounding half away from zero, clamped to the frame.
+    # Nearest neighbour, rounding half up, clamped to the frame.
     column = np.clip(np.floor(sample_x + 0.5).astype(np.int64), 0, width - 1)
     row = np.clip(np.floor(sample_y + 0.5).astype(np.int64), 0, height - 1)
 
@@ -209,8 +213,6 @@ def build_slitscan(
     rows: list[np.ndarray] = []
     position = 0
     for frame_index, _timestamp, frame in source:
-        if position >= len(wanted):
-            break
         target = wanted[position]
         if frame_index < target:
             continue
@@ -321,12 +323,6 @@ class GroundTruth:
     def frames_by_direction(self, direction: str) -> tuple[int, ...]:
         return tuple(c.frame for c in self.crossings if c.direction == direction)
 
-    def counts_by_class(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for crossing in self.crossings:
-            counts[crossing.class_name] = counts.get(crossing.class_name, 0) + 1
-        return counts
-
     @classmethod
     def load(cls, path, *, gate: Gate, clip_path) -> "GroundTruth":
         """Load and fully validate a label file.
@@ -353,7 +349,7 @@ class GroundTruth:
         # The clip is what fixes the pixel size the normalized gate
         # coordinates are compared in, so it is verified first.
         width, height = truth._check_clip(Path(clip_path))
-        truth.check_gate_geometry(gate, width, height)
+        truth._check_gate_geometry(gate, width, height)
         return truth
 
     # --- parsing and structural validation ---------------------------------
@@ -538,6 +534,17 @@ class GroundTruth:
         A label set whose frame rate disagrees with the footage has every
         crossing frame in the wrong place, and nothing downstream would
         notice.
+
+        The window's last frame is verified by DECODING to it, not by
+        comparing it against the container's advertised frame count. That
+        count is an upper bound: ``data/samples/motorway-a40.webm``
+        advertises 737 frames and decodes 735 (indices 0-734), so a
+        window ending at 736 would pass a header check and then reference
+        a frame no decoder ever produces. PROTOCOL.md's rule -- a label
+        set must never reference a frame whose existence depends on which
+        decoder opened the file -- can only be enforced by asking the
+        decoder. This runs once per label set, on a clip that is already
+        open, so the cost of playing the window out is affordable.
         """
         if clip_path.name != self.clip:
             raise GroundTruthError(
@@ -553,26 +560,35 @@ class GroundTruth:
             ) from error
         try:
             actual_fps = source.fps
-            frame_count = source.frame_count
+            advertised = source.frame_count
             width, height = source.width, source.height
+            if actual_fps is None or abs(actual_fps - self.fps) > _FPS_TOLERANCE:
+                raise GroundTruthError(
+                    f"{self.path}: labelled at fps {self.fps} but "
+                    f"{clip_path.name} reports {actual_fps}; every crossing "
+                    f"frame would map to the wrong time"
+                )
+            last_decoded = _decode_up_to(source, self.end_frame)
         finally:
             source.close()
 
-        if actual_fps is None or abs(actual_fps - self.fps) > _FPS_TOLERANCE:
-            raise GroundTruthError(
-                f"{self.path}: labelled at fps {self.fps} but {clip_path.name} "
-                f"reports {actual_fps}; every crossing frame would map to the "
-                f"wrong time"
+        if last_decoded < self.end_frame:
+            claim = (
+                f" (its container advertises {advertised} frames, an upper "
+                f"bound this decoder does not reach)"
+                if advertised is not None and advertised > last_decoded + 1
+                else ""
             )
-        if frame_count is not None and self.end_frame >= frame_count:
             raise GroundTruthError(
                 f"{self.path}: the labelled window ends at frame "
-                f"{self.end_frame} but the clip {clip_path.name} holds only "
-                f"{frame_count} frames (0-{frame_count - 1})"
+                f"{self.end_frame} but the clip {clip_path.name} decodes only "
+                f"frames 0-{last_decoded}{claim}; a label set must never "
+                f"reference a frame whose existence depends on which decoder "
+                f"opened the file"
             )
         return width, height
 
-    def gate_pixel_endpoints(self, width: float, height: float):
+    def _gate_pixel_endpoints(self, width: float, height: float):
         """This label set's gate in pixel coordinates on a width x height
         frame -- the same conversion ``Gate.from_normalized`` makes."""
         return (
@@ -580,10 +596,10 @@ class GroundTruth:
             (self.gate_end[0] * width, self.gate_end[1] * height),
         )
 
-    def check_gate_geometry(self, gate: Gate, width: float, height: float) -> None:
+    def _check_gate_geometry(self, gate: Gate, width: float, height: float) -> None:
         """Verify this label set's normalized gate lands on ``gate``'s pixel
         endpoints, to within half a pixel."""
-        start, end = self.gate_pixel_endpoints(width, height)
+        start, end = self._gate_pixel_endpoints(width, height)
         for what, labelled, scored in (("start", start, gate.start), ("end", end, gate.end)):
             if math.dist(labelled, scored) > _GATE_TOLERANCE_PX:
                 raise GroundTruthError(
@@ -592,6 +608,22 @@ class GroundTruth:
                     f"{scored} px; the gate moved after labelling, so these "
                     f"labels describe a different line"
                 )
+
+
+def _decode_up_to(source, end_frame: int) -> int:
+    """Play ``source`` forward until ``end_frame`` has been decoded, and
+    return the highest frame index the decoder actually produced.
+
+    A return value below ``end_frame`` means the frame does not exist as
+    far as this decoder is concerned, whatever the container's header
+    claims. Returns -1 for a source that yields nothing at all.
+    """
+    last_index = -1
+    for frame_index, _timestamp, _frame in source:
+        last_index = frame_index
+        if frame_index >= end_frame:
+            break
+    return last_index
 
 
 def _require_exact_fields(mapping: dict, fields, what: str, fail) -> None:

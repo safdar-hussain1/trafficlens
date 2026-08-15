@@ -156,14 +156,59 @@ def test_gate_strip_averages_across_the_perpendicular_offsets():
 
 def test_gate_strip_clamps_offsets_that_leave_the_frame():
     """A gate on the bottom edge still yields a strip: offsets past the
-    edge repeat the edge pixel rather than raising or wrapping."""
+    edge repeat the EDGE pixel -- not the opposite edge (a wrap) and not
+    an interior row (a reflect).
+
+    The frame's bottom row is given its own value, so the three
+    behaviours give three different answers and only clamping passes.
+    """
     gate = Gate.from_normalized("edge", (0.1, 1.0), (0.9, 1.0), WIDTH, HEIGHT)
     frame = np.full((HEIGHT, WIDTH, 3), 77, dtype=np.uint8)
+    frame[HEIGHT - 1, :] = 200          # the distinctive bottom row
 
-    strip = gate_strip(frame, gate, thickness_px=9, samples=32)
-
+    # thickness 1: the single sample sits at y = 480, one past the last
+    # row, so clamping reads the bottom row itself. A wrap would read row
+    # 0 (77) and a reflect row 478 (77).
+    strip = gate_strip(frame, gate, thickness_px=1, samples=32)
     assert strip.shape == (32, 3)
-    assert np.all(strip == 77)
+    assert np.all(strip == 200)
+
+    # thickness 9: offsets -4..+4 land on rows 476..484. Clamped, that is
+    # rows 476, 477, 478 (77 each) and row 479 six times (200 each), so
+    # the average is (3*77 + 6*200) / 9 = 159 exactly. A wrap would read
+    # rows 476-479 then 0-4, averaging (8*77 + 200) / 9 -> 91.
+    strip = gate_strip(frame, gate, thickness_px=9, samples=32)
+    assert strip.shape == (32, 3)
+    assert np.all(strip == 159)
+
+
+def test_gate_strip_matches_a_golden_strip_on_a_known_ramp():
+    """The sampling rule, pinned to literal values on a tiny frame.
+
+    ``frame[y, x] = x + y``, so every sampled pixel's value states both
+    coordinates it was read at. Between them the two assertions fix:
+
+    - the along-gate parameterisation ``t = i / (samples - 1)``, with
+      BOTH endpoints included -- an endpoint-exclusive ``t = i / samples``
+      would sample x = 0, 2.4, 4.8, 7.2, 9.6 and never reach x = 12;
+    - half-up rounding of the perpendicular average -- the thickness-2
+      averages are all exactly ``x + 4.5``, which half-up sends up to
+      ``x + 5`` and numpy's half-to-even ``np.round`` would send down to
+      ``x + 4`` wherever ``x + 4`` is even.
+    """
+    frame = np.fromfunction(
+        lambda y, x: x + y, (8, 13), dtype=np.int64
+    ).astype(np.uint8)
+    gate = Gate("ramp", (0.0, 4.0), (12.0, 4.0))     # pixel coordinates
+
+    # thickness 1: the gate row itself, sampled at x = 0, 3, 6, 9, 12.
+    strip = gate_strip(frame, gate, thickness_px=1, samples=5)
+    assert strip.tolist() == [4, 7, 10, 13, 16]
+
+    # thickness 2 straddles the line: rows 4 and 5 at the same five x,
+    # averaging (x + 4 + x + 5) / 2 = x + 4.5, rounded half UP.
+    strip = gate_strip(frame, gate, thickness_px=2, samples=5)
+    assert strip.tolist() == [5, 8, 11, 14, 17]
 
 
 def test_gate_strip_handles_a_single_channel_frame():
@@ -208,8 +253,13 @@ def test_build_slitscan_paints_one_blob_per_crossing_at_the_right_row(tmp_path):
     assert scan.shape == (CLIP_FRAMES, 256, 3)
     rows = blob_rows(scan)
     assert len(rows) == len(CROSSINGS), rows
+    # EXACT, not approximate. This is the only test that validates the
+    # claim every hand-read crossing frame rests on -- that a blob's row
+    # IS the frame index. A tolerance here would let a whole-image row
+    # shift through, and a shifted slit-scan misdates every label read
+    # off it while still looking perfectly plausible.
     for measured, (expected, _x) in zip(rows, CROSSINGS):
-        assert abs(measured - expected) <= 1.5, (measured, expected)
+        assert measured == expected, (measured, expected)
 
 
 def test_build_slitscan_ignores_traffic_past_the_gate_endpoints(tmp_path):
@@ -241,7 +291,7 @@ def test_build_slitscan_reads_only_the_requested_window(tmp_path):
     # lands on row 10.
     rows = blob_rows(scan)
     assert len(rows) == 1
-    assert abs(rows[0] - 10) <= 1.5
+    assert rows[0] == 10
 
 
 def test_build_slitscan_is_deterministic(tmp_path):
@@ -480,6 +530,35 @@ def test_groundtruth_rejects_a_window_past_the_end_of_the_clip(
         load(tmp_path, labelled_clip, document)
 
 
+def test_groundtruth_accepts_a_window_ending_on_the_last_decodable_frame(
+    tmp_path, labelled_clip
+):
+    document = label_document(
+        window={"start_frame": 0, "end_frame": LABELLED_FRAMES - 1}
+    )
+    truth = load(tmp_path, labelled_clip, document)
+    assert truth.end_frame == LABELLED_FRAMES - 1
+
+
+def test_groundtruth_rejects_a_window_the_decoder_never_reaches(
+    tmp_path, labelled_clip, monkeypatch
+):
+    """The container's advertised frame count is an UPPER BOUND, not a
+    guarantee: the shipped motorway clip advertises 737 frames and
+    decodes 735. A window checked only against the header would admit a
+    frame no decoder produces, which is exactly what PROTOCOL.md forbids.
+
+    The advertised count is faked high here so that a header-only check
+    would pass; the loader must still refuse, because it decodes.
+    """
+    monkeypatch.setattr(VideoSource, "frame_count", property(lambda self: 9999))
+    document = label_document(
+        window={"start_frame": 0, "end_frame": LABELLED_FRAMES + 10}
+    )
+    with pytest.raises(GroundTruthError, match="decodes only"):
+        load(tmp_path, labelled_clip, document)
+
+
 def test_groundtruth_rejects_a_backwards_window(tmp_path, labelled_clip):
     document = label_document(window={"start_frame": 90, "end_frame": 10})
     with pytest.raises(GroundTruthError, match="window"):
@@ -568,13 +647,51 @@ def test_groundtruth_error_names_the_label_file(tmp_path, labelled_clip):
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_protocol_document_exists_and_forbids_detector_derived_labels():
+def test_protocol_document_forbids_detector_derived_labels():
+    """The protocol's load-bearing sentence, asserted verbatim.
+
+    Substring checks for words like "detector" cannot fail for any
+    document that happens to contain those letters; the rule that makes
+    the ground truth independent of the system under test is a specific
+    sentence and is asserted as one.
+    """
     protocol = ROOT / "data" / "groundtruth" / "PROTOCOL.md"
     assert protocol.is_file(), "the labelling protocol must be committed"
-    text = protocol.read_text().lower()
-    for required in ["detector", "slit-scan", "confidence", "probable",
-                     "certain", "occl", "anchor"]:
-        assert required in text, required
+    text = " ".join(protocol.read_text().split())
+
+    assert (
+        "Labels are produced from slit-scan review plus full-frame "
+        "confirmation. They are never produced, seeded, corrected or "
+        '"sanity checked" against the detector, the tracker, or '
+        "`GateCounter` output."
+    ) in text
+
+
+def test_protocol_document_fixes_the_scoring_tolerance():
+    """A scorer needs a fixed frame window to match a prediction to a
+    label, and that number must be settled before any scoring code
+    exists -- for the same reason the labelling rules are settled before
+    any labelling."""
+    protocol = ROOT / "data" / "groundtruth" / "PROTOCOL.md"
+    text = " ".join(protocol.read_text().split())
+
+    assert (
+        "A prediction matches a label when it names the same gate and its "
+        "frame is within **2 frames** of the label's frame."
+    ) in text
+
+
+def test_protocol_document_states_the_anchor_tie_break_without_hedging():
+    """The tie-break for a contact point sitting on the gate must match
+    the engine's inclusive bounds, not be left to the labeller."""
+    protocol = ROOT / "data" / "groundtruth" / "PROTOCOL.md"
+    text = " ".join(protocol.read_text().split())
+
+    assert (
+        "The crossing frame is the **first** frame at which the contact "
+        "point is on or beyond the gate segment."
+    ) in text
+    assert "unambiguously past" not in text
 
 
 def test_generated_review_images_are_never_tracked():

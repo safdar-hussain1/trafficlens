@@ -25,11 +25,16 @@ Usage:
 
     PYTHONPATH=src python scripts/make_gt_slitscan.py \
         --config configs/motorway.yaml --gate inbound \
-        --start-frame 0 --end-frame 735
+        --start-frame 0 --end-frame 734
 
     PYTHONPATH=src python scripts/make_gt_slitscan.py \
         --config configs/motorway.yaml --gate inbound \
         --candidates 37,64,102
+
+Omit ``--end-frame`` and the script measures the clip's last decodable
+frame itself, which is the safer default: ``motorway-a40.webm``
+advertises 737 frames in its container and decodes 735 (0-734), so a
+window taken from the header would ask for frames that do not exist.
 """
 
 import argparse

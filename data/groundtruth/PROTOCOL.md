@@ -103,10 +103,16 @@ exactly through an endpoint has crossed (bounds are inclusive), matching
 the engine's own segment test.
 
 The crossing frame is the **first** frame at which the contact point is
-on the far side of the segment from where it was on the previous frame.
-If the contact point sits exactly on the gate for one or more frames,
-the crossing frame is the first frame at which it is unambiguously past
-the gate.
+on or beyond the gate segment. "On" is not a tie to be broken by
+judgement: a contact point sitting exactly on the segment has arrived,
+and that frame is the crossing frame, even if the vehicle sits there for
+several more frames before it is visibly past. This is the same
+convention the engine uses — `trafficlens.core.geometry.segments_intersect`
+treats a path touching the segment as an intersection, and
+`trafficlens.core.gate` documents that "a crossing that lands exactly on
+one of the gate's own endpoints counts" — so ground truth and engine
+place a crossing on the same frame rather than one frame apart by
+construction.
 
 ### Reading a blob: which of its rows is the crossing frame
 
@@ -210,6 +216,40 @@ Accuracy figures computed against this label set must report the
 against `certain` rows alone, without saying so, silently drops the hard
 cases and flatters the engine.
 
+## Scoring tolerance
+
+Fixed here, before any scoring code exists, for the same reason the
+labelling rules are fixed before any labelling: a tolerance chosen after
+seeing the engine's output is a tolerance chosen to make the engine look
+good.
+
+A prediction matches a label when it names the same gate and its frame
+is within **2 frames** of the label's frame. Matching is one-to-one: a
+label is consumed by at most one prediction and a prediction by at most
+one label, resolved nearest-frame first, so a burst of predictions
+cannot be scored against a single label. An unmatched prediction is a
+false positive; an unmatched label is a miss.
+
+**Where the 2 comes from.** It is the precision this document claims for
+its own labels and nothing more. A `certain` row's frame is "pinned to
+within a frame or two"; a scorer that demanded exact agreement would be
+charging the engine for slack the labeller has already admitted to, and
+one that allowed more would be inventing precision the labels do not
+have. The number is the label precision, so it moves only if that
+sentence moves.
+
+The window must not be widened to absorb a systematic offset. A
+prediction consistently late or early by a fixed amount is a finding
+about the engine, and a tolerance wide enough to hide it would also be
+wide enough to match a prediction to the wrong vehicle: at 30 fps, ±2
+frames is ±67 ms, comfortably inside the headway between two vehicles
+crossing this gate one after the other, whereas a wider window is not.
+
+`probable` rows carry no more frame precision than `certain` rows — the
+flag records doubt about the crossing, its class or its exact frame —
+so they are matched under the same ±2 window and reported separately
+rather than under a looser one.
+
 ## Class vocabulary
 
 Exactly the five names in `trafficlens.core.classes.VEHICLE_CLASSES`:
@@ -283,9 +323,11 @@ that something passed.
    rule in this document that can be checked mechanically. It rejects a
    crossing outside the window, a duplicate id, an unknown class, a
    direction that is not one of the gate's two labels, a confidence
-   outside `{certain, probable}`, frames that go backwards, and a clip
-   name or frame rate that does not match the real file. A label set that
-   does not load is not a label set.
+   outside `{certain, probable}`, frames that go backwards, a gate whose
+   endpoints have moved by more than 0.5 px, a window whose last frame
+   the clip's decoder never produces, and a clip name or frame rate that
+   does not match the real file. A label set that does not load is not a
+   label set.
 
 6. Record, alongside the label file: who labelled it, on what date, how
    long it took, and every case that was ambiguous and why. The
@@ -314,9 +356,14 @@ Field notes:
 - `clip` is the file *name*, not a path; it is checked against the real
   file the label set is loaded against.
 - `fps` must match the clip's container frame rate to within 0.01.
-- `window` is inclusive at both ends and must lie inside the clip.
+- `window` is inclusive at both ends, and its `end_frame` must be a
+  frame the clip's decoder actually produces — the loader plays the clip
+  forward to check, rather than trusting the container's advertised
+  frame count, which is only an upper bound.
 - `gate.start` / `gate.end` are normalized `[0, 1]` coordinates and must
-  match the gate the label set is scored against.
+  match the gate the label set is scored against to within **0.5 px**
+  once converted at the clip's frame size: the same gate written down
+  with rounded decimals still matches, a gate that was moved does not.
 - `crossings` are ordered by frame, non-decreasing. Ids are unique
   positive integers.
 - `protocol` points at this file, so a label set always carries the rules
@@ -335,8 +382,9 @@ a change in the sampling is visible as a change to this document.
   gate line, and averaged. An even `thickness_px` therefore straddles
   the line; an odd one includes the line itself.
 - Each pixel is read by **nearest neighbour**, rounding the sample
-  coordinate half away from zero and clamping to the frame bounds, so
-  an offset that leaves the frame repeats the edge pixel.
+  coordinate **half up** — `floor(v + 0.5)`, so 3.5 becomes 4 — and
+  clamping to the frame bounds, so an offset that leaves the frame
+  repeats the edge pixel. Clamped, never wrapped and never reflected.
 - Nearest neighbour, not bilinear, is used deliberately. The review
   image should show the pixels the camera recorded, not a blend of them:
   bilinear interpolation dims and smears a small, fast, high-contrast
@@ -345,7 +393,9 @@ a change in the sampling is visible as a change to this document.
   needs. Nearest neighbour is also exactly reproducible with integer
   indexing, so the same clip yields byte-identical review images on any
   platform and any OpenCV build.
-- The averaged value is rounded half up and cast back to the frame's own
-  dtype, so the strip is directly writable as an image.
+- The averaged value is rounded **half up** — `floor(v + 0.5)`, not
+  numpy's half-to-even `np.round`, so an average of exactly 4.5 becomes
+  5 — and cast back to the frame's own dtype, so the strip is directly
+  writable as an image.
 - Rows are stacked in increasing frame order, so the vertical axis of
   the slit-scan is time running downward.
