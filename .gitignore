@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+.vscode/
+
+# model weights — never committed (the small browser ONNX export is force-added)
+*.pt
+models/
+
+# sample footage — fetched by `trafficlens fetch-samples`
+data/samples/*
+
+# private, never published
+private/
+*.handbook.pdf
+
+# session outputs
+exports/
+runs/
+*.log
+
+node_modules/
+web/dist/
+
+# git-ignored tooling workspace (process docs, plans, progress notes)
+.superpowers/
