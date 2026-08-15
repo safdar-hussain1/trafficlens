@@ -15,37 +15,50 @@ How the estimate is made
 Each observed image anchor is projected to world metres through the
 ``RoadPlane`` at observe time. Per track, a deque holds the accepted
 samples ``(timestamp, wx, wy)`` covering the trailing ``window_s`` seconds.
-``speed_kmh`` computes the cumulative ARC LENGTH along the sample path
-(the running sum of step distances) and fits it against time by
-least squares; the fitted slope is metres per second, converted to km/h by
-multiplying by 3.6.
+``speed_kmh`` fits ``wx(t)`` and ``wy(t)`` SEPARATELY by least squares
+over the window; the two fitted slopes form the mean velocity vector in
+metres per second, and the speed is its magnitude,
+``hypot(slope_x, slope_y)``, converted to km/h by multiplying by 3.6.
 
-Arc length, not straight-line displacement, deliberately: a vehicle that
-changes lanes -- or follows a curved road -- travels its whole path, and
-its speedometer (and any enforcement measurement) reads the speed along
-that path. Net displacement over the window would under-read every
-non-straight trajectory. For straight-line motion the two are identical,
-so nothing is lost on the common case.
+Per-axis slopes, not cumulative arc length, deliberately: arc length
+rectifies noise. Every jitter step adds a POSITIVE path increment (for
+zero-mean Gaussian jitter the expected step is sigma * sqrt(pi)), so a
+stopped vehicle's anchor noise integrates into a deterministic phantom
+speed of several km/h -- a monotone bias no fit over the summed path can
+remove. Per-axis coordinate noise is zero-mean, so each slope goes to
+zero for a stopped vehicle, and for straight motion the vector magnitude
+is identical to the arc-length fit.
 
-The least-squares slope is the closed-form two-coefficient solve, written
-out explicitly (the TypeScript mirror copies this formula): with
-timestamps centred on their mean,
+Known limitation, stated plainly: within-window curvature reads slightly
+low. The velocity vector is a chord across the window, so a path that
+bends inside the window (a lane change, a curve) has its speed
+under-read by the chord-versus-arc difference. Over a 2s window at road
+speeds and road curvatures the effect is negligible; it is the accepted
+price of a zero noise floor at 0 km/h.
 
-    slope = sum(dt_i * (d_i - d_mean)) / sum(dt_i ** 2)
+Each least-squares slope is the closed-form two-coefficient solve,
+written out explicitly (the TypeScript mirror copies these two
+formulas): with timestamps centred on their mean,
 
-where ``dt_i = t_i - t_mean`` and ``d_i`` is cumulative arc length.
-Centring first keeps the sums small and the arithmetic well-conditioned;
-no scipy is needed.
+    slope_x = sum(dt_i * (wx_i - wx_mean)) / sum(dt_i ** 2)
+    slope_y = sum(dt_i * (wy_i - wy_mean)) / sum(dt_i ** 2)
+
+where ``dt_i = t_i - t_mean``. Centring first keeps the sums small and
+the arithmetic well-conditioned; no scipy is needed.
 
 Outlier rejection
 -----------------
 A sample whose plane-space step from the previous ACCEPTED sample exceeds
 ``SPEED_MAX_STEP_M`` is rejected at observe time -- never buffered -- so a
 single wild detector box cannot spike the speed. The comparison is against
-the last ACCEPTED sample, not the last seen one: comparing against the
-last seen sample would latch onto the outlier itself and then reject every
-good sample after it. The threshold is a physical bound (see its comment
-in ``trafficlens.core.constants``): no road vehicle can genuinely travel
+the last ACCEPTED sample, not the last raw (seen) one. Against a single
+outlier the raw-sample variant would also recover -- it loses the outlier
+plus the one good frame measured against it, two frames in total -- but it
+fails on CONSECUTIVE outliers at the same wrong location: the second wild
+box lands within threshold of the first and gets accepted, corrupting the
+estimate. Measuring against the last accepted sample rejects every sample
+in such a burst. The threshold is a physical bound (see its comment in
+``trafficlens.core.constants``): no road vehicle can genuinely travel
 that far between consecutive frames.
 
 ``time_of_flight_kmh`` is the independent gate-pair estimator used by the
@@ -140,7 +153,13 @@ class SpeedEstimator:
         trustworthy number exists: always ``None`` when the estimator is
         uncalibrated, and otherwise when the track has fewer than
         ``min_samples`` accepted samples inside the trailing window (or its
-        in-window timestamps do not span any time at all)."""
+        in-window timestamps do not span any time at all).
+
+        The window trails the track's NEWEST sample, not the caller's
+        clock, so a track that stops being observed keeps reporting its
+        last in-window speed until ``forget()`` is called -- callers must
+        forget dead tracks (the tracker's max_age culling makes this safe
+        today)."""
         if self._plane is None:
             # The refusal is absolute: even pathological internal state
             # cannot make an uncalibrated estimator emit a number.
@@ -159,29 +178,26 @@ class SpeedEstimator:
         if n < self._min_samples:
             return None
 
-        # Cumulative arc length along the sample path, in metres: the
-        # distance the vehicle actually travelled, lane changes and curves
-        # included -- not the net start-to-end displacement.
-        arc = [0.0] * n
-        for i in range(1, n):
-            _, x0, y0 = samples[i - 1]
-            _, x1, y1 = samples[i]
-            arc[i] = arc[i - 1] + math.hypot(x1 - x0, y1 - y0)
-
-        # Closed-form least-squares slope of arc length against time, with
-        # timestamps centred on their mean (see module docstring).
+        # Closed-form least-squares slopes of wx(t) and wy(t), fitted
+        # separately with timestamps centred on their mean (see module
+        # docstring: per-axis noise is zero-mean, so a stopped vehicle's
+        # jitter fits ~0 on both axes instead of rectifying into a phantom
+        # positive speed the way cumulative arc length would).
         t_mean = sum(s[0] for s in samples) / n
-        d_mean = sum(arc) / n
-        num = 0.0
+        x_mean = sum(s[1] for s in samples) / n
+        y_mean = sum(s[2] for s in samples) / n
+        num_x = 0.0
+        num_y = 0.0
         den = 0.0
-        for (t, _, _), d in zip(samples, arc):
+        for t, wx, wy in samples:
             dt = t - t_mean
-            num += dt * (d - d_mean)
+            num_x += dt * (wx - x_mean)
+            num_y += dt * (wy - y_mean)
             den += dt * dt
         if den == 0.0:
             return None  # all in-window samples share one timestamp
 
-        return (num / den) * _MPS_TO_KMH
+        return math.hypot(num_x / den, num_y / den) * _MPS_TO_KMH
 
     def forget(self, track_id: int) -> None:
         """Drop all state for a track. A later track with the same

@@ -151,8 +151,6 @@ def test_single_outlier_is_rejected_not_smoothed():
 def test_stream_recovers_after_outlier():
     # Rejection is measured against the last ACCEPTED sample, so the good
     # samples after the outlier are accepted and the estimate stays correct.
-    # (Rejecting against the last SEEN sample would latch onto the outlier
-    # and throw away every good sample that follows it.)
     fps = 25.0
     est = SpeedEstimator(plane=_plane(), fps=fps, window_s=2.0, min_samples=5)
     _drive_with_outlier(est, fps)
@@ -162,6 +160,32 @@ def test_stream_recovers_after_outlier():
     speed = est.speed_kmh(3)
     assert speed is not None
     assert abs(speed - 90.0) < 0.5
+
+
+def test_two_consecutive_outliers_are_both_rejected():
+    # The discriminating case between the two rejection policies: two
+    # consecutive wild boxes at the SAME wrong location. Rejecting against
+    # the last ACCEPTED sample (the shipped policy) rejects both. Rejecting
+    # against the last RAW sample would reject the first outlier but accept
+    # the second -- it sits within threshold of the first outlier -- and
+    # corrupt the estimate with a 30m off-path point.
+    fps = 25.0
+    clean = SpeedEstimator(plane=_plane(), fps=fps, window_s=2.0, min_samples=5)
+    _drive(clean, track_id=3, fps=fps, n_frames=51, speed_mps=25.0)
+    clean_speed = clean.speed_kmh(3)
+
+    dirty = SpeedEstimator(plane=_plane(), fps=fps, window_s=2.0, min_samples=5)
+    for f in range(51):
+        t = f / fps
+        world = (0.0, 5.0 + 25.0 * t)
+        if f in (25, 26):
+            world = (30.0, 5.0 + 25.0 * (25 / fps))  # same wrong spot twice
+        dirty.observe(3, _to_image(world), t)
+    dirty_speed = dirty.speed_kmh(3)
+
+    assert clean_speed is not None and dirty_speed is not None
+    assert abs(dirty_speed - clean_speed) < 0.1
+    assert abs(dirty_speed - 90.0) < 0.5
 
 
 def test_outlier_threshold_is_in_metres():
@@ -175,6 +199,18 @@ def test_outlier_threshold_is_in_metres():
     est2.observe(9, _to_image((0.0, 10.0)), 0.0)
     est2.observe(9, _to_image((0.0, 10.0 + SPEED_MAX_STEP_M + 0.1)), 1.0)
     assert est2.speed_kmh(9) is None  # second sample rejected -> 1 sample
+
+
+def test_step_exactly_at_threshold_is_accepted():
+    # Rejection is strictly greater-than: a step of exactly
+    # SPEED_MAX_STEP_M metres is accepted. An identity-homography plane
+    # makes the world step exact (no projection round-trip rounding).
+    identity_plane = RoadPlane(np.eye(3), [], [])
+    est = SpeedEstimator(plane=identity_plane, fps=25.0, window_s=10.0,
+                         min_samples=2)
+    est.observe(1, (0.0, 0.0), 0.0)
+    est.observe(1, (0.0, SPEED_MAX_STEP_M), 1.0)
+    assert est.speed_kmh(1) is not None  # both samples accepted
 
 
 # --- min_samples boundary ----------------------------------------------------
@@ -201,6 +237,30 @@ def test_unknown_track_is_none():
     assert est.speed_kmh(42) is None
 
 
+# --- Noise floor -------------------------------------------------------------
+
+
+def test_stopped_vehicle_with_realistic_noise_reads_near_zero():
+    # A STOPPED vehicle whose anchor jitters with per-axis Gaussian world
+    # noise (sigma = 2cm) must read near-zero speed. This is what rules out
+    # fitting cumulative arc length: arc length rectifies noise -- every
+    # jitter step adds positive path length -- turning a stationary target
+    # into a deterministic phantom speed of several km/h. Per-axis slopes
+    # see zero-mean noise and fit ~0 on both axes.
+    fps = 30.0
+    window_s = 2.0
+    rng = np.random.default_rng(42)
+    est = SpeedEstimator(plane=_plane(), fps=fps, window_s=window_s,
+                         min_samples=5)
+    n_frames = int(window_s * fps) + 1  # a full window of samples
+    for f in range(n_frames):
+        noise_x, noise_y = rng.normal(0.0, 0.02, size=2)
+        est.observe(4, _to_image((0.0 + noise_x, 10.0 + noise_y)), f / fps)
+    speed = est.speed_kmh(4)
+    assert speed is not None
+    assert speed < 1.0
+
+
 # --- Window expiry -----------------------------------------------------------
 
 
@@ -221,6 +281,22 @@ def test_window_expiry_stopped_then_moving():
     speed = est.speed_kmh(8)
     assert speed is not None
     assert abs(speed - 90.0) < 0.5
+
+
+# --- Constructor validation --------------------------------------------------
+
+
+def test_constructor_rejects_bad_parameters():
+    with pytest.raises(ValueError):
+        SpeedEstimator(plane=_plane(), fps=0.0)
+    with pytest.raises(ValueError):
+        SpeedEstimator(plane=_plane(), fps=-25.0)
+    with pytest.raises(ValueError):
+        SpeedEstimator(plane=_plane(), fps=25.0, window_s=0.0)
+    with pytest.raises(ValueError):
+        SpeedEstimator(plane=_plane(), fps=25.0, window_s=-1.0)
+    with pytest.raises(ValueError):
+        SpeedEstimator(plane=_plane(), fps=25.0, min_samples=1)
 
 
 # --- Lifecycle and determinism -----------------------------------------------

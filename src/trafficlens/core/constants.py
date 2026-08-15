@@ -238,7 +238,10 @@ SPEED_MIN_SAMPLES = 5
 # frame; 7.0m gives that worst case a ~1.5x margin (~2.5x at 25 fps, ~3x at
 # 30 fps), so no physically possible vehicle motion is ever rejected while
 # any step beyond it can only be a detection error. Rejection is measured
-# against the last ACCEPTED sample, not the last seen one: measuring
-# against the last seen sample would latch onto an outlier and then reject
-# every good sample that follows it.
+# against the last ACCEPTED sample, not the last raw (seen) one: against a
+# single outlier the raw variant would also recover (losing two frames --
+# the outlier and the one good frame measured against it), but it accepts
+# the SECOND of two consecutive outliers at the same wrong location, since
+# that one lands within threshold of the first; measuring against the last
+# accepted sample rejects the whole burst.
 SPEED_MAX_STEP_M = 7.0
