@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "clip": "motorway-a40.webm",
+  "fps": 30.0,
+  "window": {"start_frame": 0, "end_frame": 734},
+  "gate": {
+    "name": "inbound",
+    "start": [0.06, 0.80],
+    "end": [0.46, 0.80]
+  },
+  "protocol": "data/groundtruth/PROTOCOL.md",
+  "labeller": "Safdar Hussain",
+  "labelled_on": "2026-08-15",
+  "crossings": [
+    {"id": 1,  "frame": 5,   "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 2,  "frame": 12,  "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 3,  "frame": 75,  "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 4,  "frame": 93,  "class": "car",   "direction": "toward", "confidence": "probable"},
+    {"id": 5,  "frame": 134, "class": "car",   "direction": "toward", "confidence": "probable"},
+    {"id": 6,  "frame": 165, "class": "car",   "direction": "toward", "confidence": "probable"},
+    {"id": 7,  "frame": 192, "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 8,  "frame": 256, "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 9,  "frame": 321, "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 10, "frame": 411, "class": "car",   "direction": "toward", "confidence": "probable"},
+    {"id": 11, "frame": 416, "class": "truck", "direction": "toward", "confidence": "probable"},
+    {"id": 12, "frame": 473, "class": "truck", "direction": "toward", "confidence": "probable"},
+    {"id": 13, "frame": 527, "class": "truck", "direction": "toward", "confidence": "probable"},
+    {"id": 14, "frame": 598, "class": "car",   "direction": "toward", "confidence": "certain"},
+    {"id": 15, "frame": 647, "class": "truck", "direction": "toward", "confidence": "probable"},
+    {"id": 16, "frame": 670, "class": "car",   "direction": "toward", "confidence": "probable"},
+    {"id": 17, "frame": 726, "class": "car",   "direction": "toward", "confidence": "probable"}
+  ]
+}
