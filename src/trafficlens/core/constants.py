@@ -270,3 +270,51 @@ INCIDENT_STOPPED_SPEED_KMH = 3.0
 # Deliberately user-tunable per deployment: a motorway operator may want
 # less, a junction camera more.
 INCIDENT_MIN_STOPPED_S = 10.0
+
+# --- Benchmark baselines (trafficlens.bench.baselines) ------------------------
+# Defaults of the standard-failure-mode baselines the engine is measured
+# against. Each is set to the value that makes its baseline as STRONG as
+# that baseline can honestly be: a benchmark won against a deliberately
+# mis-tuned contender measures nothing. Only the tunables that have no
+# engine equivalent live here -- the baselines take max_age, min_hits and
+# the birth confidence straight from the TRACK_* values above, so track
+# lifetime can never be the source of a measured difference.
+#
+# The reference view for all three is the 640x480 motorway framing the
+# shipped config's gates are drawn on, where a car box is roughly 60x80 px
+# and a vehicle near the gate line advances a few pixels per frame.
+
+# Half-width, in pixels, of the band around the gate line that
+# trafficlens.bench.baselines.BandCounter and PerFrameCounter treat as
+# "on the gate". 20 px is about a quarter of a near-field car box and
+# roughly five frames of dwell at the ~4 px/frame a vehicle crosses the
+# reference gate at -- wide enough that ordinary motion cannot step clean
+# over it (a narrower band would make the miss failure mode dominate and
+# the baseline artificially weak), narrow enough that it does not swallow
+# a quarter of the frame's near field and phantom-fire on everything that
+# comes near. The band's two failure modes are inherent to the rule and
+# survive any choice of this value: a smaller band misses faster
+# vehicles, a larger one fires on more objects that never cross.
+BASELINE_BAND_PX = 20.0
+
+# Maximum centroid displacement, in pixels, that
+# trafficlens.bench.baselines.CentroidTracker will associate a detection
+# to a track across. 60 px is under the centroid gap between two vehicles
+# following in one lane on the reference view (about a vehicle length,
+# 80 px and up near the camera), so the radius does not routinely reach
+# the wrong vehicle, while still admitting a full frame of genuine
+# near-field motion. Without a motion model the radius has to be measured
+# from the last OBSERVED centroid rather than a predicted one, which is
+# precisely why no single value can both admit fast motion and exclude a
+# neighbouring vehicle.
+BASELINE_CENTROID_MAX_DISTANCE_PX = 60.0
+
+# IoU floor for association in trafficlens.bench.baselines.GreedyIoUTracker.
+# 0.3 is SORT's published iou_threshold. It is deliberately far looser
+# than the engine's TRACK_MATCH_IOU of 0.8: the engine compares a
+# detection against a Kalman-PREDICTED box, which a genuine continuation
+# overlaps almost entirely, while a tracker with no motion model compares
+# against the last OBSERVED box, which ordinary motion has already moved
+# away from. Holding this baseline to 0.8 would reject ordinary traffic
+# and make it a straw man rather than a baseline.
+BASELINE_GREEDY_IOU_THRESH = 0.3
