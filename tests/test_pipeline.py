@@ -73,15 +73,38 @@ def write_clip(path: Path, frames: int, fps: float = 30.0) -> Path:
 
 
 def spin(seconds: float) -> None:
-    """Burn exactly ``seconds`` of wall clock, then return.
+    """Burn at least ``seconds`` of wall clock, then return.
 
-    Deliberately a busy-wait rather than ``time.sleep``: a 5 ms sleep
-    measured 7.13 ms on this machine (43% over, the OS timer's wake-up
-    latency), which would force the timing assertions out to a ~50%
-    tolerance and blunt them. A ``perf_counter`` spin lands inside a
-    fraction of a percent, so an injected cost of 5 ms can be asserted at
-    5 ms and a stage bracket that accidentally swallowed part of another
-    one would show.
+    "At least" is the important word, and it is why the timing assertions
+    are ONE-SIDED. Neither this nor ``time.sleep`` can ever return early;
+    both can be delayed. Measured over 60 calls per cell, 10 physical
+    cores, loaded = 14 spinner processes:
+
+        target 5 ms   unloaded            loaded (1.4x oversubscribed)
+        sleep         mean 7.140 (+43%)   mean 6.752 (+35%)
+                      min  5.040          min  5.075
+        spin          mean 5.018 (+0.4%)  mean 5.288 (+5.8%)
+                      min  5.000          min  5.000
+
+    The ``min`` row is the point: no condition produced an undershoot, so
+    a lower bound is the assertion that holds under any load, while an
+    upper bound is the one that flakes.
+
+    Busy-wait rather than ``time.sleep`` for a narrower reason than the
+    first version of this docstring claimed. Sleep's overshoot is a
+    roughly CONSTANT wake-up latency, not a proportional one (~2.1 ms
+    here at both the 5 ms and 4 ms targets; a reviewer measured ~1.1 ms on
+    other hardware), so its relative error is large AND machine-dependent
+    -- a tolerance calibrated on one machine does not port. The spin's
+    overshoot stays inside 6% even at 1.4x oversubscription, which is what
+    lets the lower bound sit tight against the injected cost instead of
+    being loosened until it stops testing anything.
+
+    The trade, stated plainly: a SLEEPING stage would read ~0 ms if the
+    pipeline's brackets ever moved to ``process_time``/``thread_time``,
+    failing loudly and correctly; a spinning stage reads its full cost and
+    would pass. That is real coverage the sleep gave for free and this
+    gives up.
     """
     deadline = time.perf_counter() + seconds
     while time.perf_counter() < deadline:
@@ -174,6 +197,16 @@ def clip(tmp_path) -> Path:
 DETECT_COST_MS = 5.0
 TRACK_COST_MS = 4.0
 TIMED_FRAMES = 15
+
+# Floor as a fraction of the injected cost. `spin` never returns early
+# (measured min == target under load and unloaded), so the true floor is
+# 1.0; 0.9 leaves room for clock granularity on hardware whose
+# perf_counter is coarser than this one's, and still sits an order of
+# magnitude above any fabricated share of a whole-frame measurement.
+COST_FLOOR = 0.9
+# Ceiling as a multiple of the injected cost. Loose on purpose: the
+# quantity can only overshoot, and a busy CI runner overshoots a lot.
+COST_CEILING = 6.0
 
 
 @pytest.fixture
@@ -310,22 +343,48 @@ def test_each_stage_reports_its_own_independently_known_cost(timed_session):
     of exactly 1.0000. What such a pipeline cannot do is make two different
     stages come out at two independently chosen numbers.
 
-    So the detector sleeps a known DETECT_COST_MS and the tracker a known
+    So the detector burns a known DETECT_COST_MS and the tracker a known
     TRACK_COST_MS, and each stage is asserted against its own injected cost.
     The only way to satisfy both is to have actually bracketed each stage.
+
+    Assertion shape: ONE-SIDED, floor-first. An injected cost can only ever
+    be overshot -- neither `spin` nor `time.sleep` returns early, and the
+    `track` bracket legitimately contains the real `Tracker.update` work
+    (~0.25 ms) on top of its injected 4.0 ms. A two-sided tolerance
+    therefore spends most of its budget before the test even starts, and
+    any scheduling delay pushes it out: the earlier `approx(rel=0.3)`
+    version failed 7 times in 25 runs on `track` under CPU contention.
+    All of the anti-fabrication power lives in the FLOOR anyway -- a split
+    of a single whole-frame measurement cannot reach an independently
+    chosen floor -- so the ceiling is only a loose sanity bound.
     """
     result = timed_session
+    total = result.timings[pipeline.TOTAL]["mean_ms"]
 
-    assert result.timings["detect"]["mean_ms"] == pytest.approx(
-        DETECT_COST_MS, rel=0.3
-    ), "the detect bracket does not contain the detector's own known cost"
-    assert result.timings["track"]["mean_ms"] == pytest.approx(
-        TRACK_COST_MS, rel=0.3
-    ), "the track bracket does not contain the tracker's own known cost"
-    # Analytics has no injected cost, so it must stay far below both of the
-    # stages that do. A fabricated split would hand it a fixed share of a
-    # total dominated by the two sleeps.
-    assert result.timings["analytics"]["mean_ms"] < DETECT_COST_MS / 5.0
+    for stage, injected in (("detect", DETECT_COST_MS), ("track", TRACK_COST_MS)):
+        measured = result.timings[stage]["mean_ms"]
+        # The floor: this is the assertion with the teeth.
+        assert measured >= injected * COST_FLOOR, (
+            f"the {stage} bracket reports {measured:.3f} ms, below the "
+            f"{injected} ms this stage was made to cost -- it cannot be "
+            f"measuring that stage's own work"
+        )
+        # Exact structural invariant, not a tolerance: each stage's bracket
+        # nests inside the frame bracket, so no stage mean can exceed the
+        # frame mean. Load-independent, so it never flakes.
+        assert measured <= total, (
+            f"{stage} ({measured:.3f} ms) exceeds the whole frame "
+            f"({total:.3f} ms), so it is counting work outside itself"
+        )
+        # Loose ceiling: catches an order-of-magnitude misattribution that
+        # the partition check somehow let through. Deliberately generous --
+        # under 1.4x CPU oversubscription a 5 ms spin was measured at up to
+        # 11.8 ms, so anything tighter would flake on a busy CI runner.
+        assert measured <= injected * COST_CEILING
+
+    # Analytics has no injected cost, so it must stay far below the stages
+    # that do.
+    assert result.timings["analytics"]["mean_ms"] < TRACK_COST_MS / 2.0
 
 
 def test_stage_means_sum_to_the_measured_total_frame_time(timed_session):
