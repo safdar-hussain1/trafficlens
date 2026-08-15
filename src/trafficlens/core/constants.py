@@ -145,3 +145,51 @@ KALMAN_ASPECT_MEASUREMENT_STD = 0.1
 # (Task 7) refuses to associate such pairs. scipy.stats.chi2.ppf(0.95, 4)
 # = 9.487729036781154, conventionally quoted as 9.4877.
 KALMAN_GATING_CHI2_95_4DOF = 9.4877
+
+# --- Multi-object tracker (trafficlens.track.tracker) ------------------------
+# All tunables of the two-stage tracker live here so the later TypeScript
+# mirror reads the exact same values; tracker.py itself contains no numeric
+# tunables. Each is the default of the corresponding Tracker() constructor
+# parameter.
+
+# Detection score at or above which (inclusive) a detection counts as HIGH
+# confidence: eligible for the first association stage against every live
+# track, and the only kind of detection allowed to start a new track. 0.6
+# follows ByteTrack's published track_thresh for vehicle-scale objects:
+# high enough that a track is only ever born from a detection the model is
+# genuinely sure about, low enough not to starve the tracker on ordinary
+# footage.
+TRACK_HIGH_CONF = 0.6
+
+# Detection score at or above which (inclusive) a detection enters the LOW
+# confidence band [TRACK_LOW_CONF, TRACK_HIGH_CONF) used by the second
+# association stage to keep an occluded, already-confirmed track alive.
+# Detections below this are discarded entirely. 0.1 is ByteTrack's floor:
+# under it, boxes are overwhelmingly background noise that would only feed
+# false re-associations.
+TRACK_LOW_CONF = 0.1
+
+# IoU floor for detection-to-track association, in BOTH stages: a pair is
+# eligible only when IoU(predicted box, detection box) >= this value,
+# implemented as an assignment cost of (1 - IoU) capped at max_cost
+# = (1 - TRACK_MATCH_IOU). 0.8 is strict by design: with a per-frame
+# Kalman prediction supplying the motion, a genuine continuation overlaps
+# its predicted box almost entirely, so demanding 80% overlap rejects
+# lane-neighbour confusions that a looser floor would let through.
+TRACK_MATCH_IOU = 0.8
+
+# Number of consecutive frames a confirmed track may go without a matched
+# detection before it is dropped. A track whose time_since_update exceeds
+# this dies; a gap of up to exactly this many frames survives on Kalman
+# prediction alone and can re-associate. 30 frames is one second at the
+# 30 fps footage this project targets -- the longest occlusion (an
+# overtaking lorry, a sign gantry) worth bridging before the motion
+# extrapolation itself becomes untrustworthy.
+TRACK_MAX_AGE = 30
+
+# Consecutive matched frames (hits) a new track needs before it is
+# CONFIRMED and appears in Tracker.update() output; until then it is
+# tentative and internal, and a single missed frame kills it. 3 is the
+# SORT/DeepSORT convention: two frames of agreement can still be a
+# double-counted NMS artefact, three in a row almost never are.
+TRACK_MIN_HITS = 3
