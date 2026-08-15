@@ -218,37 +218,77 @@ cases and flatters the engine.
 
 ## Scoring tolerance
 
-Fixed here, before any scoring code exists, for the same reason the
-labelling rules are fixed before any labelling: a tolerance chosen after
-seeing the engine's output is a tolerance chosen to make the engine look
-good.
+Fixed here, in the document that states the labelling rules, for the same
+reason the labelling rules themselves are fixed before any labelling: a
+tolerance chosen after seeing the engine's output is a tolerance chosen
+to make the engine look good.
 
-A prediction matches a label when it names the same gate and its frame
-is within **2 frames** of the label's frame. Matching is one-to-one: a
-label is consumed by at most one prediction and a prediction by at most
-one label, resolved nearest-frame first, so a burst of predictions
-cannot be scored against a single label. An unmatched prediction is a
-false positive; an unmatched label is a miss.
+A prediction matches a label when it names the same gate, carries the
+same direction, and its frame lies in the closed, **asymmetric** interval
+`[label - 1, label + 4]`. Matching is one-to-one: a label is consumed by
+at most one prediction and a prediction by at most one label, resolved
+nearest-frame first, so a burst of predictions cannot be scored against a
+single label. An unmatched prediction is a false positive; an unmatched
+label is a miss.
 
-**Where the 2 comes from.** It is the precision this document claims for
-its own labels and nothing more. A `certain` row's frame is "pinned to
-within a frame or two"; a scorer that demanded exact agreement would be
-charging the engine for slack the labeller has already admitted to, and
-one that allowed more would be inventing precision the labels do not
-have. The number is the label precision, so it moves only if that
-sentence moves.
+An earlier version of this section fixed a **symmetric ±2 frames**. That
+number was wrong, and it is corrected here rather than quietly replaced,
+because a scoring tolerance that changes without an argument attached is
+exactly the thing this section exists to prevent.
 
-The window must not be widened to absorb a systematic offset. A
-prediction consistently late or early by a fixed amount is a finding
-about the engine, and a tolerance wide enough to hide it would also be
-wide enough to match a prediction to the wrong vehicle: at 30 fps, ±2
-frames is ±67 ms, comfortably inside the headway between two vehicles
-crossing this gate one after the other, whereas a wider window is not.
+**Why the interval is asymmetric.** It encodes a known bias in the
+**labels**, not slack for the engine.
+
+- The crossing frame of a label is machine-proposed from the **first row
+  of the vehicle's blob** in a drift-stabilised slit-scan, then
+  human-confirmed. A vehicle's **shadow reaches the gate band before its
+  tyres do**, so the first blob row is systematically **early**.
+- `LABELLING_RECORD.md` measures that lead frame-by-frame against the
+  footage on two isolated vehicles and states the resulting label
+  precision as **+0/-4 frames**: a label is never late, and may be up to
+  four frames early.
+- The engine fires on the bottom-centre anchor — the road-contact point,
+  the tyres — which is the thing the label is early relative to. So a
+  correct engine prediction sits **0 to 4 frames after** its label.
+
+A symmetric ±2 window therefore scores a correct 3-frames-late prediction
+as a **miss and a false alarm at once**, understating accuracy twice
+over. The `-1` side is the ordinary sub-frame slack of a frame-quantised
+crossing; the `+4` side is the measured label lead, and nothing more.
+
+**This is still not permission to widen the window.** The warning the
+earlier version gave is right and stands: a prediction consistently
+late or early by a fixed amount is a finding about the engine, and a
+tolerance wide enough to hide it would also be wide enough to match a
+prediction to the wrong vehicle. That warning is aimed at **symmetric
+widening chosen after seeing engine output**, which this is not — the
++0/-4 figure was measured and written down in `LABELLING_RECORD.md`
+before any scoring code existed, and the interval is asymmetric precisely
+because it tracks that measurement rather than buying slack in both
+directions.
+
+**The window stays effectively disjoint between neighbouring vehicles.**
+The closest pair of labels in this set is **5 frames** apart (411 and
+416). Their windows are `[410, 415]` and `[415, 420]`: they touch at
+exactly one frame, and one-to-one nearest-frame-first matching makes that
+touch harmless, since the frame can be consumed by only one of them. A
+symmetric ±4 window — the naive way to admit a 4-frame lead — would give
+`[407, 415]` and `[412, 420]`, genuinely overlapping across four frames.
+The fix is the asymmetry, not a wider window.
+
+Any scorer must publish the **signed** frame offsets of its matched
+pairs. The asymmetry is a claim that predictions run late; the offsets
+are the evidence for or against it, and a scorer that hid them could
+widen its window indefinitely without anyone noticing.
+
+Any report must record this interval as a **pair** of numbers with the
+reason attached. A single scalar "tolerance" field would misdescribe the
+scorer to every later reader.
 
 `probable` rows carry no more frame precision than `certain` rows — the
 flag records doubt about the crossing, its class or its exact frame —
-so they are matched under the same ±2 window and reported separately
-rather than under a looser one.
+so they are matched under the same window and reported separately rather
+than under a looser one.
 
 ## Class vocabulary
 

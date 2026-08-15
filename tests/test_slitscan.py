@@ -669,16 +669,32 @@ def test_protocol_document_forbids_detector_derived_labels():
 
 def test_protocol_document_fixes_the_scoring_tolerance():
     """A scorer needs a fixed frame window to match a prediction to a
-    label, and that number must be settled before any scoring code
-    exists -- for the same reason the labelling rules are settled before
-    any labelling."""
+    label, and that window must be settled in this document -- for the
+    same reason the labelling rules are settled before any labelling.
+
+    The window is ASYMMETRIC, and the asymmetry is the whole claim: the
+    label frame is the first slit-scan row of a vehicle's blob, a shadow
+    reaches the gate band before the tyres do, and LABELLING_RECORD.md
+    measures the resulting label precision at +0/-4 frames. So the
+    document must carry the interval and the argument together. An
+    interval with the argument stripped out is a tolerance someone chose,
+    which is exactly what this document exists to prevent.
+    """
     protocol = ROOT / "data" / "groundtruth" / "PROTOCOL.md"
     text = " ".join(protocol.read_text().split())
 
     assert (
-        "A prediction matches a label when it names the same gate and its "
-        "frame is within **2 frames** of the label's frame."
+        "A prediction matches a label when it names the same gate, carries "
+        "the same direction, and its frame lies in the closed, "
+        "**asymmetric** interval `[label - 1, label + 4]`."
     ) in text
+    # The argument, not just the number.
+    assert "shadow reaches the gate band before its tyres do" in text
+    assert "**+0/-4 frames**" in text
+    # The earlier symmetric window is corrected in the open, never
+    # silently swapped out.
+    assert "An earlier version of this section fixed a **symmetric" in text
+    assert "frame is within **2 frames** of the label's frame" not in text
 
 
 def test_protocol_document_states_the_anchor_tie_break_without_hedging():
