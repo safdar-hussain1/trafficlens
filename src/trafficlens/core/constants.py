@@ -68,3 +68,60 @@ DETECT_DEFAULT_INPUT_SIZE = 640
 # against, so padding with anything else would shift the input distribution
 # the model actually saw during training.
 LETTERBOX_PAD_VALUE = 114
+
+# --- Kalman filter (trafficlens.track.kalman) --------------------------------
+# All tunables of the constant-velocity box filter live here so the later
+# TypeScript mirror reads the exact same values; kalman.py itself contains
+# no numeric tunables.
+
+# Base standard deviation of POSITION-like state components (cx, cy, h) as a
+# fraction of the box height h. Height is a proxy for distance from the
+# camera: a taller box is a nearer object, which moves more pixels per frame,
+# so its uncertainty in pixels should be proportionally larger. 1/20 = 0.05
+# is the weight the original DeepSORT filter shipped with and has been the
+# de-facto standard for xyah box filters since.
+KALMAN_STD_WEIGHT_POSITION = 0.05
+
+# Base standard deviation of VELOCITY-like state components (vx, vy, vh) as a
+# fraction of the box height, per frame. 1/160 = 0.00625 (DeepSORT's value):
+# velocities change far more slowly than positions jitter, so the process
+# trusts the constant-velocity model 8x more (0.05 / 0.00625) than it trusts
+# any single position.
+KALMAN_STD_WEIGHT_VELOCITY = 0.00625
+
+# Multiplier on the position weight for the INITIAL position variance in
+# initiate(): the first box comes from a single unconfirmed detection, so it
+# is trusted less (2x the running std) than a measurement arriving during
+# steady-state tracking.
+KALMAN_INIT_POSITION_STD_FACTOR = 2.0
+
+# Multiplier on the velocity weight for the INITIAL velocity variance in
+# initiate(): velocities start at exactly 0 with no evidence at all, so
+# their std is inflated 10x -- the first two or three measurements then set
+# the velocity almost entirely on their own.
+KALMAN_INIT_VELOCITY_STD_FACTOR = 10.0
+
+# Standard deviation of the aspect-ratio (a = w/h) state used for the
+# initial variance and the per-step process noise. Aspect ratio is
+# dimensionless and near-constant for a rigid vehicle, so its uncertainty
+# is a small absolute value rather than height-scaled. 1e-2 per DeepSORT.
+KALMAN_ASPECT_STD = 0.01
+
+# Standard deviation of the aspect-ratio VELOCITY (va) process noise per
+# step. Aspect ratio should barely drift at all frame-to-frame, hence three
+# orders of magnitude below KALMAN_ASPECT_STD. 1e-5 per DeepSORT.
+KALMAN_ASPECT_VELOCITY_STD = 1e-05
+
+# Standard deviation of the aspect-ratio MEASUREMENT noise in update().
+# Detector aspect ratios jitter much more than the true aspect drifts
+# (partial occlusion clips box width), so the measurement is trusted 10x
+# less (1e-1) than the state's own process noise (1e-2). Per DeepSORT.
+KALMAN_ASPECT_MEASUREMENT_STD = 0.1
+
+# 95% quantile of the chi-square distribution with 4 degrees of freedom
+# (one DOF per measured component: cx, cy, a, h). A squared Mahalanobis
+# gating distance above this value means the measurement has under a 5%
+# chance of belonging to the track under Gaussian assumptions; the tracker
+# (Task 7) refuses to associate such pairs. scipy.stats.chi2.ppf(0.95, 4)
+# = 9.487729036781154, conventionally quoted as 9.4877.
+KALMAN_GATING_CHI2_95_4DOF = 9.4877
