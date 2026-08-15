@@ -1,12 +1,18 @@
 """Directional gate counting: turns tracked-object movement into counted
 crossings, once per track, per class, per direction.
 
-A ``Gate`` is a directed line segment. ``GateCounter`` watches each
-track's positions frame to frame and, the first time -- and only the
-first time -- a track's path crosses the gate line, emits a
-``CrossingEvent`` labelled by which side of the gate's direction of
-travel the track ended up on, using the same left/right sign convention
-as ``trafficlens.core.geometry``.
+A ``Gate`` is a directed *finite* line segment, not an infinite line.
+``GateCounter`` watches each track's positions frame to frame and, the
+first time -- and only the first time -- a track's swept path actually
+intersects the bounded gate segment (checked with
+``trafficlens.core.geometry.segments_intersect``, not merely a
+same-side/opposite-side test against the segment's infinite extension),
+emits a ``CrossingEvent`` labelled by which side of the gate's direction
+of travel the track ended up on, using the same left/right sign
+convention as ``trafficlens.core.geometry``. A crossing that lands
+exactly on one of the gate's own endpoints counts -- inclusive bounds --
+matching ``segments_intersect``'s treatment of a shared endpoint or
+T-junction as an intersection.
 
 This module imports nothing beyond the standard library and
 ``trafficlens.core.geometry``, so it stays testable without a video,
@@ -19,6 +25,7 @@ from trafficlens.core.geometry import (
     Point,
     crossing_direction,
     segment_intersection_param,
+    segments_intersect,
     side_of_line,
 )
 
@@ -114,17 +121,28 @@ class GateCounter:
     produces another until ``forget(track_id)`` is called: a lingering or
     jittering track counts exactly once, ever -- not once per direction
     change.
+
+    A crossing only counts when the track's swept path genuinely
+    intersects the *bounded* gate segment (via
+    ``trafficlens.core.geometry.segments_intersect``). Two positions
+    landing on opposite sides of the gate's infinite line is necessary
+    but not sufficient: e.g. a vehicle on a different carriageway,
+    crossing the drawn gate's line far outside its two endpoints, is not
+    counted.
     """
 
     def __init__(self, gate: Gate) -> None:
         self.gate = gate
         self._counted: set[int] = set()
-        # Last non-zero side (+1/-1) each track was seen on. Needed
-        # because an anchor landing exactly on the gate line makes
-        # side_of_line (and crossing_direction) return 0, which must be
-        # resolved on a later frame against the real previous side
+        # Last non-zero side (+1/-1) each track was seen on, and the
+        # actual point it was seen at. Needed because an anchor landing
+        # exactly on the gate line makes side_of_line (and
+        # crossing_direction) return 0, which must be resolved on a
+        # later frame against the real previous side -- and the real
+        # previous off-line position, for the bounded-segment check --
         # rather than lost.
         self._last_side: dict[int, int] = {}
+        self._last_off_line_point: dict[int, Point] = {}
         self.totals: dict[str, dict[str, int]] = {}
 
     def update(
@@ -143,11 +161,17 @@ class GateCounter:
         side_curr = side_of_line(gate_a, gate_b, curr)
 
         if side_prev_actual != 0:
+            # The normal case: prev itself is the last off-line position,
+            # so the segment to bounds-check is prev -> curr.
+            origin = prev
             signed = crossing_direction(gate_a, gate_b, prev, curr)
         else:
             # prev landed exactly on the gate line this frame: resolve
-            # against the last off-line side remembered for this track,
-            # not against 0 (which would silently drop the crossing).
+            # against the last off-line side (and position) remembered
+            # for this track, not against 0 (which would silently drop
+            # the crossing) and not against prev's on-line position
+            # (which would give the wrong segment to bounds-check).
+            origin = self._last_off_line_point.get(track_id)
             last = self._last_side.get(track_id)
             if last is None or side_curr == 0 or last == side_curr:
                 signed = 0
@@ -156,23 +180,36 @@ class GateCounter:
 
         if side_curr != 0:
             self._last_side[track_id] = side_curr
+            self._last_off_line_point[track_id] = curr
         elif side_prev_actual != 0:
             self._last_side[track_id] = side_prev_actual
+            self._last_off_line_point[track_id] = prev
 
         if signed == 0 or track_id in self._counted:
             return None
 
+        if origin is None or not segments_intersect(origin, curr, gate_a, gate_b):
+            # The infinite line was crossed, but the swept path never
+            # actually meets the bounded gate segment -- e.g. a parallel
+            # carriageway crossing the gate's line far past its ends.
+            return None
+
         self._counted.add(track_id)
 
-        t = segment_intersection_param(prev, curr, gate_a, gate_b)
+        t = segment_intersection_param(origin, curr, gate_a, gate_b)
         if t is None:
-            # Parallel/degenerate relative to the gate line -- should not
-            # happen alongside a genuine sign change, but fall back to
-            # the object's current position rather than raise.
+            # Parallel/collinear relative to the gate line -- segments_intersect
+            # can still be True here (collinear overlap), but there is no
+            # single well-defined intersection point; fall back to the
+            # object's current position rather than raise.
             crossing_x, crossing_y = curr
         else:
-            crossing_x = prev[0] + t * (curr[0] - prev[0])
-            crossing_y = prev[1] + t * (curr[1] - prev[1])
+            # segments_intersect already confirmed a genuine bounded
+            # intersection, so t should already lie in [0, 1]; clamp
+            # defensively against floating-point overshoot at the edges.
+            t = max(0.0, min(1.0, t))
+            crossing_x = origin[0] + t * (curr[0] - origin[0])
+            crossing_y = origin[1] + t * (curr[1] - origin[1])
 
         direction = self.gate.label_positive if signed == 1 else self.gate.label_negative
         violation = is_over_limit(speed_kmh, speed_limit_kmh)
@@ -199,6 +236,7 @@ class GateCounter:
         counted again."""
         self._counted.discard(track_id)
         self._last_side.pop(track_id, None)
+        self._last_off_line_point.pop(track_id, None)
 
     def total(self) -> int:
         return sum(sum(directions.values()) for directions in self.totals.values())

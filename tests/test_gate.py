@@ -152,8 +152,14 @@ def test_gate_from_normalized_passes_through_kwargs():
 
 
 def test_gate_from_normalized_rejects_zero_length():
+    # start and end are DIFFERENT normalized points (0.2, 0.5) vs
+    # (0.8, 0.5), so a check performed on the raw normalized inputs
+    # before conversion would not trip here. width=0 collapses the
+    # x-axis, so both convert to the same pixel point (0.0, 50.0) --
+    # this pins that the zero-length rejection happens on the converted
+    # pixel coordinates, not on the raw normalized inputs.
     with pytest.raises(ValueError):
-        Gate.from_normalized("g", (0.5, 0.5), (0.5, 0.5), width=100, height=100)
+        Gate.from_normalized("g", (0.2, 0.5), (0.8, 0.5), width=0, height=100)
 
 
 def test_gate_from_normalized_rejects_coordinate_above_one():
@@ -164,6 +170,116 @@ def test_gate_from_normalized_rejects_coordinate_above_one():
 def test_gate_from_normalized_rejects_negative_coordinate():
     with pytest.raises(ValueError):
         Gate.from_normalized("g", (-0.1, 0.0), (1.0, 1.0), width=100, height=100)
+
+
+# --- bounded-segment intersection (not just the infinite line) -----------------
+#
+# side_of_line / crossing_direction only test which side of the gate's
+# *infinite* line a point falls on. A genuine count also requires the
+# swept path to intersect the *finite* gate segment -- otherwise a track
+# on a completely different carriageway, crossing the drawn gate's line
+# extended far past its endpoints, would be counted as traffic through
+# that gate. All gates below are short (span x in [4, 6], or a short
+# diagonal) specifically to exercise this.
+
+def test_crossing_beyond_gate_end_point_not_counted():
+    # Repro from review: gate spans x in [4, 6]; the track crosses the
+    # infinite line at x=50, 44 px past the gate's end point.
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (50.0, -2.0), (50.0, 2.0), 1, 0.04)
+    assert ev is None
+    assert gc.total() == 0
+
+
+def test_crossing_before_gate_start_point_not_counted():
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (0.0, -2.0), (0.0, 2.0), 1, 0.04)
+    assert ev is None
+    assert gc.total() == 0
+
+
+def test_crossing_within_gate_span_is_counted():
+    # Guard against over-correcting: a genuine crossing inside the short
+    # gate's span must still count.
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (5.0, -2.0), (5.0, 2.0), 1, 0.04)
+    assert ev is not None
+    assert gc.total() == 1
+
+
+def test_crossing_exactly_at_gate_endpoint_is_counted():
+    # Decision, pinned: gate bounds are inclusive of their endpoints,
+    # matching trafficlens.core.geometry.segments_intersect's treatment
+    # of a shared endpoint / T-junction as an intersection (see
+    # test_geometry.py::test_segments_intersect_shared_endpoint and
+    # ::test_segments_intersect_t_junction). A crossing that lands
+    # exactly on the gate's start point still counts.
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (4.0, -2.0), (4.0, 2.0), 1, 0.04)
+    assert ev is not None
+    assert ev.crossing_x == pytest.approx(4.0)
+    assert ev.crossing_y == pytest.approx(0.0)
+
+
+def test_diagonal_gate_crossing_outside_span_not_counted():
+    # Diagonal gate from (0,0) to (4,4). The path crosses the infinite
+    # line x=y at (10, 10), far outside the gate's own span.
+    gate = Gate("g", (0.0, 0.0), (4.0, 4.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (9.0, 11.0), (11.0, 9.0), 1, 0.04)
+    assert ev is None
+    assert gc.total() == 0
+
+
+def test_on_line_deferral_still_respects_gate_bounds():
+    # The deferral path (prev lands exactly on the infinite line) must
+    # bounds-check against the segment spanning the last *off-line*
+    # position to curr -- not skip the bounds check entirely. Without
+    # the fix, this would incorrectly count: the side flips (matching
+    # the last off-line side), but the swept path never comes near the
+    # short gate's actual span.
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    assert gc.update(1, "car", (50.0, -2.0), (50.0, 0.0), 1, 0.04) is None  # deferred
+    assert gc.update(1, "car", (50.0, 0.0), (50.0, 2.0), 2, 0.08) is None   # still out of bounds
+    assert gc.total() == 0
+
+
+def _assert_point_on_gate(ev, gate, eps=1e-6):
+    min_x = min(gate.start[0], gate.end[0]) - eps
+    max_x = max(gate.start[0], gate.end[0]) + eps
+    min_y = min(gate.start[1], gate.end[1]) - eps
+    max_y = max(gate.start[1], gate.end[1]) + eps
+    assert min_x <= ev.crossing_x <= max_x
+    assert min_y <= ev.crossing_y <= max_y
+
+
+def test_crossing_point_within_gate_bounding_box_horizontal():
+    gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (5.0, -2.0), (5.0, 2.0), 1, 0.04)
+    assert ev is not None
+    _assert_point_on_gate(ev, gate)
+
+
+def test_crossing_point_within_gate_bounding_box_vertical():
+    gate = Gate("g", (0.0, 4.0), (0.0, 6.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (-2.0, 5.0), (2.0, 5.0), 1, 0.04)
+    assert ev is not None
+    _assert_point_on_gate(ev, gate)
+
+
+def test_crossing_point_within_gate_bounding_box_diagonal():
+    gate = Gate("g", (0.0, 0.0), (4.0, 4.0))
+    gc = GateCounter(gate)
+    ev = gc.update(1, "car", (1.0, 3.0), (3.0, 1.0), 1, 0.04)
+    assert ev is not None
+    _assert_point_on_gate(ev, gate)
 
 
 # --- is_over_limit -------------------------------------------------------------
