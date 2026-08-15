@@ -193,3 +193,38 @@ TRACK_MAX_AGE = 30
 # SORT/DeepSORT convention: two frames of agreement can still be a
 # double-counted NMS artefact, three in a row almost never are.
 TRACK_MIN_HITS = 3
+
+# --- Speed estimation (trafficlens.analytics.speed) ---------------------------
+# All tunables of the plane-space speed estimator live here so the later
+# TypeScript mirror reads the exact same values; speed.py itself contains
+# no numeric tunables.
+
+# Default trailing window, in seconds, of accepted plane-space samples the
+# least-squares speed fit runs over. 2.0s holds ~60 samples at the 30 fps
+# footage this project targets -- enough for the fitted slope to average out
+# per-frame anchor jitter -- while staying short enough that a braking or
+# accelerating vehicle reads its current speed rather than a multi-second
+# average; a vehicle at motorway speed covers ~50m in 2s, comfortably
+# within one calibrated camera view.
+SPEED_WINDOW_S = 2.0
+
+# Default minimum number of in-window accepted samples before speed_kmh
+# reports a number instead of None. Two samples determine a line exactly,
+# with zero residual, so any two noisy anchors would yield a confidently
+# wrong slope; five samples (0.2s at 25 fps) is the point where independent
+# per-frame jitter starts cancelling in the fit instead of steering it.
+SPEED_MIN_SAMPLES = 5
+
+# Maximum plane-space step, in metres, a new sample may take from the last
+# ACCEPTED sample of the same track before it is rejected as a bad
+# detection at observe() time (never buffered), so one wild detector box
+# cannot spike the speed. Physics: 250 km/h -- faster than any road vehicle
+# this product will ever see -- is 69.4 m/s, which at 15 fps (the lowest
+# frame rate worth running the pipeline at) is 4.63m of genuine travel per
+# frame; 7.0m gives that worst case a ~1.5x margin (~2.5x at 25 fps, ~3x at
+# 30 fps), so no physically possible vehicle motion is ever rejected while
+# any step beyond it can only be a detection error. Rejection is measured
+# against the last ACCEPTED sample, not the last seen one: measuring
+# against the last seen sample would latch onto an outlier and then reject
+# every good sample that follows it.
+SPEED_MAX_STEP_M = 7.0
