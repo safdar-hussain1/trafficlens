@@ -104,6 +104,57 @@ DUPLICATE_IMG = [
 # branch.
 ALL_SAME_IMG = [IMG4[0]] * 4
 
+# A 5-point fit, for exercising validate()'s no-holdout self-check on a
+# configuration where it is actually allowed to run (see the docstring of
+# RoadPlane.validate(): only 5+ points have residual degrees of freedom to
+# check against). WORLD5 is WORLD4 plus a 5th road point near the centre of
+# the surveyed area; IMG5 is that same H_wi projection -- EXCEPT the 5th
+# image point is deliberately nudged by (+2px, -2px) off its exact
+# projection.
+#
+# That 2px nudge is not noise sprinkled in for realism -- it is load-bearing
+# and was added after finding, empirically, that a *perfectly* noiseless
+# 5-point (or any >4-point) fit derived from a single exact H is always
+# reported as catastrophically ill-conditioned by _dlt_condition_number
+# (observed: ~2.2e16, indistinguishable from the COLLINEAR/DUPLICATE
+# fixtures above). This is expected once you look at what the condition
+# number actually measures: with zero-noise data that is exactly consistent
+# with one homography, the DLT design matrix is exactly rank-8 (its 9th
+# singular value is ~0) for ANY number of points >= 4 and ANY point
+# placement -- the near-zero singular value reflects "this data has zero
+# residual", not "these points are geometrically degenerate". Real surveyed
+# or detected correspondences always carry some sub-pixel measurement noise,
+# which is exactly what keeps a real overdetermined fit's design matrix
+# genuinely non-singular; a 2px nudge on one point reproduces that here so
+# this fixture behaves like a real clean survey (condition number ~1174,
+# comfortably under HOMOGRAPHY_MAX_CONDITION_NUMBER) rather than like an
+# artifact of synthetic zero-noise data.
+WORLD5 = WORLD4 + [(0.0, 18.0)]
+IMG5 = [
+    (686.1374124964, 476.0372807540398),
+    (1233.8625875036003, 476.0372807540398),
+    (854.7651148131101, 946.5662269242592),
+    (1065.2348851868899, 946.5662269242592),
+    (962.0000000000002, 821.3672343564774),
+]
+
+# IMG5 with the 4th point (index 3) additionally shifted +150px in x, on top
+# of the same 2px nudge on the 5th point. This is a corrupted 5-point
+# configuration: not geometrically degenerate (condition number ~44.5,
+# nowhere near the threshold -- the condition-number check genuinely cannot
+# catch this class of error), but its least-squares self-fit reprojection
+# error against its own 5 fit points is large (~0.72m mean), because with 5
+# points the fit no longer has to pass through every point exactly. That
+# residual freedom is what makes the no-holdout self-check in validate()
+# meaningful for 5+ points, unlike the exact 4-point case.
+BAD_IMG5 = [
+    (686.1374124964, 476.0372807540398),
+    (1233.8625875036003, 476.0372807540398),
+    (854.7651148131101, 946.5662269242592),
+    (1215.2348851868899, 946.5662269242592),
+    (962.0000000000002, 821.3672343564774),
+]
+
 
 # --- The refusal policy ------------------------------------------------------
 
@@ -174,9 +225,51 @@ def test_holdout_reprojection_detects_a_corrupted_correspondence():
 
 # --- validate(): every failure path must actually be reachable -------------
 
-def test_validate_passes_for_a_healthy_configuration():
+def test_validate_raises_on_four_point_fit_without_holdout_even_when_clean():
+    # A 4-point fit exactly determines the homography (8 equations, 8
+    # unknowns), so it reproduces its own 4 points to floating-point
+    # precision *by construction* -- checking reprojection error against
+    # them can never fail, clean or not. validate() must refuse to
+    # pretend that non-check is a pass, rather than silently reporting
+    # success for a self-check it cannot actually run.
     plane = RoadPlane.from_correspondences(IMG4, WORLD4)
+    with pytest.raises(CalibrationError):
+        plane.validate()
+
+
+def test_validate_raises_on_corrupted_four_point_fit_without_holdout():
+    # The reviewer's exact scenario: corrupt one image point by 25px, build
+    # the plane, call validate() with no holdout. Before this fix this
+    # passed -- the self-fit error against the same corrupted 4 points was
+    # ~1e-6m regardless -- even though the true (held-out) error is 0.656m.
+    # It must now raise, for the same reason as the clean case above: a
+    # 4-point plane cannot self-check at all without a holdout.
+    bad_img = [IMG4[0], IMG4[1], IMG4[2], (IMG4[3][0] + 25.0, IMG4[3][1])]
+    dirty = RoadPlane.from_correspondences(bad_img, WORLD4)
+    with pytest.raises(CalibrationError):
+        dirty.validate()
+
+
+def test_validate_passes_for_a_clean_five_point_fit_without_holdout():
+    # With 5+ correspondences the least-squares solve has genuine residual
+    # degrees of freedom, so a no-holdout self-check is not mathematically
+    # inert -- and a clean 5-point fit passes it.
+    plane = RoadPlane.from_correspondences(IMG5, WORLD5)
     assert plane.validate() is None  # must not raise
+
+
+def test_validate_raises_for_a_corrupted_five_point_fit_without_holdout():
+    # Proves the >4-point self-check is genuinely informative, not just
+    # "allowed to run": BAD_IMG5 is geometrically well-conditioned (its
+    # condition number, ~44.5, is nowhere near HOMOGRAPHY_MAX_CONDITION_NUMBER,
+    # so the condition-number check does not catch this) but its own
+    # least-squares fit has a large residual against its own 5 fit points
+    # (mean ~0.72m) because a single corrupted correspondence among 5 no
+    # longer has to be fit exactly. That residual is exactly what the
+    # no-holdout self-check for 5+ points exists to catch.
+    plane = RoadPlane.from_correspondences(BAD_IMG5, WORLD5)
+    with pytest.raises(CalibrationError):
+        plane.validate()
 
 
 def test_validate_raises_when_fewer_points_than_min_points_required():

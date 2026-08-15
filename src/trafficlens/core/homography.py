@@ -224,13 +224,36 @@ class RoadPlane:
            correspondences is not ill-conditioned -- catches collinear and
            near-collinear configurations, which duplicate points also
            produce as a side effect.
-        4. The mean reprojection error is at most ``max_mean_error_m``,
-           measured against ``holdout_image_pts``/``holdout_world_pts`` when
-           given (a genuine out-of-sample check), or against the plane's
-           own fit correspondences otherwise. A single mis-surveyed point
-           among an otherwise well-conditioned set passes checks 1-3 but is
-           exactly what a held-out check is for -- see
-           ``tests/test_homography.py::test_condition_number_check_alone_does_not_catch_a_shifted_single_point``.
+        4. A reprojection-error self-check -- but only when it can actually
+           mean something. A homography has 8 degrees of freedom, and each
+           correspondence contributes exactly 2 equations, so exactly 4
+           correspondences (8 equations) exactly determine the homography:
+           the DLT solve reproduces those same 4 points to floating-point
+           precision *no matter what the correspondences were*, including a
+           badly corrupted survey (see
+           ``tests/test_homography.py::test_validate_raises_on_corrupted_four_point_fit_without_holdout``,
+           where a 25px error in one of 4 points still self-checks at
+           ~1e-6m). So for a 4-point plane, checking reprojection error
+           against its own fit points is not merely weak -- it is
+           mathematically incapable of ever failing, which makes it
+           decoration, not validation. If no ``holdout_image_pts`` /
+           ``holdout_world_pts`` are given for a 4-point plane, this method
+           raises ``CalibrationError`` outright, rather than silently
+           reporting a pass it cannot back up.
+
+           With 5 or more correspondences, the least-squares solve has
+           ``2 * (n - 4)`` more equations than unknowns -- genuine residual
+           degrees of freedom -- so checking reprojection error against the
+           plane's own fit points *is* informative: a single corrupted
+           correspondence among 5+ shows up as nonzero self-fit error (see
+           ``test_validate_raises_for_a_corrupted_five_point_fit_without_holdout``).
+           For 5+ points, self-checking without a holdout is therefore
+           allowed.
+
+           Whenever ``holdout_image_pts``/``holdout_world_pts`` are given
+           (any point count, including exactly 4), they are used instead of
+           the fit points -- a genuine out-of-sample check, and the
+           strongest form of this validation.
         """
         n = len(self._image_pts)
         if n < min_points:
@@ -258,12 +281,26 @@ class RoadPlane:
             raise ValueError(
                 "holdout_image_pts and holdout_world_pts must be given together"
             )
-        check_image_pts = (
-            holdout_image_pts if holdout_image_pts is not None else self._image_pts
-        )
-        check_world_pts = (
-            holdout_world_pts if holdout_world_pts is not None else self._world_pts
-        )
+        has_holdout = holdout_image_pts is not None
+
+        if not has_holdout and n == 4:
+            raise CalibrationError(
+                "validate() was called without holdout_image_pts/"
+                "holdout_world_pts on a plane built from exactly 4 "
+                "correspondences. 4 points exactly determine a homography "
+                "(8 equations for 8 degrees of freedom), so this plane "
+                "reproduces those same 4 points to floating-point precision "
+                "regardless of whether the survey was correct -- checking "
+                "reprojection error against them can never fail, so it "
+                "cannot validate anything. Either build the plane from 5 or "
+                "more correspondences (a least-squares fit has real "
+                "residual error to check), or pass "
+                "holdout_image_pts/holdout_world_pts: surveyed points that "
+                "were not used to build this plane."
+            )
+
+        check_image_pts = holdout_image_pts if has_holdout else self._image_pts
+        check_world_pts = holdout_world_pts if has_holdout else self._world_pts
         error = self.reprojection_error(check_image_pts, check_world_pts)
         if error["mean_m"] > max_mean_error_m:
             raise CalibrationError(

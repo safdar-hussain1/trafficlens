@@ -20,12 +20,15 @@ GEOMETRY_EPS = 1e-9
 # a degenerate or near-degenerate correspondence set (collinear points, a
 # duplicated point, or any configuration close to one). Measured on real
 # synthetic configurations: a healthy trapezoid of 4 surveyed road points
-# gives a condition number of about 8; nudging one point 1mm toward
-# collinear with the other three pushes it to about 56000; exactly collinear
-# or duplicated points push it above 1e16. 10000.0 sits comfortably between
-# the healthy and near-degenerate measurements (three orders of magnitude of
-# margin on each side), so it rejects genuine near-degeneracy without ever
-# rejecting a well-spread survey.
+# gives a condition number of about 7.93; nudging one point 1mm toward
+# collinear with the other three pushes it to about 56216; exactly collinear
+# or duplicated points push it above 1e16. 10000.0 sits below the
+# near-degenerate measurement (56216 / 10000 = ~5.6x) and far below the
+# healthy measurement (10000 / 7.93 = ~1261x) -- the margin is not
+# symmetric: comfortably wide on the healthy side, narrower but still clear
+# on the near-degenerate side, which is why the near-degenerate fixture in
+# tests/test_homography.py nudges a point by a full 1mm rather than a
+# smaller amount that might land closer to the threshold.
 HOMOGRAPHY_MAX_CONDITION_NUMBER = 10000.0
 
 # Default maximum acceptable mean reprojection error, in metres, for
