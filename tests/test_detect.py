@@ -400,36 +400,67 @@ def test_ultralytics_and_onnx_adapters_agree_on_a_real_frame():
     ultra = UltralyticsDetector(str(YOLO11N))
     ultra_dets = ultra.detect(frame)
 
-    # Export to ONNX into an isolated tmp dir so the repo root -- which is
-    # NOT .gitignored for *.onnx -- never gets a stray tracked file, even
-    # transiently, regardless of test outcome.
+    # Export to ONNX with the source .pt itself inside an isolated tmp dir,
+    # so ultralytics -- which always writes the .onnx next to the weights
+    # file it's given -- writes directly into the tmp dir and the repo
+    # root is never touched at all (not "touched then cleaned up": never
+    # written to in the first place). The stray-cleanup in `finally` below
+    # is kept purely as insurance against an unrelated ultralytics quirk,
+    # not because this method is expected to touch the root.
     tmpdir = tempfile.mkdtemp(prefix="trafficlens_onnx_test_")
     try:
         from ultralytics import YOLO
 
-        yolo = YOLO(str(YOLO11N))
-        exported = yolo.export(format="onnx", imgsz=640, opset=12, simplify=True, dynamic=False, verbose=False)
-        onnx_path = Path(tmpdir) / "yolo11n.onnx"
-        shutil.move(exported, onnx_path)
+        weights_copy = Path(tmpdir) / "yolo11n.pt"
+        shutil.copy2(YOLO11N, weights_copy)
+
+        yolo = YOLO(str(weights_copy))
+        onnx_path = Path(
+            yolo.export(format="onnx", imgsz=640, opset=12, simplify=True, dynamic=False, verbose=False)
+        )
+        assert onnx_path.parent == Path(tmpdir), (
+            f"expected the ONNX export to land in {tmpdir}, got {onnx_path}"
+        )
 
         onnx_detector = OnnxDetector(str(onnx_path))
         onnx_dets = onnx_detector.detect(frame)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+        # Insurance only, per the comment above -- not expected to trigger.
         stray = ROOT / "yolo11n.onnx"
         if stray.exists():
             stray.unlink()
 
     assert len(ultra_dets) > 0
     assert len(onnx_dets) > 0
+    # Equal counts in each direction rules out spurious extra detections
+    # on either side that a one-directional "every X has a Y" check would
+    # miss.
+    assert len(ultra_dets) == len(onnx_dets)
 
     # Every ultralytics-adapter detection should have a matching
-    # onnx-adapter detection of the same class within a tight IoU and
-    # score tolerance -- the numerical noise between a torch forward pass
-    # and its ONNX export (observed empirically at <=0.01 max abs diff on
-    # the raw (1, 84, 8400) tensor), not a structural difference.
-    for ud in ultra_dets:
-        candidates = [d for d in onnx_dets if d.class_name == ud.class_name]
-        assert candidates, f"no onnx detection of class {ud.class_name!r} to match {ud}"
-        best_iou = max(_box_iou((ud.x1, ud.y1, ud.x2, ud.y2), (c.x1, c.y1, c.x2, c.y2)) for c in candidates)
-        assert best_iou > 0.9, f"{ud} has no close onnx match (best IoU {best_iou:.3f})"
+    # onnx-adapter detection of the same class, within a tight IoU AND a
+    # tight score tolerance -- the numerical noise between a torch forward
+    # pass and its ONNX export (observed empirically at <=0.01 max abs
+    # diff on the raw (1, 84, 8400) tensor), not a structural difference.
+    # Checked in both directions (ultra->onnx and onnx->ultra) so neither
+    # side can have an unmatched, spurious extra detection.
+    score_tol = 0.05
+
+    def _assert_all_matched(dets_a, dets_b, label):
+        for a in dets_a:
+            candidates = [d for d in dets_b if d.class_name == a.class_name]
+            assert candidates, f"no {label} detection of class {a.class_name!r} to match {a}"
+            best = max(
+                candidates,
+                key=lambda c: _box_iou((a.x1, a.y1, a.x2, a.y2), (c.x1, c.y1, c.x2, c.y2)),
+            )
+            best_iou = _box_iou((a.x1, a.y1, a.x2, a.y2), (best.x1, best.y1, best.x2, best.y2))
+            assert best_iou > 0.9, f"{a} has no close {label} match (best IoU {best_iou:.3f})"
+            assert abs(best.score - a.score) < score_tol, (
+                f"{a} vs closest {label} match {best}: score diff "
+                f"{abs(best.score - a.score):.4f} exceeds tolerance {score_tol}"
+            )
+
+    _assert_all_matched(ultra_dets, onnx_dets, "onnx")
+    _assert_all_matched(onnx_dets, ultra_dets, "ultralytics")

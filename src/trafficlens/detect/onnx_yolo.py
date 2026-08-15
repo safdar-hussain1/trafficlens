@@ -60,4 +60,7 @@ class OnnxDetector:
     def detect(self, frame: np.ndarray) -> list[Detection]:
         chw, scale, pad_x, pad_y = letterbox(frame, self.size)
         (preds_np,) = self._session.run(None, {self._input_name: chw})
-        return decode_yolo(preds_np, scale, pad_x, pad_y, self.conf, self.iou, self.keep_class_ids)
+        return decode_yolo(
+            preds_np, scale, pad_x, pad_y,
+            conf=self.conf, iou=self.iou, keep_class_ids=self.keep_class_ids,
+        )

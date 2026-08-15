@@ -84,4 +84,7 @@ class UltralyticsDetector:
         # caller who passes an already-export-mode model still works.
         preds = raw[0] if isinstance(raw, (tuple, list)) else raw
         preds_np = preds.detach().cpu().numpy()
-        return decode_yolo(preds_np, scale, pad_x, pad_y, self.conf, self.iou, self.keep_class_ids)
+        return decode_yolo(
+            preds_np, scale, pad_x, pad_y,
+            conf=self.conf, iou=self.iou, keep_class_ids=self.keep_class_ids,
+        )

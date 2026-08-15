@@ -72,8 +72,18 @@ def letterbox(
        makes the LARGER of the two resized dimensions exactly ``size``,
        so the resized image fits inside the square without cropping.
     3. The resized dimensions are ``new_w = int(round(w * scale))`` and
-       ``new_h = int(round(h * scale))`` -- ordinary round-half-away-
-       toward-even rounding of the scaled float, not truncation.
+       ``new_h = int(round(h * scale))``, using Python's built-in
+       ``round()`` -- ROUND-HALF-TO-EVEN ("banker's rounding"), not
+       truncation and, critically, NOT ``Math.round``-style round-half-up.
+       The two disagree exactly on values ending in ``.5``: e.g.
+       ``round(358.5) == 358`` in Python but ``Math.round(358.5) === 359``
+       in JavaScript (a real case -- a 1280x717 frame at ``size=640`` gives
+       ``scale = 0.5`` and ``717 * 0.5 = 358.5`` exactly). A TypeScript
+       mirror MUST implement round-half-to-even explicitly (e.g. check for
+       the exact ``.5`` case and round to the nearest even integer) rather
+       than calling ``Math.round``, or it will produce an off-by-one pixel
+       letterbox on inputs like this one and fail the byte-identical
+       parity assertion.
     4. The frame is resized to ``(new_w, new_h)`` with bilinear
        interpolation (``cv2.INTER_LINEAR``).
     5. Padding is centred using INTEGER FLOOR division:
@@ -171,9 +181,10 @@ def decode_yolo(
     scale: float,
     pad_x: float,
     pad_y: float,
+    *,
     conf: float = DETECT_DEFAULT_CONF,
     iou: float = DETECT_DEFAULT_NMS_IOU,
-    keep_class_ids: set[int] = frozenset(),
+    keep_class_ids: set[int],
 ) -> list[Detection]:
     """Decode a raw YOLO11 output tensor into ``Detection``s in ORIGINAL
     image coordinates.
@@ -187,7 +198,9 @@ def decode_yolo(
     ``k`` (0-based within the score rows) names ``COCO_CLASSES[k]``.
 
     Steps: transpose to ``(N, 4 + n_classes)``, take each row's max class
-    score/id, threshold at ``conf``, filter to ``keep_class_ids``, convert
+    score/id, threshold at ``conf`` INCLUSIVE (``score >= conf`` survives;
+    a score exactly equal to ``conf`` is kept, mirroring ``nms``'s
+    documented strict ``>`` for suppression), filter to ``keep_class_ids``, convert
     the surviving boxes from letterboxed ``cx, cy, w, h`` to
     ``x1, y1, x2, y2`` in ORIGINAL image coordinates by undoing the pad
     then the scale (``(v - pad) / scale``), then run class-wise ``nms``
