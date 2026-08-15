@@ -114,6 +114,56 @@ def test_sample_iteration_yields_indexed_timestamped_frames():
 
 
 @needs_sample
+def test_a_source_is_single_pass():
+    with VideoSource.open(str(SAMPLE)) as source:
+        frames = iter(source)
+        for _ in range(3):
+            next(frames)
+        # a second iterator would restart frame_index at 0 while the
+        # capture is already at frame 3 -- refuse instead of misnumbering
+        with pytest.raises(SourceError) as exc:
+            iter(source)
+        assert "single-pass" in str(exc.value)
+
+
+def test_a_failed_probe_rewind_is_a_source_error(tmp_path, monkeypatch):
+    import trafficlens.io.video as video_module
+
+    real_cv2 = video_module.cv2
+
+    class SeeklessCapture:
+        """Opens and reads fine, but silently ignores the rewind seek."""
+
+        def __init__(self, *_args):
+            self._position = 0
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self._position += 1
+            return True, object()
+
+        def set(self, _prop, _value):
+            return True  # claims success, does nothing
+
+        def get(self, prop):
+            if prop == real_cv2.CAP_PROP_POS_FRAMES:
+                return float(self._position)
+            return 30.0
+
+        def release(self):
+            pass
+
+    target = tmp_path / "seekless.mp4"
+    target.write_bytes(b"pretend container")
+    monkeypatch.setattr(video_module.cv2, "VideoCapture", SeeklessCapture)
+    with pytest.raises(SourceError) as exc:
+        VideoSource.open(str(target))
+    assert "rewind" in str(exc.value)
+
+
+@needs_sample
 def test_context_manager_releases_the_capture():
     with VideoSource.open(str(SAMPLE)) as source:
         pass
@@ -261,6 +311,35 @@ def test_validate_session_rejects_an_unknown_schema_version():
     with pytest.raises(ValueError) as exc:
         validate_session_dict(broken)
     assert "schema" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_schema", [1.0, True, "1"])
+def test_validate_session_requires_the_schema_to_be_the_exact_int(bad_schema):
+    # 1.0 is reachable from real JSON and True == 1 in Python; neither is
+    # the integer version stamp a producer wrote.
+    broken = _session()
+    broken["schema"] = bad_schema
+    with pytest.raises(ValueError) as exc:
+        validate_session_dict(broken)
+    assert "schema" in str(exc.value)
+
+
+def test_validate_session_rejects_non_numeric_geometry_elements():
+    broken = _session()
+    broken["frames"][0]["tracks"][0]["box"] = ["a", "b", "c", "d"]
+    with pytest.raises(ValueError) as exc:
+        validate_session_dict(broken)
+    assert "box" in str(exc.value)
+
+    broken = _session()
+    broken["gates"][0]["start"] = ["76.8", 576.0]
+    with pytest.raises(ValueError):
+        validate_session_dict(broken)
+
+    broken = _session()
+    broken["gates"][0]["end"] = [True, 576.0]
+    with pytest.raises(ValueError):
+        validate_session_dict(broken)
 
 
 def test_validate_session_rejects_malformed_nested_structures():

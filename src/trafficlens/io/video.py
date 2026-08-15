@@ -21,6 +21,13 @@ Timestamp policy, per source kind:
   (``frame_index / fps``, same VFR approximation as files), wall clock
   otherwise.
 
+A source is **single-pass**: it hands out exactly one iterator, ever.
+The underlying capture advances as frames are read, so a second iterator
+would silently start its ``frame_index`` and timestamps at 0 while the
+capture is already mid-file; instead of misnumbering every frame, a second
+``iter()`` raises ``SourceError`` -- open a new ``VideoSource`` to read
+the footage again.
+
 Errors are ``SourceError`` with actionable messages: a missing file names
 the path (and points at ``trafficlens fetch-samples`` when it lives under
 ``data/samples/``), an existing file cv2 cannot decode names the codec
@@ -67,6 +74,7 @@ class VideoSource:
         self.kind = kind
         self.spec = spec
         self._closed = False
+        self._iterating = False
         fps = float(capture.get(cv2.CAP_PROP_FPS))
         self._fps: float | None = fps if fps > 0 else None
 
@@ -112,6 +120,20 @@ class VideoSource:
             ok, _ = capture.read()
             if ok:
                 capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                # The rewind must be verified: a backend that ignores the
+                # seek would silently offset every frame index and
+                # timestamp by one probe frame.
+                position = int(capture.get(cv2.CAP_PROP_POS_FRAMES))
+                if position != 0:
+                    capture.release()
+                    raise SourceError(
+                        f"{value} opened, but the container did not rewind "
+                        f"after a probe read (position reports {position}, "
+                        f"not 0), so every frame index and timestamp would "
+                        f"be offset. This container/backend does not "
+                        f"support seeking; remux the file (e.g. with "
+                        f"ffmpeg) into a seekable container."
+                    )
             opened = ok
         if not opened:
             capture.release()
@@ -160,13 +182,26 @@ class VideoSource:
     # --- iteration ------------------------------------------------------------
 
     def __iter__(self):
-        """Yield ``(frame_index, timestamp_s, frame)`` until the source
-        ends. See the module docstring for the per-kind timestamp policy."""
+        """Hand out this source's single iterator of
+        ``(frame_index, timestamp_s, frame)`` tuples. See the module
+        docstring for the per-kind timestamp policy and the single-pass
+        rule; a second ``iter()`` raises ``SourceError`` rather than
+        misnumbering frames the capture has already advanced past."""
         if self._closed:
             raise SourceError(
                 f"source {self.spec} is closed; open a new VideoSource to "
                 f"read it again"
             )
+        if self._iterating:
+            raise SourceError(
+                f"source {self.spec} is single-pass and already handed out "
+                f"its iterator; open a new VideoSource to read the footage "
+                f"again"
+            )
+        self._iterating = True
+        return self._frames()
+
+    def _frames(self):
         use_wall_clock = self.kind == "webcam" or self._fps is None
         first_frame_monotonic: float | None = None
         frame_index = 0

@@ -129,6 +129,27 @@ def _require_number(mapping: dict, key: str, where: str) -> float:
     return value
 
 
+def _require_point(mapping: dict, key: str, where: str, arity: int) -> list:
+    """A coordinate list (gate start/end, track box) must have exactly
+    ``arity`` elements and every element must be a non-bool number --
+    the replay draws these, so a "valid" session must never carry
+    strings or booleans where pixels belong."""
+    value = _require(mapping, key, where)
+    if not (
+        isinstance(value, list)
+        and len(value) == arity
+        and all(
+            not isinstance(element, bool) and isinstance(element, (int, float))
+            for element in value
+        )
+    ):
+        raise ValueError(
+            f"session JSON: {where}.{key} must be a list of exactly "
+            f"{arity} numbers, got {value!r}"
+        )
+    return value
+
+
 def validate_session_dict(session: dict) -> None:
     """Check that a dict is a valid schema-1 session, raising ``ValueError``
     naming the first offending key.
@@ -171,10 +192,16 @@ def validate_session_dict(session: dict) -> None:
         )
 
     schema = _require(session, "schema", "session")
-    if schema != SESSION_SCHEMA_VERSION:
+    # An exact int, and only an int: 1.0 is reachable from real JSON and
+    # True == 1 in Python, but neither is the version stamp consumers wrote.
+    if (
+        isinstance(schema, bool)
+        or not isinstance(schema, int)
+        or schema != SESSION_SCHEMA_VERSION
+    ):
         raise ValueError(
             f"session JSON: schema version {schema!r} is not the supported "
-            f"version {SESSION_SCHEMA_VERSION}"
+            f"integer version {SESSION_SCHEMA_VERSION}"
         )
 
     clip = _require(session, "clip", "session")
@@ -196,11 +223,7 @@ def validate_session_dict(session: dict) -> None:
         if not isinstance(name, str) or not name:
             raise ValueError(f"session JSON: {where}.name must be a non-empty string")
         for key in ("start", "end"):
-            point = _require(gate, key, where)
-            if not (isinstance(point, list) and len(point) == 2):
-                raise ValueError(
-                    f"session JSON: {where}.{key} must be a [x, y] pair"
-                )
+            _require_point(gate, key, where, 2)
         _require(gate, "label_positive", where)
         _require(gate, "label_negative", where)
         _require(gate, "expected_direction", where)  # may be None, must exist
@@ -223,11 +246,7 @@ def validate_session_dict(session: dict) -> None:
                 raise ValueError(f"session JSON: {track_where} must be a dict")
             _require_number(track, "track_id", track_where)
             _require(track, "class_name", track_where)
-            box = _require(track, "box", track_where)
-            if not (isinstance(box, list) and len(box) == 4):
-                raise ValueError(
-                    f"session JSON: {track_where}.box must be [x1, y1, x2, y2]"
-                )
+            _require_point(track, "box", track_where, 4)
             _require(track, "speed_kmh", track_where)  # number or None, must exist
 
     events = _require(session, "events", "session")
