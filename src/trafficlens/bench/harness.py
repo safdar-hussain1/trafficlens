@@ -1,78 +1,51 @@
-"""Scoring the engine, and every standard failure mode, against ground
-truth the pipeline did not produce.
+"""Running the engine and every standard failure mode over one shared
+detection stream, and building the reports.
 
-This is the only measurement in the project where the yardstick shares
-nothing with the thing measured: the labels come from
-``trafficlens.bench.slitscan``'s raw-pixel review images, read by a human
-under ``data/groundtruth/PROTOCOL.md``. Everything else here -- the
-trackers, the counting rules, the gate geometry -- is under test.
-
-What is scored, and at what level
----------------------------------
-Crossings, one by one, not totals. A total-count metric structurally
-under-reports tracker damage: measured on the crossing-paths fixture with
-a vertical gate, the engine reads a total of 2 in every gate position
-while ``CentroidTracker`` reads 1, 0 or 1 depending only on where its
-identity swap falls relative to the gate. Whether a swap costs nothing,
-one count or two is a property of the geometry, never a property of the
-swap -- so nothing in this module, or in any report it writes, may claim
-that an identity swap leaves the total unchanged.
-
-Matching is therefore ONE-TO-ONE between predicted crossings and labels,
-nearest-frame first, so a burst of predictions cannot all score against a
-single label.
-
-The match window is asymmetric: ``[label - 1, label + 4]``
------------------------------------------------------------
-``LABELLING_RECORD.md`` states the label frame is accurate to +0/-4
-frames. The frame is machine-derived from the first blob row of a
-stabilised slit-scan, and a vehicle's shadow reaches the gate band before
-its tyres do, so labels are systematically EARLY. The engine fires on the
-box's bottom-centre anchor -- the tyres -- and therefore lands 0 to 4
-frames LATE relative to the label. A symmetric window scores a correct
-3-frames-late prediction as a miss AND a false alarm, understating
-accuracy twice over.
-
-The asymmetry encodes a KNOWN bias in the LABELS. It is not a widening
-chosen after seeing engine output, which ``PROTOCOL.md`` rightly warns
-against: a symmetric +-4 window would put the closest real label pair
-(411 and 416) at [407, 415] and [412, 420], genuinely overlapping, where
-the asymmetric windows [410, 415] and [415, 420] touch at exactly one
-frame and one-to-one nearest-first matching makes that touch harmless.
-
-Nothing in this module takes a scalar ``tolerance_frames``. A single
-symmetric number would misdescribe the scorer, and a report field named
-that way would misdescribe it to every later reader.
-
-Class and direction
--------------------
-Matching is CLASS-BLIND and DIRECTION-AWARE. Requiring class equality
-would charge a car detected as a truck twice -- one miss and one false
-alarm -- and would conflate a detector class error with a counting error,
-so class agreement is reported separately, as consistency among matched
-pairs and as per-class predicted-vs-ground-truth counts. Direction is
-different: a wrong-direction prediction at a gate IS a counting error,
-so it never matches.
+The scoring half lives in ``trafficlens.bench.scoring``: what a match is,
+what the numbers mean, and the asymmetric match window are all decided
+there, by a module that imports no tracker and no detector. This module
+is the other half -- it composes trackers with counting rules, drives
+them over cached detections, times them, and assembles the JSON. The two
+were split at the whole-branch review's seam when the combined file
+passed 1200 lines.
 
 Timing
 ------
 One method per measurement. A bracket that ran every method and then
-indexed one out would report a sum in disguise; each method here is timed
-alone, and the report's timing block is asserted by test to hold one
-distinct entry per method. The measurement covers the tracker and the
-counting rule ONLY -- detections are read from a cache, so the detector's
-cost is excluded and is identical for every method by construction.
+indexed one out would report a sum in disguise -- and so would a single
+bracket opened once and read after each method, which yields a running
+total rather than all-equal values and slips past any check that only
+compares methods against each other. Each method here is timed alone,
+against its own injected cost in test. The measurement covers the tracker
+and the counting rule ONLY: detections are read from a cache, so the
+detector's cost is excluded and is identical for every method by
+construction.
+
+Identical detections
+--------------------
+Every method is handed the same decoded stream. A method that re-ran the
+detector could differ from another by detector variance rather than by
+its counting rule or its tracker, so the guarantee is structural: this
+module never constructs a detector and never opens a model. The script
+``scripts/bench_counting.py`` runs the detector once, caches it, and
+passes the stream in.
+
+Composition
+-----------
+``build_methods`` composes {tracker} x {counting rule}. That is the point
+of the two-family split in ``trafficlens.bench.baselines``: holding the
+tracker fixed and swapping the rule isolates the RULE, holding the rule
+fixed and swapping the tracker isolates the TRACKER.
 
 numpy + stdlib + ``trafficlens.core`` / ``.detect`` / ``.track`` /
-``.bench`` / ``.pipeline`` only. No torch, no ultralytics: the scorer must
-run wherever the labels do.
+``.bench`` / ``.pipeline`` only. No torch, no ultralytics: the benchmark
+must run wherever the labels do.
 """
 
 from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Callable, Iterable, Sequence
@@ -86,6 +59,15 @@ from trafficlens.bench.baselines import (
     PerFrameCounter,
     _signed_offset,
 )
+from trafficlens.bench.scoring import (
+    DEFAULT_MATCH_WINDOW,
+    MATCH_WINDOW_REASON,
+    MatchResult,
+    MatchWindow,
+    match_crossings,
+    max_cardinality_true_positives,
+    restrict_to_adjudicated,
+)
 from trafficlens.bench.slitscan import Crossing, GroundTruth
 from trafficlens.core.constants import BASELINE_BAND_PX
 from trafficlens.core.gate import CrossingEvent, Gate, GateCounter
@@ -98,18 +80,6 @@ from trafficlens.track.tracker import Tracker
 #: yields, with the decoded frame replaced by its detections.
 FrameDetections = tuple[int, float, list[Detection]]
 
-#: Why the window is asymmetric, carried into every report that uses it so
-#: the number can never be quoted without its justification.
-MATCH_WINDOW_REASON = (
-    "Labels are systematically early: the frame is the first slit-scan row "
-    "of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 "
-    "frames before its tyres do, so LABELLING_RECORD.md states the label "
-    "frame is accurate to +0/-4 frames. The engine fires on the box's "
-    "bottom-centre anchor -- the tyres -- and so lands 0-4 frames late "
-    "against the label. The asymmetry encodes that known label bias; it is "
-    "not a widening chosen to absorb an engine offset."
-)
-
 #: The schema version of ``reports/counting_accuracy.json``.
 REPORT_SCHEMA_VERSION = 1
 
@@ -120,317 +90,28 @@ REPORT_SCHEMA_VERSION = 1
 #: the residual as noise.
 NOISE_MEDIAN_FILTER_FRAMES = 5
 
-
-# --- the match window -------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class MatchWindow:
-    """The closed interval ``[label - frames_before, label + frames_after]``
-    a prediction must land in to match a label.
-
-    ``reason`` is not decoration. The interval is asymmetric, which is a
-    claim about the LABELS, and a report that published the two numbers
-    without the claim would look like a tolerance someone chose.
-    """
-
-    frames_before: int = 1
-    frames_after: int = 4
-    reason: str = MATCH_WINDOW_REASON
-
-    def __post_init__(self) -> None:
-        if self.frames_before < 0 or self.frames_after < 0:
-            raise ValueError(
-                f"a match window extends outward from the label in both "
-                f"directions, so neither side may be negative; got "
-                f"frames_before={self.frames_before}, "
-                f"frames_after={self.frames_after}"
-            )
-        if not self.reason.strip():
-            raise ValueError(
-                "a match window must carry the reason for its width: a bare "
-                "pair of numbers reads as a tolerance someone chose"
-            )
-
-    def contains(self, predicted_frame: int, label_frame: int) -> bool:
-        """True when ``predicted_frame`` lies in this window around
-        ``label_frame``. Both ends are CLOSED."""
-        return (
-            label_frame - self.frames_before
-            <= predicted_frame
-            <= label_frame + self.frames_after
-        )
-
-    def as_dict(self) -> dict:
-        return {
-            "frames_before": self.frames_before,
-            "frames_after": self.frames_after,
-            "reason": self.reason,
-        }
-
-
-DEFAULT_MATCH_WINDOW = MatchWindow()
-
-
-# --- one-to-one crossing matching -------------------------------------------
-
-
-def _rate(numerator: int, denominator: int) -> float:
-    """A rate, or 0.0 when there is nothing to divide by.
-
-    An empty prediction set has no precision and an empty label set has no
-    recall; both report 0.0 rather than raising or returning NaN. The
-    counts are always published alongside, so a 0.0 that means "no
-    denominator" is never mistaken for a 0.0 that means "got everything
-    wrong".
-    """
-    return numerator / denominator if denominator else 0.0
-
-
-@dataclass(frozen=True)
-class MatchResult:
-    """The one-to-one pairing of predicted crossings with labels, and the
-    scores that follow from it.
-
-    ``matches`` holds ``(prediction_index, label_index, frame_delta)``
-    triples, where ``frame_delta`` is ``predicted_frame - label_frame`` --
-    signed, so a systematic offset is visible rather than absorbed.
-    ``false_positives`` and ``misses`` hold the indices of the predictions
-    and labels nothing paired with.
-    """
-
-    predictions: tuple[CrossingEvent, ...]
-    labels: tuple[Crossing, ...]
-    matches: tuple[tuple[int, int, int], ...]
-    false_positives: tuple[int, ...]
-    misses: tuple[int, ...]
-
-    @property
-    def n_predicted(self) -> int:
-        return len(self.predictions)
-
-    @property
-    def n_ground_truth(self) -> int:
-        return len(self.labels)
-
-    @property
-    def true_positives(self) -> int:
-        return len(self.matches)
-
-    @property
-    def precision(self) -> float:
-        return _rate(self.true_positives, self.n_predicted)
-
-    @property
-    def recall(self) -> float:
-        return _rate(self.true_positives, self.n_ground_truth)
-
-    @property
-    def f1(self) -> float:
-        total = self.precision + self.recall
-        return 2.0 * self.precision * self.recall / total if total else 0.0
-
-    @property
-    def signed_bias(self) -> int:
-        """Predicted minus labelled crossings: positive is an over-count."""
-        return self.n_predicted - self.n_ground_truth
-
-    @property
-    def count_error(self) -> int:
-        """The magnitude of ``signed_bias``. Reported alongside it, never
-        instead of it: a rule that misses one vehicle and phantoms another
-        has a count error of 0 and is still wrong twice."""
-        return abs(self.signed_bias)
-
-    @property
-    def miss_rate(self) -> float:
-        """Labels nothing predicted, over all labels."""
-        return _rate(len(self.misses), self.n_ground_truth)
-
-    @property
-    def phantom_rate(self) -> float:
-        """False alarms per labelled crossing -- NOT ``1 - precision``.
-
-        Normalising by the label count keeps the magnitude visible: a rule
-        emitting fifty times more crossings than exist would saturate any
-        rate normalised by its own output and read as merely "bad", where
-        this reads 50.0.
-        """
-        return _rate(len(self.false_positives), self.n_ground_truth)
-
-    def _class_consistency(self) -> dict:
-        """Class agreement among MATCHED pairs only.
-
-        Matching is class-blind, so this is where a detector class error
-        surfaces -- once, as a confusion, rather than twice as a miss plus
-        a false alarm.
-        """
-        confusions: Counter[str] = Counter()
-        same = 0
-        for prediction_index, label_index, _delta in self.matches:
-            predicted = self.predictions[prediction_index].class_name
-            labelled = self.labels[label_index].class_name
-            if predicted == labelled:
-                same += 1
-            else:
-                confusions[f"{labelled} -> {predicted}"] += 1
-        return {
-            "matched": self.true_positives,
-            "same_class": same,
-            "rate": _rate(same, self.true_positives),
-            "confusions": dict(sorted(confusions.items())),
-        }
-
-    def _per_class(self) -> dict:
-        """Predicted against labelled counts, per class, unmatched.
-
-        A separate view from the matching, deliberately: it answers "did
-        the engine see four trucks?" without any pairing decision in the
-        way.
-        """
-        predicted = Counter(event.class_name for event in self.predictions)
-        labelled = Counter(label.class_name for label in self.labels)
-        return {
-            class_name: {
-                "predicted": predicted.get(class_name, 0),
-                "ground_truth": labelled.get(class_name, 0),
-            }
-            for class_name in sorted(set(predicted) | set(labelled))
-        }
-
-    def _per_direction(self) -> dict:
-        """Predicted, labelled and matched counts per direction label.
-
-        On a clip whose labels are all one direction this table has no
-        discriminating power at all, and the report says so rather than
-        letting two rows imply otherwise.
-        """
-        predicted = Counter(event.direction for event in self.predictions)
-        labelled = Counter(label.direction for label in self.labels)
-        matched = Counter(
-            self.labels[label_index].direction
-            for _prediction_index, label_index, _delta in self.matches
-        )
-        return {
-            direction: {
-                "predicted": predicted.get(direction, 0),
-                "ground_truth": labelled.get(direction, 0),
-                "true_positives": matched.get(direction, 0),
-            }
-            for direction in sorted(set(predicted) | set(labelled))
-        }
-
-    def _frame_deltas(self) -> dict:
-        """Signed ``predicted - label`` frame offsets of matched pairs.
-
-        Published because the match window is asymmetric: the asymmetry is
-        a claim that predictions run late, and this is the evidence for or
-        against it. A scorer that hid these could widen its window forever
-        unobserved.
-        """
-        deltas = [delta for _prediction, _label, delta in self.matches]
-        if not deltas:
-            return {"mean": None, "min": None, "max": None, "histogram": {}}
-        histogram = Counter(deltas)
-        return {
-            "mean": sum(deltas) / len(deltas),
-            "min": min(deltas),
-            "max": max(deltas),
-            "histogram": {
-                str(delta): histogram[delta] for delta in sorted(histogram)
-            },
-        }
-
-    def as_dict(self) -> dict:
-        """The JSON-shaped record of this match.
-
-        ``false_positives`` and ``misses`` are published as FRAME NUMBERS,
-        not as indices into arrays the report does not contain: a reader
-        with the slit-scan open wants to know which frames went wrong.
-        """
-        return {
-            "n_predicted": self.n_predicted,
-            "n_ground_truth": self.n_ground_truth,
-            "true_positives": self.true_positives,
-            "false_positives": [
-                self.predictions[index].frame_index
-                for index in self.false_positives
-            ],
-            "misses": [self.labels[index].frame for index in self.misses],
-            "precision": self.precision,
-            "recall": self.recall,
-            "f1": self.f1,
-            "count_error": self.count_error,
-            "signed_bias": self.signed_bias,
-            "miss_rate": self.miss_rate,
-            "phantom_rate": self.phantom_rate,
-            "matched_frame_delta": self._frame_deltas(),
-            "class_consistency": self._class_consistency(),
-            "per_class": self._per_class(),
-            "per_direction": self._per_direction(),
-        }
-
-
-def match_crossings(
-    predictions: Sequence[CrossingEvent],
-    labels: Sequence[Crossing],
-    window: MatchWindow = DEFAULT_MATCH_WINDOW,
-    *,
-    gate_name: str,
-) -> MatchResult:
-    """Pair predicted crossings with labels, one to one, nearest first.
-
-    A pair is ELIGIBLE when the prediction names ``gate_name``, carries the
-    label's direction, and its frame lies inside ``window`` around the
-    label's frame. Class is deliberately NOT part of eligibility -- see the
-    module docstring.
-
-    Eligible pairs are then taken greedily in order of ascending
-    ``abs(frame_delta)``, ties broken by ascending label index then
-    ascending prediction index, so the same inputs always produce the same
-    pairing. Each prediction and each label is consumed at most once;
-    whatever is left over is a false alarm or a miss.
-
-    ``gate_name`` is a required keyword because a label set carries no gate
-    of its own: it is validated against one by ``GroundTruth.load``, and
-    scoring a prediction from a different gate against it would be
-    meaningless in a way no downstream number would reveal.
-    """
-    candidates: list[tuple[int, int, int, int]] = []
-    for label_index, label in enumerate(labels):
-        for prediction_index, prediction in enumerate(predictions):
-            if prediction.gate != gate_name:
-                continue
-            if prediction.direction != label.direction:
-                continue
-            if not window.contains(prediction.frame_index, label.frame):
-                continue
-            delta = prediction.frame_index - label.frame
-            candidates.append((abs(delta), label_index, prediction_index, delta))
-
-    matches: list[tuple[int, int, int]] = []
-    used_predictions: set[int] = set()
-    used_labels: set[int] = set()
-    for _distance, label_index, prediction_index, delta in sorted(candidates):
-        if label_index in used_labels or prediction_index in used_predictions:
-            continue
-        used_labels.add(label_index)
-        used_predictions.add(prediction_index)
-        matches.append((prediction_index, label_index, delta))
-
-    matches.sort()
-    return MatchResult(
-        predictions=tuple(predictions),
-        labels=tuple(labels),
-        matches=tuple(matches),
-        false_positives=tuple(
-            index for index in range(len(predictions)) if index not in used_predictions
-        ),
-        misses=tuple(
-            index for index in range(len(labels)) if index not in used_labels
-        ),
-    )
-
+__all__ = [
+    "DEFAULT_MATCH_WINDOW",
+    "MATCH_WINDOW_REASON",
+    "MatchResult",
+    "MatchWindow",
+    "match_crossings",
+    "max_cardinality_true_positives",
+    "restrict_to_adjudicated",
+    "FrameDetections",
+    "NOISE_MEDIAN_FILTER_FRAMES",
+    "REPORT_SCHEMA_VERSION",
+    "build_methods",
+    "measure_detection_noise",
+    "median_gate_approach_px_per_frame",
+    "read_detection_cache",
+    "run_counting",
+    "run_counting_benchmark",
+    "sweep_band_px",
+    "write_detection_cache",
+    "write_report",
+    "DetectionCacheError",
+]
 
 # --- driving one tracker and one counting rule over cached detections -------
 
@@ -580,10 +261,35 @@ def _caveats(truth: GroundTruth) -> list[str]:
         "that is to investigate the engine's anchor timing -- never to "
         "widen the window, which would also start matching predictions to "
         "the wrong vehicle.",
-        "certain-only precision is NOT comparable with the full-set "
-        "figure: dropping the probable labels turns their correct "
-        "predictions into false alarms. Each certain-only result records "
-        "how many of its false alarms were manufactured that way.",
+        "certain_only uses IGNORE-REGION semantics -- the standard "
+        "treatment of an unadjudicated region (MOTChallenge distractor "
+        "zones, COCO iscrowd) moved from space to the timeline. A probable "
+        "label marks an interval the labeller could not adjudicate, so a "
+        "prediction there is neither credited nor charged. It is scored by "
+        "restricting the SAME joint match the full set reports, never by "
+        "re-matching against the certain rows alone, so the two figures "
+        "are directly comparable.",
+        "certain_only precision is an UPPER bound within the certain "
+        "subset: a genuine phantom landing inside a probable label's "
+        "window is absorbed into the ignore set and leaves the denominator "
+        "altogether. The ignore mass here is large -- see labels_ignored "
+        "against the label total -- so predictions_moved_to_ignore is "
+        "published with every figure.",
+        "A prediction claimed by a probable label is removed from "
+        "certain_only even when a certain label was also within window, "
+        "because the joint match had already given it away. That can turn "
+        "a certain label into a miss, so a recall gap between certain_only "
+        "and full is not by itself evidence about the certain crossings.",
+        "A gap between certain_only and full is dilution arithmetic before "
+        "it is anything else: the same errors measured against a smaller "
+        "label count move the rate further per error. It is not evidence "
+        "that the certain crossings are harder.",
+        "certain_only_naive is published only as the artefact that "
+        "motivates the treatment above. It matches the certain rows alone, "
+        "which turns every correct prediction of a probable crossing into "
+        "a false alarm; its precision is not comparable with anything, and "
+        "false_positives_matching_probable_labels is how much of it is "
+        "manufactured that way.",
     ]
     if len(directions) < 2:
         only = next(iter(directions)) if directions else "one direction"
@@ -597,30 +303,29 @@ def _caveats(truth: GroundTruth) -> list[str]:
     return caveats
 
 
-def _score_subset(
+def _score_naive_subset(
     predictions: Sequence[CrossingEvent],
     labels: Sequence[Crossing],
     probable_labels: Sequence[Crossing],
     window: MatchWindow,
     gate_name: str,
 ) -> dict:
-    """Score one confidence subset, and say how many of its false alarms
-    are artefacts of the labels the subset dropped.
+    """Score a confidence subset the NAIVE way -- match against the subset
+    alone -- and count how many of its false alarms that manufactured.
 
-    The second half matters for the certain-only subset: a prediction that
-    correctly found a ``probable`` crossing becomes a false alarm the
-    moment that label is excluded. Counting those is descriptive, not a
-    second scoring rule -- the precision figure is left exactly as the
-    subset produces it.
+    Published only as the artefact that motivates ignore-region
+    semantics. Matching the certain rows alone turns every correct
+    prediction of a ``probable`` crossing into a false alarm, so this
+    precision figure is not comparable with anything; the count beside it
+    is how much of it is manufactured.
     """
     result = match_crossings(predictions, labels, window, gate_name=gate_name)
     record = result.as_dict()
-    if probable_labels:
-        leftovers = [predictions[index] for index in result.false_positives]
-        explained = match_crossings(
-            leftovers, probable_labels, window, gate_name=gate_name
-        )
-        record["false_positives_matching_probable_labels"] = explained.true_positives
+    leftovers = [predictions[index] for index in result.false_positives]
+    explained = match_crossings(
+        leftovers, probable_labels, window, gate_name=gate_name
+    )
+    record["false_positives_matching_probable_labels"] = explained.true_positives
     return record
 
 
@@ -669,17 +374,28 @@ def run_counting_benchmark(
     certain = [label for label in gt.crossings if label.confidence == "certain"]
     probable = [label for label in gt.crossings if label.confidence != "certain"]
 
-    scored = {
-        name: {
-            "full": _score_subset(
-                produced, gt.crossings, (), window, gt.gate_name
-            ),
-            "certain_only": _score_subset(
+    scored = {}
+    for name, produced in events.items():
+        joint = match_crossings(produced, gt.crossings, window, gate_name=gt.gate_name)
+        full = joint.as_dict()
+        # Greedy can under-report where two windows overlap; this is the
+        # check that says whether it did, on this label set, today.
+        full["max_cardinality_true_positives"] = max_cardinality_true_positives(
+            produced, gt.crossings, window, gate_name=gt.gate_name
+        )
+
+        adjudicated, ignored = restrict_to_adjudicated(joint)
+        certain_only = adjudicated.as_dict()
+        certain_only["predictions_moved_to_ignore"] = ignored
+        certain_only["labels_ignored"] = len(probable)
+
+        scored[name] = {
+            "full": full,
+            "certain_only": certain_only,
+            "certain_only_naive": _score_naive_subset(
                 produced, certain, probable, window, gt.gate_name
             ),
         }
-        for name, produced in events.items()
-    }
 
     return {
         "schema": REPORT_SCHEMA_VERSION,
@@ -690,6 +406,29 @@ def run_counting_benchmark(
         # on the label file's own ``clip`` field, for the same reason.
         "ground_truth": gt.path.name,
         "match_window": window.as_dict(),
+        "matching": {
+            "rule": (
+                "one-to-one, greedy nearest-frame-first, with a canonical "
+                "tie-break on the label's own frame and id rather than on "
+                "its position in the label file"
+            ),
+            "limitation": (
+                "Greedy is not maximum-cardinality. Where two labels' "
+                "windows overlap, taking the locally nearest pair first "
+                "can consume a frame the other label needed, so greedy can "
+                "score fewer true positives than the best possible "
+                "assignment over the same eligible pairs. It errs only in "
+                "the conservative direction -- it can under-report the "
+                "engine, never flatter it -- and PROTOCOL.md fixed the rule "
+                "before any scoring code existed, so it is kept and "
+                "measured rather than amended after the fact."
+            ),
+            "greedy_equals_max_cardinality": all(
+                record["full"]["true_positives"]
+                == record["full"]["max_cardinality_true_positives"]
+                for record in scored.values()
+            ),
+        },
         "clip": gt.clip,
         "fps": gt.fps,
         "frames": frames,

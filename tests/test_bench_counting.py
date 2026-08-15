@@ -27,15 +27,19 @@ import pytest
 
 from trafficlens.bench.baselines import GreedyIoUTracker
 from trafficlens.bench.harness import (
-    DEFAULT_MATCH_WINDOW,
     build_methods,
-    match_crossings,
     measure_detection_noise,
     median_gate_approach_px_per_frame,
     run_counting,
     run_counting_benchmark,
     sweep_band_px,
     write_report,
+)
+from trafficlens.bench.scoring import (
+    DEFAULT_MATCH_WINDOW,
+    MatchWindow,
+    match_crossings,
+    max_cardinality_true_positives,
 )
 from trafficlens.bench.slitscan import Crossing, GroundTruth
 from trafficlens.core.gate import CrossingEvent, Gate, GateCounter
@@ -143,6 +147,43 @@ def _stream(frames: dict[int, list[Detection]], last_frame: int):
     ]
 
 
+# -- the scorer / runner seam ------------------------------------------------
+
+
+def test_the_scorer_imports_no_tracker_no_detector_and_no_counting_rule():
+    """``scoring`` decides what a match IS; it must not know how a
+    prediction was produced.
+
+    The split exists so the scorer can be pointed at any source of
+    crossings, and so that nothing under test can reach into the thing
+    scoring it. An import creeping back in would undo that silently, so
+    the module's own import graph is asserted rather than trusted.
+    """
+    import ast
+
+    source = Path("src/trafficlens/bench/scoring.py")
+    tree = ast.parse((ROOT / source).read_text())
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+        elif isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+
+    forbidden = {
+        "trafficlens.track.tracker",
+        "trafficlens.bench.baselines",
+        "trafficlens.bench.harness",
+        "trafficlens.detect.base",
+        "trafficlens.pipeline",
+        "torch",
+        "ultralytics",
+    }
+    assert imported & forbidden == set(), sorted(imported & forbidden)
+    assert "trafficlens.bench.slitscan" in imported  # the labels
+    assert "trafficlens.core.gate" in imported  # the CrossingEvent type
+
+
 # -- the match window --------------------------------------------------------
 
 
@@ -166,26 +207,108 @@ def test_the_window_boundaries_are_closed_and_asymmetric():
         assert result.true_positives == expected, f"offset {offset:+d}"
 
 
-def test_the_real_label_sets_closest_pair_stays_effectively_disjoint():
-    """The 5-frame gap between labels 411 and 416 is what makes the
-    asymmetric window safe, so it is asserted here on the real numbers.
-    The windows touch at exactly one frame (415) and nearest-first
-    matching keeps that harmless."""
+def test_the_asymmetry_shrinks_the_ambiguous_region_without_removing_it():
+    """The closest real label pair is 411 and 416, five frames apart.
+
+    Asymmetric windows share ONE frame where a symmetric +-4 would share
+    four -- a four-fold reduction, and the whole of what the asymmetry
+    buys. It does not make the overlap harmless, and the second half of
+    this test is the counterexample: predictions that sit ON the shared
+    frame are mis-assigned. An earlier version asserted "harmless" with
+    predictions at +1, deltas that cannot reach the shared frame and so
+    could never have falsified the claim.
+    """
     window = DEFAULT_MATCH_WINDOW
     early = set(range(411 - window.frames_before, 411 + window.frames_after + 1))
     late = set(range(416 - window.frames_before, 416 + window.frames_after + 1))
     assert early & late == {415}
 
+    wide_early = set(range(411 - 4, 411 + 4 + 1))
+    wide_late = set(range(416 - 4, 416 + 4 + 1))
+    assert len(wide_early & wide_late) == 4
+
     labels = [_label(10, 411), _label(11, 416, class_name="truck")]
-    result = match_crossings(
+
+    # Deltas of +1: neither prediction can reach frame 415, so both pair
+    # off correctly. This is the easy case.
+    clean = match_crossings(
         [_prediction(412), _prediction(417, class_name="truck")],
         labels,
         window,
         gate_name=GATE_NAME,
     )
-    assert result.true_positives == 2
-    assert result.false_positives == ()
-    assert result.misses == ()
+    assert clean.true_positives == 2
+    assert clean.misses == ()
+
+    # Deltas of +4 on both: two CORRECT predictions, and the shared frame
+    # 415 is mis-assigned. Label 416 takes it at distance 1 before label
+    # 411 can take it at distance 4.
+    ambiguous = match_crossings(
+        [_prediction(415), _prediction(420, class_name="truck")],
+        labels,
+        window,
+        gate_name=GATE_NAME,
+    )
+    assert ambiguous.true_positives == 1
+    assert [labels[i].frame for i in ambiguous.misses] == [411]
+    assert [
+        ambiguous.predictions[i].frame_index for i in ambiguous.false_positives
+    ] == [420]
+    # The matched pair is 415 -> label 416, a delta of -1.
+    assert ambiguous.matches == ((0, 1, -1),)
+
+    # And that is a GREEDY shortfall, not an impossible one: a
+    # maximum-cardinality assignment over the same eligible pairs gets 2.
+    assert (
+        max_cardinality_true_positives(
+            [_prediction(415), _prediction(420, class_name="truck")],
+            labels,
+            window,
+            gate_name=GATE_NAME,
+        )
+        == 2
+    )
+
+
+def test_greedy_matching_never_beats_maximum_cardinality():
+    """Greedy errs only in the conservative direction. It is allowed to
+    under-report the engine; it must never over-report it."""
+    labels = [_label(1, 411), _label(2, 416)]
+    for frames in ((415, 420), (412, 417), (411, 416), (415, 416), (410, 415)):
+        predictions = [_prediction(frame) for frame in frames]
+        greedy = match_crossings(
+            predictions, labels, DEFAULT_MATCH_WINDOW, gate_name=GATE_NAME
+        )
+        best = max_cardinality_true_positives(
+            predictions, labels, DEFAULT_MATCH_WINDOW, gate_name=GATE_NAME
+        )
+        assert greedy.true_positives <= best, frames
+
+
+def test_equidistant_ties_break_canonically_not_by_input_order():
+    """A prediction equidistant from two labels must go to the same one
+    however the label list is ordered.
+
+    Ranking by list position instead is deterministic only because
+    ``GroundTruth`` happens to validate frame order -- nothing asserts
+    that here, and this project has already been bitten twice by
+    determinism that held by coincidence.
+    """
+    early, late = _label(1, 99), _label(2, 101)
+    prediction = [_prediction(100)]  # +1 from 99, -1 from 101: a true tie
+
+    forward = match_crossings(
+        prediction, [early, late], gate_name=GATE_NAME
+    )
+    reversed_order = match_crossings(
+        prediction, [late, early], gate_name=GATE_NAME
+    )
+
+    assert forward.true_positives == reversed_order.true_positives == 1
+    matched_forward = forward.labels[forward.matches[0][1]]
+    matched_reversed = reversed_order.labels[reversed_order.matches[0][1]]
+    assert matched_forward.frame == matched_reversed.frame == 99
+    assert matched_forward.id == matched_reversed.id == 1
 
 
 # -- one-to-one matching -----------------------------------------------------
@@ -341,21 +464,76 @@ def test_a_track_seen_for_the_first_time_cannot_cross():
     assert events == []
 
 
-def test_run_counting_releases_every_track_it_saw():
-    """The pipeline reaps on a clock because the tracker never announces
-    a death; a harness that skips it leaks per-track state across a clip."""
-    forgotten: list[int] = []
+class _RecordingCounter(GateCounter):
+    """A gate counter that records the frame each ``forget`` arrived on,
+    so reaping can be observed at the interface instead of guessed at."""
 
-    class RecordingCounter(GateCounter):
-        def forget(self, track_id: int) -> None:
-            forgotten.append(track_id)
-            super().forget(track_id)
+    def __init__(self, gate, clock: list[int]) -> None:
+        super().__init__(gate)
+        self.clock = clock
+        self.forgotten: list[tuple[int, int]] = []
+
+    def forget(self, track_id: int) -> None:
+        self.forgotten.append((track_id, self.clock[0]))
+        super().forget(track_id)
+
+
+def test_run_counting_reaps_a_dead_track_mid_clip_on_the_tracker_s_clock():
+    """The tracker never announces a death, so tracks are reaped on a
+    clock. This pins the exact boundary: a confirmed track survives while
+    ``time_since_update <= max_age`` and may still re-associate at exactly
+    ``max_age``, so ``last_seen + max_age`` must reap NOTHING and
+    ``last_seen + max_age + 1`` is the first frame it is provably gone.
+
+    A fixture whose track is still alive on the final frame cannot tell
+    mid-clip reaping apart from the end-of-session drain -- delete the
+    reap and it still passes -- so the vehicle here disappears at frame 7
+    and the clip runs well past its death.
+    """
+    tracker = GreedyIoUTracker()
+    max_age = tracker.max_age
+    last_seen = 7
+    clock = [-1]
+
+    class Clocked(GreedyIoUTracker):
+        def update(self, detections, frame_index):
+            clock[0] = frame_index
+            return super().update(detections, frame_index)
+
+    # Detections for frames 0-7 only; frames 8 onward are empty, so the
+    # track is last seen on frame 7 and then dies where we can watch it.
+    stream = _stream(
+        {index: [_det(100.0, 100.0 + 8.0 * index)] for index in range(last_seen + 1)},
+        last_seen + max_age + 6,
+    )
+    counter = _RecordingCounter(_gate(), clock)
+    run_counting(stream, Clocked(), counter)
+
+    assert counter.forgotten == [(1, last_seen + max_age + 1)]
+
+    # Both sides of the boundary, stated as the frames themselves.
+    reaped_on = counter.forgotten[0][1]
+    assert reaped_on == last_seen + max_age + 1
+    assert reaped_on != last_seen + max_age
+
+
+def test_run_counting_releases_a_track_still_alive_at_the_end_of_the_clip():
+    """The end-of-session drain, which is a different code path from
+    mid-clip reaping and would otherwise leave the last tracks alive
+    holding state forever."""
+    clock = [-1]
+
+    class Clocked(GreedyIoUTracker):
+        def update(self, detections, frame_index):
+            clock[0] = frame_index
+            return super().update(detections, frame_index)
 
     stream = _stream(
         {index: [_det(100.0, 100.0 + 8.0 * index)] for index in range(8)}, 7
     )
-    run_counting(stream, GreedyIoUTracker(), RecordingCounter(_gate()))
-    assert forgotten == [1]
+    counter = _RecordingCounter(_gate(), clock)
+    run_counting(stream, Clocked(), counter)
+    assert [track_id for track_id, _frame in counter.forgotten] == [1]
 
 
 def test_run_counting_counts_a_crossing_the_way_the_pipeline_does():
@@ -395,10 +573,26 @@ def test_the_report_carries_the_match_window_object_and_no_scalar_tolerance():
     assert "tolerance_frames" not in text
 
 
+#: One-sided slack allowed when a method's measured time is checked
+#: against the cost injected into it. ``time.sleep`` can only overshoot,
+#: never undershoot, so the bound is ``[cost, cost + SLEEP_SLACK_S]``.
+#: Measured on this machine over 40 trials at each of 0.01/0.05/0.09 s:
+#: worst overshoot 10.1 ms, median 3.8-7.9 ms. 25 ms is ~2.5x the worst
+#: observed, which leaves room for CPU contention while staying far
+#: below the 60 ms gap a cumulative timing column would introduce.
+SLEEP_SLACK_S = 0.025
+
+
 def test_the_timing_block_holds_one_measurement_per_method_never_a_sum():
-    """Each method is timed in its OWN bracket. A shared loop that timed
-    every method and indexed one out would report the total (0.15 s) for
-    all three, which the upper bounds below reject."""
+    """Each method is timed in its OWN bracket.
+
+    Every entry is bounded against ITS OWN injected cost, both sides.
+    Bounding each method against the NEXT method's cost instead is not
+    enough: a cumulative column (each entry the running total 0.01 / 0.06
+    / 0.15) satisfies relative bounds by construction, and leaves the
+    most expensive method -- the one whose number gets published -- with
+    no upper bound at all.
+    """
     costs = {"cheap": 0.01, "middling": 0.05, "dear": 0.09}
 
     def sleeper(seconds):
@@ -414,11 +608,13 @@ def test_the_timing_block_holds_one_measurement_per_method_never_a_sum():
     assert sorted(timing) == sorted(costs)
     assert len(set(entry["seconds"] for entry in timing.values())) == 3
 
-    assert timing["cheap"]["seconds"] >= costs["cheap"]
-    assert timing["cheap"]["seconds"] < costs["middling"]
-    assert timing["middling"]["seconds"] >= costs["middling"]
-    assert timing["middling"]["seconds"] < costs["dear"]
-    assert timing["dear"]["seconds"] >= costs["dear"]
+    for name, cost in costs.items():
+        measured = timing[name]["seconds"]
+        assert cost <= measured <= cost + SLEEP_SLACK_S, (
+            f"{name}: measured {measured:.4f}s against an injected "
+            f"{cost:.4f}s -- a method's timing must contain its own work "
+            f"and nothing else"
+        )
 
 
 def test_every_method_is_handed_the_identical_detection_stream():
@@ -450,11 +646,13 @@ def test_both_confidence_subsets_are_published_together():
     assert scores["certain_only"]["recall"] == 1.0
 
 
-def test_the_certain_only_subset_declares_the_false_alarms_it_manufactures():
-    """Dropping the probable labels turns their correct predictions into
-    false alarms, so certain-only precision is NOT comparable with the
-    full-set figure. The report has to say how many of its own false
-    alarms it made that way."""
+def test_certain_only_treats_probable_labels_as_ignore_regions():
+    """A prediction landing on a `probable` label is neither credited nor
+    charged: it leaves both the numerator and the denominator.
+
+    Naive subsetting scores this same input at precision 0.5, because the
+    correct prediction of the probable crossing becomes a false alarm.
+    Under ignore semantics it is 1.0, and both are published."""
     labels = [
         _label(1, 100, confidence="certain"),
         _label(2, 200, confidence="probable"),
@@ -463,10 +661,116 @@ def test_the_certain_only_subset_declares_the_false_alarms_it_manufactures():
         {"engine": lambda detections: [_prediction(100), _prediction(200)]},
         labels=labels,
     )
-    certain_only = report["methods"]["engine"]["certain_only"]
+    scores = report["methods"]["engine"]
 
-    assert certain_only["precision"] == 0.5
-    assert certain_only["false_positives_matching_probable_labels"] == 1
+    ignored = scores["certain_only"]
+    assert ignored["n_ground_truth"] == 1
+    assert ignored["n_predicted"] == 1  # the probable-matched one is gone
+    assert ignored["true_positives"] == 1
+    assert ignored["precision"] == 1.0
+    assert ignored["recall"] == 1.0
+    assert ignored["predictions_moved_to_ignore"] == 1
+    assert ignored["labels_ignored"] == 1
+
+    naive = scores["certain_only_naive"]
+    assert naive["precision"] == 0.5
+    assert naive["false_positives_matching_probable_labels"] == 1
+
+
+def test_a_phantom_outside_every_ignore_region_is_still_charged():
+    """Ignore semantics must not swallow genuine false alarms. Only a
+    prediction the JOINT match paired with a probable label is ignored;
+    one that matched nothing stays chargeable."""
+    labels = [
+        _label(1, 100, confidence="certain"),
+        _label(2, 200, confidence="probable"),
+    ]
+    report = _benchmark(
+        {
+            "engine": lambda detections: [
+                _prediction(100),
+                _prediction(200),
+                _prediction(600),  # nothing near it
+            ]
+        },
+        labels=labels,
+    )
+    ignored = report["methods"]["engine"]["certain_only"]
+    assert ignored["n_predicted"] == 2
+    assert ignored["true_positives"] == 1
+    assert ignored["false_positives"] == [600]
+    assert ignored["precision"] == 0.5
+
+
+def test_a_probable_label_can_claim_a_prediction_a_certain_label_needed():
+    """The joint match is authoritative. A prediction taken by a probable
+    label is removed from the certain subset even though a certain label
+    was also within window -- which turns that certain label into a miss.
+
+    Stated as a test because it is the one way ignore semantics can LOWER
+    recall, and an unexplained recall gap would otherwise look like
+    evidence the certain crossings are harder."""
+    labels = [
+        _label(1, 101, confidence="probable"),
+        _label(2, 103, confidence="certain"),
+    ]
+    # Frame 102: +1 from the probable label, -1 from the certain one, and
+    # the canonical tie-break gives it to the earlier-framed probable one.
+    report = _benchmark(
+        {"engine": lambda detections: [_prediction(102)]}, labels=labels
+    )
+    ignored = report["methods"]["engine"]["certain_only"]
+
+    assert ignored["predictions_moved_to_ignore"] == 1
+    assert ignored["n_predicted"] == 0
+    assert ignored["true_positives"] == 0
+    assert ignored["misses"] == [103]
+    assert ignored["recall"] == 0.0
+    # No denominator, so no precision -- not a claim the engine was wrong.
+    assert ignored["precision"] == 0.0
+
+
+def test_certain_only_is_a_restriction_of_the_full_match_not_a_rematch():
+    """Every certain-only true positive must be a pair the full-set match
+    already made, with the same frame delta. Re-matching against the
+    surviving subset could pair a prediction differently and make the two
+    published figures incomparable."""
+    labels = [
+        _label(1, 100, confidence="certain"),
+        _label(2, 140, confidence="probable"),
+        _label(3, 180, confidence="certain"),
+    ]
+    predictions = [_prediction(102), _prediction(143), _prediction(182)]
+    report = _benchmark(
+        {"engine": lambda detections: predictions}, labels=labels
+    )
+    scores = report["methods"]["engine"]
+
+    full_deltas = scores["full"]["matched_frame_delta"]["histogram"]
+    certain_deltas = scores["certain_only"]["matched_frame_delta"]["histogram"]
+    # 102-100 = +2, 143-140 = +3, 182-180 = +2.
+    assert full_deltas == {"2": 2, "3": 1}
+    # The probable pair (the +3) is removed; the two certain pairs keep
+    # their own deltas exactly as the joint match assigned them.
+    assert certain_deltas == {"2": 2}
+    assert scores["certain_only"]["predictions_moved_to_ignore"] == 1
+
+
+def test_the_report_publishes_a_computed_max_cardinality_not_the_greedy_count():
+    """The max-cardinality field is the published check that greedy cost
+    the engine nothing. Echoing the greedy count into it would make the
+    check assert itself, so this pins a case where the two genuinely
+    diverge: the 411/416 shared frame with two +4 predictions."""
+    labels = [_label(1, 411), _label(2, 416)]
+    report = _benchmark(
+        {"engine": lambda detections: [_prediction(415), _prediction(420)]},
+        labels=labels,
+    )
+    full = report["methods"]["engine"]["full"]
+
+    assert full["true_positives"] == 1  # greedy mis-assigns the shared frame
+    assert full["max_cardinality_true_positives"] == 2  # a better pairing exists
+    assert report["matching"]["greedy_equals_max_cardinality"] is False
 
 
 def test_the_report_publishes_no_speed_figure():
@@ -651,6 +955,12 @@ def test_the_protocol_states_the_same_match_window_the_scorer_uses():
     assert "411" in text and "416" in text
 
 
+def _ratio(numerator: int, denominator: int) -> float:
+    """The scorer's own no-denominator convention, restated independently
+    here so the check is not the implementation checking itself."""
+    return numerator / denominator if denominator else 0.0
+
+
 def test_the_committed_counting_report_is_self_consistent():
     assert COUNTING_REPORT.is_file(), (
         f"{COUNTING_REPORT} is missing: run scripts/bench_counting.py"
@@ -681,14 +991,70 @@ def test_the_committed_counting_report_is_self_consistent():
 
     for name, scores in methods.items():
         for subset, result in scores.items():
+            where = f"{name}/{subset}"
+            true_positives = result["true_positives"]
+            misses = len(result["misses"])
+            false_positives = len(result["false_positives"])
+
+            # Cardinality: the arrays account for every label and every
+            # prediction.
+            assert true_positives + misses == result["n_ground_truth"], where
             assert (
-                result["true_positives"] + len(result["misses"])
-                == result["n_ground_truth"]
-            ), f"{name}/{subset}"
+                true_positives + false_positives == result["n_predicted"]
+            ), where
+
+            # Every PUBLISHED RATE recomputed from those same arrays.
+            # Without this a report can carry cardinality-consistent
+            # arrays and a fabricated headline -- 16/1/1 alongside a
+            # claimed precision of 1.000 -- and pass.
+            expected_precision = _ratio(true_positives, result["n_predicted"])
+            expected_recall = _ratio(true_positives, result["n_ground_truth"])
+            expected_f1 = (
+                2.0
+                * expected_precision
+                * expected_recall
+                / (expected_precision + expected_recall)
+                if (expected_precision + expected_recall)
+                else 0.0
+            )
+            assert result["precision"] == pytest.approx(expected_precision), where
+            assert result["recall"] == pytest.approx(expected_recall), where
+            assert result["f1"] == pytest.approx(expected_f1), where
+            assert result["miss_rate"] == pytest.approx(
+                _ratio(misses, result["n_ground_truth"])
+            ), where
+            assert result["phantom_rate"] == pytest.approx(
+                _ratio(false_positives, result["n_ground_truth"])
+            ), where
+            assert result["count_error"] == abs(result["signed_bias"]), where
             assert (
-                result["true_positives"] + len(result["false_positives"])
-                == result["n_predicted"]
-            ), f"{name}/{subset}"
+                result["signed_bias"]
+                == result["n_predicted"] - result["n_ground_truth"]
+            ), where
+
+            # The frame-delta histogram is the report's empirical
+            # vindication of the asymmetric window, so it is pinned to the
+            # window it claims to justify rather than left free.
+            delta = result["matched_frame_delta"]
+            assert sum(delta["histogram"].values()) == true_positives, where
+            if true_positives:
+                offsets = [int(key) for key in delta["histogram"]]
+                assert min(offsets) == delta["min"], where
+                assert max(offsets) == delta["max"], where
+                assert delta["min"] >= -DEFAULT_MATCH_WINDOW.frames_before, where
+                assert delta["max"] <= DEFAULT_MATCH_WINDOW.frames_after, where
+
+    # The headline that lands on the site, pinned explicitly.
+    engine = methods["engine+gate"]["full"]
+    assert engine["n_predicted"] == 17
+    assert engine["n_ground_truth"] == 17
+    assert engine["true_positives"] == 16
+    assert engine["precision"] == pytest.approx(16 / 17)
+    assert engine["recall"] == pytest.approx(16 / 17)
+    assert engine["f1"] == pytest.approx(16 / 17)
+    assert engine["matched_frame_delta"]["max"] <= 4
+    # Greedy matching is conservative; the report says by how much.
+    assert engine["max_cardinality_true_positives"] >= engine["true_positives"]
 
     text = json.dumps(report).lower()
     assert "kmh" not in text and "km/h" not in text

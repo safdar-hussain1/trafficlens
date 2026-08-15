@@ -216,6 +216,48 @@ Accuracy figures computed against this label set must report the
 against `certain` rows alone, without saying so, silently drops the hard
 cases and flatters the engine.
 
+### How the `certain`-only figure is scored
+
+Added after the first scoring run, and recorded here rather than left in
+code, for the same reason the ±2 correction above is recorded: a scoring
+rule that lives only in the scorer is a rule nobody can audit.
+
+Matching the `certain` rows *alone* is wrong, and wrong in a way that
+looks like rigour. It turns every correct prediction of a `probable`
+crossing into a false positive, so it penalises a system for finding the
+crossings the labeller flagged as hard. The `certain`-only precision it
+produces is not comparable with anything.
+
+`probable` rows are therefore treated as **ignore regions** — the
+standard treatment of an unadjudicated region (MOTChallenge distractor
+zones, COCO's `iscrowd`) transposed from space to the timeline. A
+`probable` label marks an interval the labeller could not adjudicate, so
+a prediction landing there is **neither credited nor charged**:
+
+1. Match once against **all** rows, under the ordinary rules above.
+2. Remove, from both sides, every pair matched to a `probable` row.
+3. Score the `certain` rows against the predictions that remain.
+
+Scoring by restriction of the single joint match — never by re-matching
+against the surviving subset — is what makes the two published figures
+comparable rather than two differently-computed numbers.
+
+Two limitations travel with any figure produced this way:
+
+- It is an **upper bound on precision** within the `certain` subset. A
+  genuine phantom that happens to land inside a `probable` row's window
+  is absorbed into the ignore set and leaves the denominator entirely.
+  The count of predictions moved to the ignore set must be published so
+  the size of that absorbed mass is visible.
+- A prediction claimed by a `probable` row is removed **even when a
+  `certain` row was also within window**, because the joint match had
+  already assigned it. That can turn a `certain` row into a miss, so a
+  recall gap is not by itself evidence about the `certain` crossings.
+
+The naive figure may still be published, labelled as the artefact that
+motivates this treatment, alongside the count of false positives it
+manufactured.
+
 ## Scoring tolerance
 
 Fixed here, in the document that states the labelling rules, for the same
@@ -267,14 +309,35 @@ before any scoring code existed, and the interval is asymmetric precisely
 because it tracks that measurement rather than buying slack in both
 directions.
 
-**The window stays effectively disjoint between neighbouring vehicles.**
+**The asymmetry shrinks the ambiguous region; it does not remove it.**
 The closest pair of labels in this set is **5 frames** apart (411 and
-416). Their windows are `[410, 415]` and `[415, 420]`: they touch at
-exactly one frame, and one-to-one nearest-frame-first matching makes that
-touch harmless, since the frame can be consumed by only one of them. A
-symmetric ±4 window — the naive way to admit a 4-frame lead — would give
-`[407, 415]` and `[412, 420]`, genuinely overlapping across four frames.
-The fix is the asymmetry, not a wider window.
+416). Their windows are `[410, 415]` and `[415, 420]`, which share
+exactly **one** frame. A symmetric ±4 window — the naive way to admit a
+4-frame lead — would give `[407, 415]` and `[412, 420]`, sharing **four**.
+So the asymmetry buys a four-fold reduction in the ambiguous region, and
+that is the whole of what it buys.
+
+The one shared frame is **not harmless.** One-to-one matching stops a
+frame being counted twice; it does not stop it being assigned to the
+wrong label. Two correct predictions at 415 and 420 — both +4, which is
+inside the stated label precision — score one true positive, one false
+positive and one miss, because nearest-frame-first lets label 416 take
+frame 415 (distance 1) before label 411 can take it (distance 4).
+One-to-one matching bounds that damage to a single crossing; it does not
+eliminate it. Any scorer must state this limitation rather than claim the
+windows are disjoint.
+
+**Matching is greedy nearest-first, not maximum-cardinality.** Where two
+windows overlap, taking the locally nearest pair first can consume a
+frame the other label needed, so this rule can score fewer matches than
+the best possible assignment over the same eligible pairs. That is
+accepted deliberately. The rule was fixed here before any scoring code
+existed, and it errs only in the conservative direction — it can
+under-report the system under test, never flatter it. Changing it after
+seeing a score would be exactly the move this section forbids. A scorer
+must instead **publish the maximum-cardinality count alongside its own**,
+so the size of the gap is a measured, visible quantity rather than an
+assumption.
 
 Any scorer must publish the **signed** frame offsets of its matched
 pairs. The asymmetry is a claim that predictions run late; the offsets

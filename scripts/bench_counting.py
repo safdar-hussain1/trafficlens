@@ -38,7 +38,6 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from trafficlens.bench.harness import (  # noqa: E402
-    DEFAULT_MATCH_WINDOW,
     DetectionCacheError,
     build_methods,
     measure_detection_noise,
@@ -49,6 +48,7 @@ from trafficlens.bench.harness import (  # noqa: E402
     write_detection_cache,
     write_report,
 )
+from trafficlens.bench.scoring import DEFAULT_MATCH_WINDOW  # noqa: E402
 from trafficlens.bench.slitscan import GroundTruth  # noqa: E402
 from trafficlens.config import load_config  # noqa: E402
 from trafficlens.io.video import VideoSource  # noqa: E402
