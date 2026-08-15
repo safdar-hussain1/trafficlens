@@ -47,11 +47,16 @@ gates:
 # does not describe this road. The paint was measured off the clip and
 # its stroke fills about half of each period -- stroke:period 0.44 to
 # 0.50 across the runs measured -- where a 6 m stroke in an 18 m period
-# requires 0.333. The ratio is scale-free, so that refutation does not
-# depend on the 18 m figure itself. The 18 m is kept anyway, because the
-# survey needs some absolute along-road scale and this is the one number
-# it took from that standard. It is a working assumption. It is
-# unverified.
+# requires 0.333. Those paint landmarks are not committed either, so
+# this figure cannot be re-derived from tracked data. It is retained
+# anyway because it argues against the 18 m assumption rather than for
+# it -- it lowers confidence in the period rather than raising it --
+# but it is held to the same standard as the footprint check below and
+# is not treated as independent evidence. The ratio is scale-free, so
+# that refutation does not depend on the 18 m figure itself. The 18 m
+# is kept anyway, because the survey needs some absolute along-road
+# scale and this is the one number it took from that standard. It is a
+# working assumption. It is unverified.
 #
 # What a wrong period costs: the relationship is linear and unbounded.
 # Every reported speed scales directly with the assumed period, so if
