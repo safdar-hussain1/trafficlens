@@ -34,8 +34,8 @@ import cv2
 import numpy as np
 
 from trafficlens.core.constants import (
-    HOMOGRAPHY_MAX_CONDITION_NUMBER,
     HOMOGRAPHY_MAX_MEAN_ERROR_M,
+    HOMOGRAPHY_MAX_RANK_CONDITION_NUMBER,
 )
 from trafficlens.core.geometry import Point
 
@@ -78,17 +78,51 @@ def _normalization_transform(points: np.ndarray) -> np.ndarray:
 
 
 def _dlt_condition_number(image_pts: list[Point], world_pts: list[Point]) -> float:
-    """Condition number (largest / smallest singular value) of the
-    Hartley-normalized direct-linear-transform design matrix for these
-    correspondences.
+    """A rank/uniqueness diagnostic of the correspondence *configuration*,
+    computed from the singular values of the Hartley-normalized
+    direct-linear-transform design matrix, independent of whatever numerical
+    method actually produced a RoadPlane's H.
 
-    This is a diagnostic of the correspondence *configuration*, independent
-    of whatever numerical method actually produced a RoadPlane's H: a
-    near-degenerate configuration (points close to collinear, or nearly
-    duplicated) makes this matrix close to rank-deficient even though
-    cv2.findHomography will still return a matrix that fits those exact
-    points -- see RoadPlane.validate(), which is the caller of this
-    function.
+    The design matrix for N correspondences has 2N rows and 9 columns (one
+    column per entry of the homogeneous homography vector h, which solves
+    ``design @ h = 0``). Its singular values, largest to smallest, are
+    sigma_1 >= sigma_2 >= ... The *smallest* one is always the "solve
+    residual" direction: for data that is close to exactly consistent with
+    one homography (which includes any noise-free synthetic data, and any
+    reasonably clean real survey), that smallest singular value is close to
+    zero *by construction* -- it reflects how well a single homography
+    explains the data, not whether the point configuration could support a
+    *unique* homography at all. Dividing by it, unconditionally, therefore
+    conflates "this fit has very little residual error" (a good thing) with
+    "this configuration is geometrically degenerate" (a bad thing), and
+    ends up penalising precise surveys -- the smaller the pixel noise, the
+    smaller that residual singular value, the larger (and more falsely
+    alarming) the resulting ratio.
+
+    Whether that conflation matters depends on N:
+
+    - Exactly 4 correspondences: the design matrix is 8x9 (rank at most 8),
+      so it has exactly 8 singular values, sigma_1..sigma_8, and there is no
+      separate "residual" singular value to exclude -- the system is
+      exactly determined, not overdetermined, so sigma_8 itself already
+      reflects how well-separated the (unique, if the configuration is
+      healthy) null-space direction is from the rest. Using
+      sigma_1 / sigma_8 here is correct and this is what a 4-point plane
+      uses.
+    - 5 or more correspondences: the design matrix is 2Nx9 with N>=5, so it
+      has 9 singular values (2N > 9), and sigma_9 -- the smallest -- is that
+      residual direction described above. Geometric degeneracy (e.g. most
+      of the points collinear) instead shows up in sigma_8, the
+      second-smallest: it is only close to zero when the design matrix's
+      null space is not one-dimensional, i.e. when more than one homography
+      (up to scale) is consistent with the *shape* of the points, which is
+      what "the points can't uniquely determine a homography" actually
+      means. So for 5+ correspondences this function uses
+      sigma_1 / sigma_8 and never looks at sigma_9 at all.
+
+    See RoadPlane.validate(), which is the caller of this function, and
+    tests/test_homography.py::test_precise_surveys_are_never_rejected_as_degenerate
+    for the regression this distinction fixes.
     """
     img = np.asarray(image_pts, dtype=np.float64)
     world = np.asarray(world_pts, dtype=np.float64)
@@ -107,7 +141,12 @@ def _dlt_condition_number(image_pts: list[Point], world_pts: list[Point]) -> flo
     design = np.array(rows, dtype=np.float64)
 
     singular_values = np.linalg.svd(design, compute_uv=False)
-    smallest = float(singular_values[-1])
+    # Exactly 4 points: only 8 singular values exist at all, and the last
+    # one is the meaningful one (see docstring). 5+ points: 9 singular
+    # values exist; skip the smallest (the residual direction) and use the
+    # second-smallest instead.
+    index = -1 if len(image_pts) == 4 else -2
+    smallest = float(singular_values[index])
     if smallest <= 0.0:
         return math.inf
     return float(singular_values[0] / smallest)
@@ -220,10 +259,14 @@ class RoadPlane:
            survey (e.g. ``min_points=6``) than the bare minimum.
         2. No duplicate image point and no duplicate world point among the
            fit correspondences.
-        3. The (Hartley-normalized) DLT design matrix for the fit
-           correspondences is not ill-conditioned -- catches collinear and
-           near-collinear configurations, which duplicate points also
-           produce as a side effect.
+        3. The fit correspondences are not geometrically degenerate: the
+           rank/uniqueness diagnostic in ``_dlt_condition_number`` (see its
+           docstring) is at most ``HOMOGRAPHY_MAX_RANK_CONDITION_NUMBER``.
+           This catches collinear and near-collinear configurations, which
+           duplicate points also produce as a side effect, without
+           penalising a precise (low pixel-noise) survey -- see that
+           function's docstring for why the diagnostic differs between
+           exactly 4 correspondences and 5 or more.
         4. A reprojection-error self-check -- but only when it can actually
            mean something. A homography has 8 degrees of freedom, and each
            correspondence contributes exactly 2 equations, so exactly 4
@@ -269,11 +312,11 @@ class RoadPlane:
             )
 
         condition_number = _dlt_condition_number(self._image_pts, self._world_pts)
-        if condition_number > HOMOGRAPHY_MAX_CONDITION_NUMBER:
+        if condition_number > HOMOGRAPHY_MAX_RANK_CONDITION_NUMBER:
             raise CalibrationError(
                 f"ill-conditioned correspondence set: condition number "
                 f"{condition_number:.3e} exceeds the maximum of "
-                f"{HOMOGRAPHY_MAX_CONDITION_NUMBER:.3e} (points are "
+                f"{HOMOGRAPHY_MAX_RANK_CONDITION_NUMBER:.3e} (points are "
                 f"collinear or nearly so)"
             )
 

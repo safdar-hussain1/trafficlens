@@ -15,21 +15,41 @@ computed belongs at its point of use, not here.
 # ambiguity in the input.
 GEOMETRY_EPS = 1e-9
 
-# Maximum acceptable condition number of the (Hartley-normalized) DLT design
-# matrix used by trafficlens.core.homography.RoadPlane.validate() to detect
-# a degenerate or near-degenerate correspondence set (collinear points, a
-# duplicated point, or any configuration close to one). Measured on real
-# synthetic configurations: a healthy trapezoid of 4 surveyed road points
-# gives a condition number of about 7.93; nudging one point 1mm toward
-# collinear with the other three pushes it to about 56216; exactly collinear
-# or duplicated points push it above 1e16. 10000.0 sits below the
-# near-degenerate measurement (56216 / 10000 = ~5.6x) and far below the
-# healthy measurement (10000 / 7.93 = ~1261x) -- the margin is not
-# symmetric: comfortably wide on the healthy side, narrower but still clear
-# on the near-degenerate side, which is why the near-degenerate fixture in
-# tests/test_homography.py nudges a point by a full 1mm rather than a
+# Maximum acceptable value of the rank/uniqueness diagnostic
+# trafficlens.core.homography._dlt_condition_number computes from the
+# Hartley-normalized DLT design matrix, used by RoadPlane.validate() to
+# detect a geometrically degenerate correspondence set (collinear points, a
+# duplicated point, or any configuration close to one) without penalising a
+# precise survey. The diagnostic is sigma_1/sigma_8 of the design matrix's
+# singular values for BOTH the exactly-4-point case (8x9 matrix, 8 singular
+# values total, sigma_8 is the last one) and the 5-or-more-point case (2Nx9
+# matrix, 9 singular values, sigma_9 -- the smallest -- is excluded because
+# it measures fit residual/noise, not geometry; see that function's
+# docstring for why excluding it matters).
+#
+# Measured on real synthetic configurations, both sides of the threshold,
+# for both point counts (name kept "CONDITION_NUMBER" despite the sigma_8
+# vs sigma_9 distinction: it is still literally sigma_1 divided by another
+# singular value of the same matrix, just the correct one):
+#   - 4-point healthy trapezoid: ~7.93. Threshold / healthy = ~1261x margin.
+#   - 4-point near-degenerate (one point nudged 1mm toward collinear with
+#     the other three): ~56216. Near-degenerate / threshold = ~5.6x margin
+#     -- narrower than the healthy side, but still clearly separated.
+#   - 5-point healthy, well-spread survey, Gaussian pixel noise sigma in
+#     {0.1, 0.25, 0.5, 1.0, 2.0}px, 30 trials each (see
+#     tests/test_homography.py::test_precise_surveys_are_never_rejected_as_degenerate):
+#     ~4.6-4.7 across every noise level tested, essentially flat -- this
+#     diagnostic does not scale with survey precision the way the excluded
+#     sigma_9 did. Threshold / worst observed (~4.66) = ~2146x margin.
+#   - 5-point genuinely degenerate (4 of the 5 points collinear, 1 off the
+#     line -- the minimum degeneracy that leaves no non-degenerate 4-point
+#     subset among the 5): ~1.27e16. Degenerate / threshold = ~1.27e12x
+#     margin.
+# 10000.0 sits comfortably inside every one of these gaps; the narrowest
+# margin on either point count is the 4-point near-degenerate case (~5.6x),
+# which is why that fixture nudges a point by a full 1mm rather than a
 # smaller amount that might land closer to the threshold.
-HOMOGRAPHY_MAX_CONDITION_NUMBER = 10000.0
+HOMOGRAPHY_MAX_RANK_CONDITION_NUMBER = 10000.0
 
 # Default maximum acceptable mean reprojection error, in metres, for
 # RoadPlane.validate() to accept a calibration. 0.5m mirrors the threshold a
