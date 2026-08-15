@@ -164,11 +164,16 @@ def test_stream_recovers_after_outlier():
 
 def test_two_consecutive_outliers_are_both_rejected():
     # The discriminating case between the two rejection policies: two
-    # consecutive wild boxes at the SAME wrong location. Rejecting against
-    # the last ACCEPTED sample (the shipped policy) rejects both. Rejecting
-    # against the last RAW sample would reject the first outlier but accept
-    # the second -- it sits within threshold of the first outlier -- and
-    # corrupt the estimate with a 30m off-path point.
+    # consecutive wild boxes, placed where they have real leverage on the
+    # per-axis least-squares fit -- at the NEWEST edge of the window (max
+    # |t - t_mean|, so an accepted one steers the slope hardest) and
+    # displaced 30m ALONG the motion axis (the axis whose slope IS the
+    # speed; a lateral offset would barely touch it). The shipped policy
+    # rejects both: each is >SPEED_MAX_STEP_M from the last ACCEPTED
+    # sample. A reject-vs-last-RAW policy rejects the first but accepts the
+    # second (1m from the first outlier), and that one edge sample drags
+    # the estimate several km/h off -- the corruption this test exists to
+    # catch.
     fps = 25.0
     clean = SpeedEstimator(plane=_plane(), fps=fps, window_s=2.0, min_samples=5)
     _drive(clean, track_id=3, fps=fps, n_frames=51, speed_mps=25.0)
@@ -178,8 +183,8 @@ def test_two_consecutive_outliers_are_both_rejected():
     for f in range(51):
         t = f / fps
         world = (0.0, 5.0 + 25.0 * t)
-        if f in (25, 26):
-            world = (30.0, 5.0 + 25.0 * (25 / fps))  # same wrong spot twice
+        if f in (49, 50):  # the last two frames: maximum fit leverage
+            world = (0.0, 5.0 + 25.0 * t + 30.0)  # 30m ahead, along-track
         dirty.observe(3, _to_image(world), t)
     dirty_speed = dirty.speed_kmh(3)
 
