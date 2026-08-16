@@ -35,6 +35,7 @@ against a dict built in the test proves the test's dict is well-formed,
 not that the published numbers are.
 """
 
+import copy
 import importlib.util
 import json
 import math
@@ -44,6 +45,7 @@ import numpy as np
 import pytest
 
 from trafficlens.bench.degrade import (
+    FALSE_POSITIVE_FRAME_LIMIT,
     PROTOCOL_BOX_JITTER,
     PROTOCOL_DETECTION_DROPOUT,
     PROTOCOL_DROPPED_FRAMES,
@@ -239,45 +241,83 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
     Methods arrive as opaque callables and labels as data, so the module's
     own import graph is asserted rather than trusted.
 
-    Asserted as an ALLOWLIST, not a blacklist. A blacklist of dotted
-    module paths is evaded by three forms a working programmer would
-    reach for without thinking: ``from trafficlens.track import tracker``
-    and ``from trafficlens.bench import harness`` name the PACKAGE and
-    bind the module as an attribute, and
+    Asserted as a TOTAL ALLOWLIST over every module the file reaches, not
+    as a blacklist and not only over ``trafficlens.*``. A blacklist of
+    dotted module paths is evaded by three forms a working programmer
+    reaches for without thinking -- ``from trafficlens.track import
+    tracker`` and ``from trafficlens.bench import harness`` name the
+    PACKAGE and bind the module as an attribute, and
     ``from trafficlens.core.gate import GateCounter`` pulls the engine's
     own counting rule out of a module the seam does legitimately need for
-    its ``CrossingEvent`` type. The allowlist is exactly the one the
-    module docstring states, and the second check names the symbols that
-    must never be bound however they are reached.
+    its ``CrossingEvent`` type.
+
+    An allowlist keyed on ``node.module`` alone is evaded in turn by the
+    two forms that name no absolute module at all:
+
+    - **relative imports**, the most idiomatic way to reach a sibling.
+      ``from . import harness`` and ``from ..track import tracker`` both
+      leave ``node.module`` empty or partial while resolving straight
+      into the package that imports ``Tracker``. They are rejected
+      outright rather than resolved: this module has no legitimate use
+      for one, and rejecting is not a rule anyone can get subtly wrong.
+    - **dynamic imports**. ``importlib.import_module("trafficlens.track.
+      tracker")`` is invisible to any check that reads the import graph,
+      so the machinery itself is refused -- which the total allowlist
+      does for free, because ``importlib`` is not on it.
+
+    The allowlist and the module docstring's stated list are asserted
+    against each other in BOTH directions, so neither an undocumented
+    import nor a test-only widening can pass on its own.
     """
     import ast
+    import re
 
     source = (ROOT / "src/trafficlens/bench/degrade.py").read_text()
     tree = ast.parse(source)
     imported: set[str] = set()
     bound: set[str] = set()
     star_from: set[str] = set()
+    relative: list[str] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module)
+        if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                if alias.name == "*":
-                    star_from.add(node.module)
-                else:
-                    bound.add(alias.name)
+                target = star_from if alias.name == "*" else bound
+                target.add(alias.name)
+            if node.level:
+                relative.append("." * node.level + (node.module or ""))
+            elif node.module:
+                imported.add(node.module)
         elif isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
 
-    # The module docstring states this list; it is asserted here so the two
-    # cannot drift apart.
-    allowed = {
+    # A relative import names no absolute module, so it is invisible to
+    # every check below. Rejected outright.
+    assert relative == [], (
+        f"degrade.py must not use relative imports -- a sibling-relative "
+        f"form reaches trafficlens.bench.harness, and the tracker with it, "
+        f"while naming no module this pin can see: {sorted(relative)}"
+    )
+
+    #: The four internal modules the seam may see, and nothing else.
+    allowed_internal = {
         "trafficlens.bench.scoring",
         "trafficlens.bench.slitscan",
         "trafficlens.core.gate",
         "trafficlens.detect.base",
     }
-    reached = {name for name in imported if name.startswith("trafficlens")}
-    assert reached <= allowed, sorted(reached - allowed)
+    # The TOTAL import surface, stdlib included. Keeping the stdlib on the
+    # allowlist is what refuses importlib -- and with it every dynamic
+    # escape hatch -- without needing to enumerate escape hatches.
+    allowed = allowed_internal | {
+        "__future__",
+        "dataclasses",
+        "fractions",
+        "hashlib",
+        "math",
+        "numpy",
+        "typing",
+    }
+    assert imported <= allowed, sorted(imported - allowed)
 
     # An allowed MODULE is not a licence to import anything inside it:
     # trafficlens.core.gate carries both the CrossingEvent type this module
@@ -293,18 +333,26 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
     assert bound & never_bound == set(), sorted(bound & never_bound)
     # A star import would smuggle every one of those in unnamed.
     assert star_from == set(), sorted(star_from)
+    # ... and __import__ would bypass the import graph altogether.
+    assert not [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id == "__import__"
+    ], "degrade.py must not call __import__"
 
-    forbidden = {"torch", "ultralytics"}
-    assert imported & forbidden == set(), sorted(imported & forbidden)
     assert "trafficlens.bench.scoring" in imported  # the scorer
     assert "trafficlens.detect.base" in imported  # the Detection type
 
-    # The docstring's own statement of the allowlist, so a future import
-    # cannot be waved through by editing only the test.
+    # The docstring's own statement of the allowlist, matched EXACTLY and
+    # in both directions. A substring check on the last dotted component
+    # would not do: "tracker" already appears in the docstring's prose, so
+    # adding trafficlens.track.tracker to the set above would pass one.
     docstring = ast.get_docstring(tree) or ""
-    for module in sorted(allowed):
-        tail = module.split(".")[-1]
-        assert tail in docstring, module
+    stated = set(re.findall(r"trafficlens(?:\.[A-Za-z_][A-Za-z0-9_]*)+", docstring))
+    assert stated == allowed_internal, {
+        "documented but not allowed": sorted(stated - allowed_internal),
+        "allowed but not documented": sorted(allowed_internal - stated),
+    }
 
 
 # -- the match window must widen with the sampling interval ------------------
@@ -361,16 +409,22 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
     The property holds only for labels the retained pattern can still
     reach. A label past the LAST retained frame has no later sample at
     all, so there is nothing for the widening to cover and every method is
-    charged a miss for it by construction -- which happens on the real
-    clip, where 2 fps retains nothing after frame 720 and the last label
-    sits at 726. That case is exercised here rather than merely not
-    tripped over: a fixture in which every label happens to have a later
-    sample would leave ``assert later`` untested, and the real clip would
-    then fire an assertion whose message says nothing about a recall
-    ceiling.
+    charged a miss for it by construction -- which is what happens on the
+    real clip, where 2 fps retains nothing after frame 720 and the last
+    label sits at 726.
+
+    That case is exercised rather than merely not tripped over, and the
+    fixture is built to reach it: a fourth label sits at frame 199 of a
+    stream ending at 200, which 10, 5 and 2 fps all retain nothing after.
+    ``_synthetic_labels`` alone would not do -- its latest label is 104,
+    every swept level keeps a frame after it, and the ``if not later``
+    branch below would be dead code under a docstring claiming otherwise.
+    The ``reached`` assertion at the end is what keeps that honest.
     """
     stream = _synthetic_stream()
-    labels = _synthetic_labels()
+    # The three shipped labels plus one in the stream's tail, past the last
+    # frame the lower rates retain.
+    labels = _synthetic_labels() + [Crossing(4, 199, "car", "toward", "certain")]
     label_frames = [label.frame for label in labels]
     streams = list(
         frame_rate_streams(stream, source_fps=30.0, target_rates=(30, 25, 15, 10, 5, 2))
@@ -378,11 +432,13 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
         dropped_frame_streams(stream, fractions=(0.0, 0.05, 0.10, 0.20, 0.30))
     )
     pressed = False
+    reached = 0
     for degraded in streams:
         window = widen_for_gap(DEFAULT_MATCH_WINDOW, degraded.max_gap)
         widening = window.frames_after - DEFAULT_MATCH_WINDOW.frames_after
         reach = label_reachability(labels, degraded.source_frames)
         unreachable = set(reach["labels_after_the_last_retained_frame"])
+        reached += bool(unreachable)
         for label_frame in label_frames:
             later = [s for s in degraded.source_frames if s >= label_frame]
             # The two halves must agree on which labels have no later
@@ -406,6 +462,11 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
     assert pressed, (
         "no label in any swept level waits the full quantisation, so this "
         "fixture never presses the bound and could not see it narrowed"
+    )
+    assert reached == 3, (
+        f"exactly the three lowest rates must leave the tail label "
+        f"unreachable, or the branch this test claims to exercise is dead "
+        f"code; {reached} level(s) reached it"
     )
 
 
@@ -997,6 +1058,139 @@ def test_two_runs_of_the_whole_family_are_byte_identical():
     assert family() == family()
 
 
+# -- every published record must be arithmetically possible ------------------
+
+
+def _ratio(numerator: int, denominator: int) -> float:
+    """The scorer's own no-denominator convention, restated independently
+    here so the check is not the implementation checking itself. Same
+    helper, for the same reason, as ``test_bench_counting``."""
+    return numerator / denominator if denominator else 0.0
+
+
+def _f1(precision: float, recall: float) -> float:
+    return (
+        2.0 * precision * recall / (precision + recall)
+        if (precision + recall)
+        else 0.0
+    )
+
+
+def _assert_rates_follow_from_counts(record, n_ground_truth, where):
+    """Every published rate recomputed from the record's own counts.
+
+    Without this a report can carry cardinality-consistent counts and a
+    fabricated headline. The engine at ``frame_rate@5 fps`` scores
+    precision 1.0 on 2 predictions against 17 labels; an F1 of 0.9697
+    pasted over its 0.2105 is arithmetically impossible on its face, and
+    every summary above it can then be recomputed honestly from the
+    fabricated record so that the whole report agrees with itself.
+    """
+    true_positives = record["true_positives"]
+    false_positives = record["false_positives"]
+    misses = record["misses"]
+    n_predicted = record["n_predicted"]
+
+    # Cardinality: the counts account for every label and every prediction.
+    assert true_positives + false_positives == n_predicted, where
+    assert true_positives + misses == n_ground_truth, where
+
+    precision = _ratio(true_positives, n_predicted)
+    recall = _ratio(true_positives, n_ground_truth)
+    assert record["precision"] == pytest.approx(precision), where
+    assert record["recall"] == pytest.approx(recall), where
+    assert record["f1"] == pytest.approx(_f1(precision, recall)), where
+    assert record["miss_rate"] == pytest.approx(
+        _ratio(misses, n_ground_truth)
+    ), where
+    assert record["phantom_rate"] == pytest.approx(
+        _ratio(false_positives, n_ground_truth)
+    ), where
+    assert record["signed_bias"] == n_predicted - n_ground_truth, where
+    # Band-sweep rows publish the signed bias without the absolute count
+    # error beside it; every full method record carries both.
+    if "count_error" in record:
+        assert record["count_error"] == abs(record["signed_bias"]), where
+
+
+def test_every_published_record_is_arithmetically_self_consistent():
+    """The layer under the headline: no published record may be impossible.
+
+    The guards elsewhere anchor every SUMMARY to the per-level records.
+    Nothing anchored the records to each other, so a single fabricated
+    ``f1`` -- with its own precision and recall left untouched and every
+    derived summary honestly recomputed from it -- inverted the session's
+    strongest negative claim while the whole suite stayed green. This is
+    the same treatment ``test_bench_counting`` gives counting_accuracy.json,
+    applied to every method at every level, to the certain-only sub-record,
+    and to every band-sweep row.
+    """
+    report = _report()
+    total = report["labels"]["total"]
+    certain = report["labels"]["certain"]
+    checked = 0
+
+    for protocol, block in report["protocols"].items():
+        for entry in block["entries"]:
+            window = entry["match_window"]
+            for name, record in entry["methods"].items():
+                where = f"{protocol}@{entry['level_label']}/{name}"
+                assert record["n_ground_truth"] == total, where
+                _assert_rates_follow_from_counts(record, total, where)
+                checked += 1
+
+                # The listed frames must agree with the counts beside them.
+                assert len(record["miss_frames"]) == record["misses"], where
+                frames = record["false_positive_frames"]
+                if frames is None:
+                    assert (
+                        record["false_positives"] > FALSE_POSITIVE_FRAME_LIMIT
+                    ), where
+                else:
+                    assert len(frames) == record["false_positives"], where
+
+                # Greedy matching cannot beat the best possible assignment,
+                # and no assignment can exceed either side's cardinality.
+                best = record["max_cardinality_true_positives"]
+                assert record["true_positives"] <= best <= min(
+                    total, record["n_predicted"]
+                ), where
+
+                # A matched prediction lies inside the window that scored
+                # it, which ties the deltas to the published window.
+                delta = record["matched_frame_delta"]
+                if record["true_positives"]:
+                    assert -window["frames_before"] <= delta["min"], where
+                    assert delta["max"] <= window["frames_after"], where
+                    assert delta["min"] <= delta["mean"] <= delta["max"], where
+                else:
+                    assert delta == {"mean": None, "min": None, "max": None}, where
+
+                # The certain-only sub-record, on its own denominator.
+                sub = record["certain_only"]
+                assert sub["n_ground_truth"] == certain, where
+                sub_precision = _ratio(sub["true_positives"], sub["n_predicted"])
+                sub_recall = _ratio(sub["true_positives"], certain)
+                assert sub["precision"] == pytest.approx(sub_precision), where
+                assert sub["recall"] == pytest.approx(sub_recall), where
+                assert sub["f1"] == pytest.approx(
+                    _f1(sub_precision, sub_recall)
+                ), where
+                assert sub["true_positives"] <= min(certain, sub["n_predicted"]), where
+
+    # The band sweep publishes the same rates and must obey the same
+    # arithmetic; it carries no denominator of its own, so it is checked
+    # against the label total the rest of the report is scored on.
+    for block in report["protocols"][PROTOCOL_FRAME_RATE]["band_sweep_by_rate"]:
+        for row in block["entries"]:
+            where = f"band {row['band_px']:g}px/{row['tracker']}@{row['level_label']}"
+            _assert_rates_follow_from_counts(row, total, where)
+            checked += 1
+
+    # 21 levels x 9 methods + 6 rates x 2 trackers x 7 bands.
+    assert checked == 21 * 9 + 6 * 2 * 7, checked
+
+
 # -- the reduction test: every protocol's identity level ---------------------
 
 
@@ -1237,6 +1431,17 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
     assert question["step_over_trade_off_reappears"] == observed
     assert question["step_over_rows"] == stepped
     assert question["verdict"].strip() != ""
+
+    # Both pins below derive from `stepped`, so an empty `stepped` would
+    # reduce them to False == False and None == None and they would stop
+    # biting without anything going red. The sweep observes 2 rows today;
+    # if it ever observed none, that is a finding to be looked at rather
+    # than a guard to be quietly satisfied.
+    assert stepped, (
+        "no swept (tracker, rate, band) row steps over, so the two pins "
+        "below are vacuous -- if the sweep genuinely stopped reaching the "
+        "mode, that is a change to the published answer, not to this test"
+    )
 
     # The two fields carrying the INTERESTING half of the answer, both
     # recomputed rather than trusted. "NOT with the engine's own tracker at
@@ -1515,6 +1720,56 @@ def test_the_published_figures_exist_for_every_protocol():
     assert report["figures"] == sorted(expected)
 
 
+def test_each_committed_figure_is_the_one_its_own_report_renders(tmp_path):
+    """Ties every committed PNG to the JSON it claims to draw.
+
+    Magic bytes and a size floor say a file is a PNG, not that it is a
+    picture of THIS report: a figure and the numbers under it can drift
+    apart silently, and the figure is what most readers actually look at.
+    Re-rendering the committed report and comparing bytes is the only
+    check that sees that, and matplotlib's Agg output is deterministic for
+    a fixed build -- five figures reproduce byte-for-byte across repeated
+    runs here.
+
+    The cost is that the comparison is sensitive to the RENDERING BUILD as
+    well as to the data: a different matplotlib or freetype lays glyphs
+    out differently, and this test would then fail on committed artefacts
+    that are perfectly honest. The failure message says so, and the fix in
+    that case is to regenerate the figures rather than to weaken this.
+    """
+    pytest.importorskip("matplotlib")
+    script = _load_script("bench_robustness")
+    report = _report()
+
+    for path in script.write_figures(report, tmp_path):
+        committed = FIGURE_DIR / path.name
+        assert path.read_bytes() == committed.read_bytes(), (
+            f"{committed.relative_to(ROOT)} is not what robustness.json "
+            f"renders. Either the figure is stale against the report -- "
+            f"regenerate with scripts/bench_robustness.py -- or this "
+            f"machine's matplotlib/freetype build lays the figure out "
+            f"differently from the one that produced the committed file."
+        )
+
+    # ... and the comparison must be capable of failing: if the renderer
+    # ignored the numbers it plots, every figure would match every report
+    # and the assertion above would be decoration.
+    perturbed = copy.deepcopy(report)
+    entry = perturbed["protocols"][PROTOCOL_FRAME_RATE]["entries"][-1]
+    entry["methods"]["engine+gate"]["f1"] = 0.5
+    altered = tmp_path / "altered"
+    rendered = {
+        path.name: path.read_bytes()
+        for path in script.write_figures(perturbed, altered)
+    }
+    name = f"robustness_{PROTOCOL_FRAME_RATE}.png"
+    assert rendered[name] != (FIGURE_DIR / name).read_bytes(), (
+        "changing a plotted F1 left the rendered figure identical, so the "
+        "figure is not a function of the report and pinning its bytes "
+        "proves nothing"
+    )
+
+
 # -- the report assembler ----------------------------------------------------
 
 
@@ -1538,7 +1793,12 @@ def _synthetic_ground_truth(labels) -> GroundTruth:
 def _built_report() -> dict:
     script = _load_script("bench_robustness")
     return script.build_report(
-        _traffic([(50, 60.0), (80, 160.0), (120, 260.0)]),
+        # The traffic must cross where the labels say it does. Nothing
+        # downstream of this helper reads a crossing-level score, so the
+        # old mismatched pairing was harmless here -- but it was the last
+        # copy in this file of the fixture bug the reduction test had, and
+        # a harmless copy is what the next reader learns from.
+        _synthetic_stream(),
         _synthetic_ground_truth(_synthetic_labels()),
         _gate(),
         noise=json.loads(NOISE_REPORT.read_text()),

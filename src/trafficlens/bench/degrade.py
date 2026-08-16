@@ -72,8 +72,24 @@ the level VALUE -- never from one sequence consumed in sweep order.
 Otherwise adding a sweep point silently moves every published number
 after it, and the re-run would look like a measurement.
 
-numpy + stdlib + ``trafficlens.bench.scoring`` / ``.slitscan`` /
-``trafficlens.core.gate`` / ``trafficlens.detect.base`` only.
+What may be imported here, in full
+----------------------------------
+numpy, the standard library, and exactly these four -- spelled out rather
+than abbreviated, because ``tests/test_bench_robustness.py`` asserts this
+list and the module's real import graph against each other in BOTH
+directions:
+
+- ``trafficlens.bench.scoring``
+- ``trafficlens.bench.slitscan``
+- ``trafficlens.core.gate``
+- ``trafficlens.detect.base``
+
+Nothing else, and in particular no RELATIVE import. A sibling-relative
+form names no absolute module at all, so it reaches the harness -- which
+imports the tracker -- while staying invisible to any pin that reads the
+imported module's name. They are rejected outright rather than resolved.
+Dynamic import machinery is refused for the same reason: a module fetched
+by name at runtime cannot be seen by a check that reads the import graph.
 """
 
 from __future__ import annotations
