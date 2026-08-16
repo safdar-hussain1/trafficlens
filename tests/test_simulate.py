@@ -233,6 +233,46 @@ def test_the_full_chain_at_zero_noise_misses_by_the_kalman_lag_and_only_that(
     assert max(abs(s.error_kmh) for s in tracked.settled_samples) < 0.4
 
 
+def test_the_kalman_smoothing_trade_is_not_a_uniform_win(plane):
+    """What the Kalman lag BUYS, measured rather than assumed.
+
+    The speed estimator is fed the tracker's smoothed anchor; the
+    alternative is the raw detection's own bottom-centre. It is tempting
+    to write that the smoothing pays for its lag with noise robustness --
+    and at the bottom of the speed range it does. It does not at the top,
+    which is exactly where the lag costs the most. This pins the crossover
+    so that claim cannot quietly become an assertion again.
+
+    Measured at the sigma taken from reports/detection_noise.json, over
+    scenes where the tracker loses no vehicle at all, so the two columns
+    differ by the anchor and nothing else.
+    """
+    measured = (0.3344, 0.0971, 1.0294, 0.5232)
+    smoothed, raw = {}, {}
+    for seed in range(6):
+        scene = simulate_scene(
+            plane,
+            speeds_kmh=BANDS,
+            n_vehicles=3,
+            fps=FPS,
+            seed=seed,
+            box_noise_px=measured,
+        )
+        tracked = score_scene(scene)
+        assert tracked.lost_vehicles == (), tracked.lost_vehicles
+        for sample in tracked.settled_samples:
+            smoothed.setdefault(sample.truth_kmh, []).append(sample.error_kmh)
+        for sample in score_scene(scene, bypass_tracker=True).settled_samples:
+            raw.setdefault(sample.truth_kmh, []).append(sample.error_kmh)
+
+    def rmse(values):
+        return math.sqrt(sum(v * v for v in values) / len(values))
+
+    slowest, fastest = min(BANDS), max(BANDS)
+    assert rmse(smoothed[slowest]) < rmse(raw[slowest]), "smoothing should win slow"
+    assert rmse(smoothed[fastest]) > rmse(raw[fastest]), "and lose fast"
+
+
 def test_non_zero_noise_degrades_the_estimate_monotonically(plane):
     """sigma is swept as a multiple of the MEASURED per-component vector,
     so every point on the curve is a stated multiple of a number taken

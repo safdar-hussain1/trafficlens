@@ -792,9 +792,9 @@ def build_fixture() -> tuple[dict, dict]:
     # Parity does not need those correspondences to be TRUE. What it needs
     # is one fixed 3x3 matrix that both engines are handed, so that any
     # disagreement is the two implementations disagreeing rather than two
-    # different calibrations. Rebuilding the old survey's homography here
-    # keeps the speed path -- the longest float64 chain in the engine, and
-    # the one most likely to diverge across languages -- covered by the
+    # different calibrations. Reconstructing the old survey's homography
+    # here keeps the speed path -- the longest float64 chain in the engine,
+    # and the one most likely to diverge across languages -- covered by the
     # parity suite, which removing the calibration would otherwise have
     # silently deleted. It is an instrument, not a calibration, and nothing
     # downstream of it reports a km/h figure about this clip.

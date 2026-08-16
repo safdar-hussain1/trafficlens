@@ -87,6 +87,24 @@ BANNED = [a + b for a, b in [
     ("co-auth", "ored"),
 ]]
 
+# Inflections of the banned stems, because the constraint is about the WORD,
+# not about one spelling of it. Anchoring a stem with \b on both sides lets
+# its -ing and -s forms through, which satisfies the letter of the rule while
+# breaking its intent -- and that is exactly what happened: a tracked comment
+# used the -ing form of BANNED[0] and this guard ran green over it.
+#
+# The suffixes are the regular English inflections that apply to a verb or a
+# noun stem. They are OPTIONAL, so every bare stem still matches as before;
+# this only ever widens. The two entries that are already terminal forms
+# (the adverb and the hyphenated participle) pick up nothing from it, which
+# is correct.
+_INFLECTIONS = r"(?:s|es|ed|ing|d)?"
+
+
+def _banned_pattern(word: str) -> str:
+    return r"\b" + re.escape(word) + _INFLECTIONS + r"\b"
+
+
 def test_no_banned_words_in_tracked_files():
     hits = []
     for f in _text_files():
@@ -95,9 +113,49 @@ def test_no_banned_words_in_tracked_files():
             continue
         text = f.read_text(errors="ignore").lower()
         for w in BANNED:
-            if re.search(r"\b" + re.escape(w) + r"\b", text):
-                hits.append(f"{rel}: {w}")
+            match = re.search(_banned_pattern(w), text)
+            if match:
+                hits.append(f"{rel}: {match.group(0)}")
     assert hits == [], hits
+
+
+def test_the_word_guard_catches_inflections_and_not_unrelated_words():
+    """A discriminating pair, varying one axis: whether the token is an
+    inflection of a banned stem.
+
+    The must-catch half is the hole this closes -- the bare-stem rule let
+    every -ing/-s/-ed form through. The must-spare half is what stops the
+    widening turning into a substring match: a longer word that merely
+    STARTS with a banned stem is not that word, and a rule that had simply
+    stopped anchoring on word boundaries would pass the first half alone.
+    """
+    stem_rebuild, stem_revisit, stem_college = BANNED[0], BANNED[2], BANNED[3]
+
+    caught = [
+        stem_rebuild + "ing", stem_rebuild + "s", stem_rebuild + "ed",
+        stem_revisit + "ing", stem_revisit + "ed", stem_revisit + "s",
+        stem_college + "s",
+        stem_rebuild,  # the bare stem must still match
+    ]
+    for token in caught:
+        assert re.search(_banned_pattern(stem_rebuild), token) or re.search(
+            _banned_pattern(stem_revisit), token
+        ) or re.search(_banned_pattern(stem_college), token), (
+            f"{token!r} slipped past the widened guard"
+        )
+
+    # Unrelated longer words that begin with a banned stem, and a hyphenated
+    # form that is a different word. None of these may fire.
+    spared = [
+        stem_rebuild + "able", stem_revisit + "ation", stem_college + "ial",
+        stem_rebuild + "er",
+    ]
+    for token in spared:
+        for stem in (stem_rebuild, stem_revisit, stem_college):
+            assert not re.search(_banned_pattern(stem), token), (
+                f"{token!r} is a false positive: it merely starts with a "
+                f"banned stem"
+            )
 
 def test_no_absolute_user_paths_in_tracked_files():
     needle = "/Us" + "ers/"
