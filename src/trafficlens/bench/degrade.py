@@ -88,8 +88,13 @@ Nothing else, and in particular no RELATIVE import. A sibling-relative
 form names no absolute module at all, so it reaches the harness -- which
 imports the tracker -- while staying invisible to any pin that reads the
 imported module's name. They are rejected outright rather than resolved.
-Dynamic import machinery is refused for the same reason: a module fetched
-by name at runtime cannot be seen by a check that reads the import graph.
+
+For the same reason the four ways of reaching a module without leaving an
+import node are refused by name: ``importlib`` is off the allowlist, and
+``__import__``, ``exec`` and ``eval`` are rejected wherever they appear.
+That is the whole of what is enforced -- a check on the import graph
+cannot see a module fetched at runtime, so the escape hatches are named
+rather than the property being asserted in general.
 """
 
 from __future__ import annotations

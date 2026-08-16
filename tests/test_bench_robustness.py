@@ -281,8 +281,11 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                target = star_from if alias.name == "*" else bound
-                target.add(alias.name)
+                if alias.name == "*":
+                    # Name the MODULE that was star-imported, not the "*".
+                    star_from.add("." * node.level + (node.module or ""))
+                else:
+                    bound.add(alias.name)
             if node.level:
                 relative.append("." * node.level + (node.module or ""))
             elif node.module:
@@ -317,7 +320,15 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
         "numpy",
         "typing",
     }
-    assert imported <= allowed, sorted(imported - allowed)
+    assert imported <= allowed, (
+        f"degrade.py imports {sorted(imported - allowed)}, which is not on "
+        f"the allowlist this module's docstring states. The seam is the "
+        f"reason degrade.py is its own file, so widening it is a decision: "
+        f"if the import is genuinely harmless, add it BOTH here and to the "
+        f"docstring's list -- the two are asserted against each other -- and "
+        f"if it reaches a tracker, a detector or a counting rule, it is the "
+        f"thing this pin exists to stop."
+    )
 
     # An allowed MODULE is not a licence to import anything inside it:
     # trafficlens.core.gate carries both the CrossingEvent type this module
@@ -333,12 +344,22 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
     assert bound & never_bound == set(), sorted(bound & never_bound)
     # A star import would smuggle every one of those in unnamed.
     assert star_from == set(), sorted(star_from)
-    # ... and __import__ would bypass the import graph altogether.
-    assert not [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Name) and node.id == "__import__"
-    ], "degrade.py must not call __import__"
+    # ... and __import__, exec or eval would bypass the import graph
+    # altogether: none of the three leaves an import node to read, so the
+    # docstring's claim that dynamic import machinery is refused is only
+    # true if the machinery itself is refused by name.
+    smuggled = sorted(
+        {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+            and node.id in {"__import__", "exec", "eval"}
+        }
+    )
+    assert smuggled == [], (
+        f"degrade.py must not call {smuggled}: each one can reach a tracker "
+        f"without leaving an import node for this pin to read"
+    )
 
     assert "trafficlens.bench.scoring" in imported  # the scorer
     assert "trafficlens.detect.base" in imported  # the Detection type
@@ -1616,6 +1637,8 @@ def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor(
     assert ablation["floors"] == [TRACK_MATCH_IOU, BASELINE_GREEDY_IOU_THRESH]
     assert set(ablation["by_protocol"]) == set(report["protocols"])
 
+    total = report["labels"]["total"]
+    cells = 0
     gains = []
     for protocol, rows in ablation["by_protocol"].items():
         entries = report["protocols"][protocol]["entries"]
@@ -1631,6 +1654,31 @@ def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor(
                 row["n_predicted"][shipped]
                 == entry["methods"]["engine+gate"]["n_predicted"]
             )
+            assert (
+                row["true_positives"][shipped]
+                == entry["methods"]["engine+gate"]["true_positives"]
+            )
+
+            # BOTH columns' cells recomputed from the counts published
+            # beside them. The shipped column is cross-referenced to the
+            # main sweep above; the LOOSENED column is this ablation's own
+            # measurement and has no such anchor, so without this an F1
+            # pasted into it -- inflated to overstate the mechanism, or
+            # flattened onto the shipped column to erase it -- passes while
+            # every summary above is honestly recomputed from the forgery.
+            for floor in ablation["floors"]:
+                key = f"{floor:g}"
+                where = f"{protocol}@{row['level_label']}/floor {key}"
+                true_positives = row["true_positives"][key]
+                n_predicted = row["n_predicted"][key]
+                assert true_positives <= min(n_predicted, total), where
+                precision = _ratio(true_positives, n_predicted)
+                recall = _ratio(true_positives, total)
+                assert row["f1"][key] == pytest.approx(
+                    _f1(precision, recall)
+                ), where
+                cells += 1
+
             gains.append(
                 {
                     "protocol": protocol,
@@ -1638,6 +1686,10 @@ def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor(
                     "gain": row["f1"][loosened] - row["f1"][shipped],
                 }
             )
+
+    # 21 levels x 2 floors, asserted so the loop cannot silently stop
+    # covering cells.
+    assert cells == 21 * len(ablation["floors"]), cells
 
     best = max(gains, key=lambda row: row["gain"])
     assert ablation["largest_f1_gain"]["gain"] == pytest.approx(best["gain"])
@@ -1720,35 +1772,53 @@ def test_the_published_figures_exist_for_every_protocol():
     assert report["figures"] == sorted(expected)
 
 
+def _png_pixels(path: Path):
+    """A PNG's decoded pixels, ignoring everything that is not picture.
+
+    Comparing PNG BYTES would be comparing the encoder as well as the
+    image. matplotlib stamps its own version into an ancillary ``tEXt``
+    chunk -- the committed figures carry ``Software\\0Matplotlib
+    version3.11.1`` -- while ``pyproject.toml`` permits anything in
+    ``matplotlib>=3.8,<4``. Any other version inside that cap therefore
+    fails a byte comparison on a render that is pixel-for-pixel correct,
+    which would turn a clean-clone install into a false alarm and make
+    "regenerate the figures" the prescribed remedy for a problem the
+    figures do not have.
+
+    Pillow is a hard dependency of matplotlib, so decoding costs nothing.
+    """
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return np.asarray(image.convert("RGBA"))
+
+
 def test_each_committed_figure_is_the_one_its_own_report_renders(tmp_path):
     """Ties every committed PNG to the JSON it claims to draw.
 
     Magic bytes and a size floor say a file is a PNG, not that it is a
     picture of THIS report: a figure and the numbers under it can drift
     apart silently, and the figure is what most readers actually look at.
-    Re-rendering the committed report and comparing bytes is the only
-    check that sees that, and matplotlib's Agg output is deterministic for
-    a fixed build -- five figures reproduce byte-for-byte across repeated
-    runs here.
+    Re-rendering the committed report and comparing the result is the only
+    check that sees that.
 
-    The cost is that the comparison is sensitive to the RENDERING BUILD as
-    well as to the data: a different matplotlib or freetype lays glyphs
-    out differently, and this test would then fail on committed artefacts
-    that are perfectly honest. The failure message says so, and the fix in
-    that case is to regenerate the figures rather than to weaken this.
+    The comparison is on decoded PIXELS, not on file bytes -- see
+    ``_png_pixels`` for why. That keeps the catch (a figure drawn from
+    different numbers differs in pixels) while dropping a sensitivity to
+    the encoder that has nothing to do with whether the figure is honest.
     """
     pytest.importorskip("matplotlib")
+    pytest.importorskip("PIL")
     script = _load_script("bench_robustness")
     report = _report()
 
     for path in script.write_figures(report, tmp_path):
         committed = FIGURE_DIR / path.name
-        assert path.read_bytes() == committed.read_bytes(), (
-            f"{committed.relative_to(ROOT)} is not what robustness.json "
-            f"renders. Either the figure is stale against the report -- "
-            f"regenerate with scripts/bench_robustness.py -- or this "
-            f"machine's matplotlib/freetype build lays the figure out "
-            f"differently from the one that produced the committed file."
+        assert np.array_equal(_png_pixels(path), _png_pixels(committed)), (
+            f"{committed.relative_to(ROOT)} is not the picture "
+            f"robustness.json renders: the committed figure is stale "
+            f"against the report it claims to draw. Regenerate both with "
+            f"scripts/bench_robustness.py."
         )
 
     # ... and the comparison must be capable of failing: if the renderer
@@ -1758,15 +1828,14 @@ def test_each_committed_figure_is_the_one_its_own_report_renders(tmp_path):
     entry = perturbed["protocols"][PROTOCOL_FRAME_RATE]["entries"][-1]
     entry["methods"]["engine+gate"]["f1"] = 0.5
     altered = tmp_path / "altered"
-    rendered = {
-        path.name: path.read_bytes()
-        for path in script.write_figures(perturbed, altered)
-    }
+    rendered = {path.name: path for path in script.write_figures(perturbed, altered)}
     name = f"robustness_{PROTOCOL_FRAME_RATE}.png"
-    assert rendered[name] != (FIGURE_DIR / name).read_bytes(), (
+    assert not np.array_equal(
+        _png_pixels(rendered[name]), _png_pixels(FIGURE_DIR / name)
+    ), (
         "changing a plotted F1 left the rendered figure identical, so the "
-        "figure is not a function of the report and pinning its bytes "
-        "proves nothing"
+        "figure is not a function of the report and pinning it proves "
+        "nothing"
     )
 
 
