@@ -41,6 +41,11 @@ interface CachedResponseLike {
 interface CacheLike {
   match(url: string): Promise<CachedResponseLike | undefined>;
   put(url: string, response: unknown): Promise<void>;
+  /** Both optional: eviction is a courtesy to the visitor's disk, not a
+   * correctness requirement, and a storage that cannot enumerate itself must
+   * still be usable for the download that matters. */
+  keys?(): Promise<readonly { readonly url: string }[]>;
+  delete?(url: string): Promise<boolean>;
 }
 
 interface CacheStorageLike {
@@ -52,9 +57,47 @@ export interface LoadOptions {
   readonly storage?: CacheStorageLike | undefined;
   readonly fetchImpl?: ((url: string) => Promise<ResponseLike>) | undefined;
   readonly cacheName?: string | undefined;
+  /** A token identifying the CONTENT at `url`, not the path to it. Supply the
+   * model's digest here; see `cacheKeyFor`. */
+  readonly version?: string | undefined;
 }
 
 export const MODEL_CACHE_NAME = "trafficlens-models-v1";
+
+/** The key an entry is stored under.
+ *
+ * Cache Storage matches on the request and, unlike the HTTP cache, consults no
+ * freshness metadata at all: an entry stored under a URL is served forever. So
+ * a model replaced at the same path would strand every returning visitor on the
+ * old graph while the page went on reporting the new graph's accuracy. Keying
+ * on the content version turns a replacement into a miss, which is the only
+ * behaviour that survives a redeploy. Callers with no version keep the bare URL
+ * -- unchanged behaviour for anything whose bytes cannot change. */
+export function cacheKeyFor(url: string, version?: string | undefined): string {
+  return version === undefined || version === "" ? url : `${url}?v=${version}`;
+}
+
+/** Drop every other entry for the same url, whatever version it carried: the
+ * old bytes can never be wanted again once the page has asked for new ones, and
+ * a stale copy of a model this size is a real cost to the visitor's disk. */
+async function evictOtherVersions(cache: CacheLike, url: string, keep: string): Promise<void> {
+  if (cache.keys === undefined || cache.delete === undefined) {
+    return;
+  }
+  try {
+    for (const request of await cache.keys()) {
+      const stored = request.url;
+      if (stored === keep) {
+        continue;
+      }
+      if (stored === url || stored.startsWith(`${url}?v=`)) {
+        await cache.delete(stored);
+      }
+    }
+  } catch {
+    // Eviction is best-effort throughout; the visitor has the bytes either way.
+  }
+}
 
 function defaultStorage(): CacheStorageLike | undefined {
   return typeof caches === "undefined" ? undefined : (caches as unknown as CacheStorageLike);
@@ -75,6 +118,7 @@ export async function loadCachedBytes(
   const fetchImpl =
     options.fetchImpl ?? ((target: string) => fetch(target) as unknown as Promise<ResponseLike>);
   const cacheName = options.cacheName ?? MODEL_CACHE_NAME;
+  const cacheKey = cacheKeyFor(url, options.version);
 
   let cache: CacheLike | undefined;
   if (storage !== undefined) {
@@ -87,7 +131,7 @@ export async function loadCachedBytes(
 
   if (cache !== undefined) {
     try {
-      const hit = await cache.match(url);
+      const hit = await cache.match(cacheKey);
       if (hit !== undefined && hit.ok) {
         const bytes = await hit.arrayBuffer();
         onProgress?.({
@@ -147,7 +191,8 @@ export async function loadCachedBytes(
     try {
       // A fresh Response rather than the fetched one: its body has been
       // consumed by the reader above and cannot be put a second time.
-      await cache.put(url, new Response(bytes.buffer as ArrayBuffer));
+      await cache.put(cacheKey, new Response(bytes.buffer as ArrayBuffer));
+      await evictOtherVersions(cache, url, cacheKey);
     } catch {
       // Quota refusals are expected at this size. The visitor has the bytes.
     }

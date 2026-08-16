@@ -4,13 +4,220 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TrafficLens</title>
+    <!-- Inline, so the page makes no request for it: a favicon 404 is noise in
+         every console a visitor opens, and the mark is two shapes -- the road's
+         ground and the gate drawn across it. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2322262B'/%3E%3Cpath d='M4 21h24' stroke='%230058A3' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M6 27h5M14 27h5M22 27h5' stroke='%23E8E6E1' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
     <meta
       name="description"
       content="Traffic analytics from any camera: gate counting, calibrated speeds, and a detector that runs on your own GPU."
     />
+    <script>
+      // Ahead of first paint, and ahead of the bundle: a stored theme has to be
+      // on the document before anything is drawn, or the page flashes the other
+      // theme on every load. The toggle writes localStorage BEFORE it touches
+      // the document, so a reload can never lose the choice.
+      try {
+        var stored = localStorage.getItem("trafficlens-theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {
+        // Storage can be unavailable (private mode, blocked cookies). The page
+        // then follows the operating system, which is the right default anyway.
+      }
+    </script>
   </head>
   <body>
-    <main id="app"></main>
+    <a class="skip-link" href="#control-room">Skip to the control room</a>
+
+    <header class="masthead">
+      <div class="wordmark">Traffic<span>lens</span></div>
+      <div class="badge" id="backend-badge" role="status" aria-live="polite">
+        <span class="badge__renderer">Checking what this machine can run…</span>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" type="button">Theme</button>
+    </header>
+
+    <main>
+      <section id="control-room">
+        <div class="hero-head">
+          <div>
+            <h1>Count vehicles across a line you draw yourself.</h1>
+            <p class="lede">
+              The detector runs here, in this tab, on your own hardware. Drag the gate on the
+              video and watch the diagram beside it: a count fires exactly where a vehicle's
+              trajectory crosses the gate line, and the marker is drawn where it happened.
+            </p>
+          </div>
+        </div>
+
+        <div class="stage">
+          <figure class="panel">
+            <figcaption class="panel__head">
+              <span>Camera</span>
+              <span class="panel__note" id="video-note">stopped</span>
+            </figcaption>
+            <div class="canvas-wrap" id="stage-video">
+              <canvas id="video-canvas"></canvas>
+              <button class="handle handle--start" id="handle-start" type="button">
+                <span class="visually-hidden">Gate start. Arrow keys move it.</span>
+              </button>
+              <button class="handle handle--body" id="handle-body" type="button">
+                <span class="visually-hidden">Whole gate. Arrow keys move it.</span>
+              </button>
+              <button class="handle handle--end" id="handle-end" type="button">
+                <span class="visually-hidden">Gate end. Arrow keys move it.</span>
+              </button>
+              <div class="empty-state" id="empty-state">
+                <p id="empty-text">
+                  Start runs a 10.7 MB detector in this tab. It downloads once, is cached
+                  afterwards, and no frame ever leaves your device.
+                </p>
+                <progress class="progress" id="load-progress" hidden max="1" value="0"></progress>
+              </div>
+            </div>
+            <figcaption id="video-caption">Loading the source…</figcaption>
+          </figure>
+
+          <figure class="panel">
+            <figcaption class="panel__head">
+              <span>Time–space diagram</span>
+              <span class="panel__note" id="chart-note">position from the gate, in pixels</span>
+            </figcaption>
+            <div class="canvas-wrap">
+              <canvas id="chart-canvas"></canvas>
+            </div>
+            <div class="legend">
+              <span class="swatch-gate"><i></i> gate (position 0)</span>
+              <span class="swatch-band"><i></i> ±20 px band</span>
+              <span class="swatch-trace"><i></i> in the gate's span</span>
+              <span class="swatch-outside swatch-trace"><i></i> past its ends</span>
+              <span class="swatch-gate">▲ ▼ counted crossing</span>
+            </div>
+            <figcaption>
+              Time runs left to right; the vertical axis is distance from the gate line. A
+              trajectory touching zero <em>is</em> the crossing, so every marker sits on the axis.
+            </figcaption>
+          </figure>
+        </div>
+
+        <hr class="leitlinie" />
+
+        <div class="readouts">
+          <div class="readout">
+            <h3>Counted</h3>
+            <span class="total" id="total-count">0</span>
+            <span class="total__unit" id="total-unit">crossings of the gate</span>
+            <p class="reason" id="counting-since"></p>
+          </div>
+          <div class="readout">
+            <h3>By class</h3>
+            <table class="figures" id="class-counts">
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="readout">
+            <h3>By direction</h3>
+            <table class="figures" id="direction-counts">
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="readout">
+            <h3>Speed</h3>
+            <span class="refusal" id="speed-readout">no speed</span>
+            <p class="reason" id="speed-reason"></p>
+          </div>
+          <div class="readout">
+            <h3>Incidents</h3>
+            <div id="incidents"></div>
+          </div>
+        </div>
+
+        <hr class="leitlinie" />
+
+        <div class="controls">
+          <div class="switcher" id="source-switcher" role="group" aria-label="Source"></div>
+          <div class="actions">
+            <button class="button button--primary" id="start-button" type="button">Start</button>
+            <button class="button" id="reset-button" type="button">Reset counts</button>
+          </div>
+        </div>
+        <p class="status-line" id="status-line"></p>
+      </section>
+
+      <hr class="leitlinie" />
+
+      <section class="prose">
+        <h2>How the count is decided</h2>
+        <p>
+          A gate is a directed line <strong>segment</strong>, not a line. Every frame, each
+          tracked vehicle's anchor — the bottom centre of its box, where it meets the road —
+          moves from one point to the next. If that step's path meets the gate segment, the
+          vehicle is counted once, labelled by the side it ended up on, and never counted
+          again however long it lingers.
+        </p>
+        <p>
+          The common shortcut is a band: count a vehicle when it is within some pixels of the
+          line. The diagram shows both ways that fails. A fast vehicle steps clean across a
+          thin band between two frames and is never counted; a slow one sits inside the band
+          for a second and is counted on every frame it stays there. Crossing is a property of
+          the path, not of a distance, which is why the engine tests the path.
+        </p>
+      </section>
+
+      <hr class="leitlinie" />
+
+      <section class="prose notes">
+        <div class="note">
+          <h3>Why there is no speed here</h3>
+          <p>
+            Speed needs a surveyed road plane. None of the three sources on this page has one
+            with an independent along-road anchor, so the engine returns nothing rather than
+            converting pixels into km/h. Stopped-vehicle detection needs the same survey, so it
+            never fires here either — the panel says so instead of sitting empty.
+          </p>
+        </div>
+        <div class="note">
+          <h3>Limits are set by you</h3>
+          <p>
+            There is no speed limit configured on this page. The motorway clip has a limit sign
+            on the median whose digits are not legible at this resolution, so nothing here
+            refers to a posted limit. Where a deployment sets one, it is a user-set number and
+            the interface says which.
+          </p>
+        </div>
+        <div class="note">
+          <h3>What runs where</h3>
+          <p>
+            The model is a YOLO11n graph exported at 480 px, 10.7 MB, downloaded once and kept
+            in Cache Storage. It runs on WebGPU where the machine grants an adapter and on
+            single-threaded WebAssembly where it does not. The badge above names which one you
+            got and what it measured.
+          </p>
+        </div>
+        <div class="note">
+          <h3>Detecting and drawing are separate</h3>
+          <p>
+            The page draws every frame and detects on the cadence the measured backend can
+            actually sustain, then says which it is doing. A machine that cannot detect every
+            frame still tracks and draws smoothly; it just detects less often, and the badge
+            reports that rather than hiding it.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Engine and site MIT. The detector weights are an export of Ultralytics YOLO11n and are
+      AGPL-3.0 — see the
+      <a href="models/MODEL_CARD.md">model card</a> beside the graph. Numbers on this page were measured in
+      your browser, in this session.
+    </footer>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

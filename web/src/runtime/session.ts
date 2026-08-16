@@ -68,6 +68,10 @@ export interface BrowserDepsOptions {
   readonly importOrt?: ((url: string) => Promise<OrtModule>) | undefined;
   /** Defaults to the live `crossOriginIsolated`. */
   readonly isolated?: boolean | undefined;
+  /** A token for the model's CONTENT, passed through to the cache so that
+   * replacing the graph at the same path is a miss rather than an invisible
+   * no-op for returning visitors. */
+  readonly contentVersion?: string | undefined;
 }
 
 /** Resolve a vendored asset against the page, so the site works from a project
@@ -92,7 +96,13 @@ export function browserDeps(options: BrowserDepsOptions = {}): SessionDeps {
     // rewritten into a bundled chunk; see the module comment.
     ((url: string) => import(/* @vite-ignore */ url) as Promise<OrtModule>);
   return {
-    load: (url, onProgress) => loadCachedBytes(url, { ...(onProgress ? { onProgress } : {}) }),
+    load: (url, onProgress) =>
+      loadCachedBytes(url, {
+        ...(onProgress ? { onProgress } : {}),
+        ...(options.contentVersion === undefined
+          ? {}
+          : { version: options.contentVersion }),
+      }),
     create: async (model, sessionOptions) => {
       const entry = vendoredUrl(ORT_ENTRY, options.baseUri);
       const ort = await importOrt(entry);

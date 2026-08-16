@@ -48,9 +48,9 @@ import { describe, expect, test } from "vitest";
 
 import { Gate, GateCounter } from "./engine/gate";
 import type { CrossingEvent } from "./engine/gate";
-import type { Point } from "./engine/geometry";
 import { RoadPlane } from "./engine/homography";
-import { SpeedEstimator } from "./engine/speed";
+import { SessionPipeline } from "./engine/pipeline";
+import type { Counts } from "./engine/pipeline";
 import { Tracker } from "./engine/tracker";
 import type { Detection } from "./engine/tracker";
 import { decodeYolo } from "./runtime/postprocess";
@@ -102,8 +102,6 @@ interface ExpectedEvent {
   readonly speedKmh: number | null;
   readonly isViolation: boolean;
 }
-
-type Counts = Record<string, Record<string, Record<string, number>>>;
 
 interface TrackerCase {
   readonly name: string;
@@ -229,33 +227,31 @@ function countsOf(counters: Map<string, GateCounter>): Counts {
   return out;
 }
 
-/** The per-frame loop `trafficlens.pipeline.run_session` runs, reduced to the
- * parts a parity comparison can see: track, observe, count, reap.
+/** Replay a fixture case through the SHIPPED per-frame loop.
  *
- * The reaping rule is the pipeline's own and matters to the comparison: a
- * confirmed track survives while `timeSinceUpdate <= maxAge` and may
- * re-associate at exactly `maxAge`, so a track unseen for STRICTLY MORE than
- * `maxAge` frames is the first moment it is provably gone. Reaping one frame
- * early would forget a gate counter's `_counted` entry while the track could
- * still return, and the same vehicle would be counted twice. */
+ * `SessionPipeline` is the loop `trafficlens.pipeline.run_session` mirrors --
+ * track, observe, count, reap -- and it is the same object the live control
+ * room and the in-page selftest run. That is deliberate: this file used to
+ * carry its own copy of the loop, which meant the code proven to agree with
+ * Python and the code the visitor's browser executes were two things that
+ * merely looked alike. */
 function replay(testCase: TrackerCase): ReplayResult {
-  const gates = testCase.gates.map(toGate);
-  const counters = new Map(gates.map((gate) => [gate.name, new GateCounter(gate)]));
-  const tracker = new Tracker({
-    highThresh: FIXTURE.tracker.highThresh,
-    lowThresh: FIXTURE.tracker.lowThresh,
-    matchThresh: FIXTURE.tracker.matchThresh,
-    maxAge: FIXTURE.tracker.maxAge,
-    minHits: FIXTURE.tracker.minHits,
+  const pipeline = new SessionPipeline({
+    gates: testCase.gates.map(toGate),
+    plane: new RoadPlane(FIXTURE.plane.imageToWorld),
+    fps: FIXTURE.source.fps,
+    speedLimitKmh: FIXTURE.speedLimitKmh,
+    tracker: {
+      highThresh: FIXTURE.tracker.highThresh,
+      lowThresh: FIXTURE.tracker.lowThresh,
+      matchThresh: FIXTURE.tracker.matchThresh,
+      maxAge: FIXTURE.tracker.maxAge,
+      minHits: FIXTURE.tracker.minHits,
+    },
   });
-  const plane = new RoadPlane(FIXTURE.plane.imageToWorld);
-  const speed = new SpeedEstimator(plane, FIXTURE.source.fps);
 
-  const previousAnchor = new Map<number, Point>();
-  const lastSeen = new Map<number, number>();
   const frames: { frameIndex: number; tracks: ExpectedTrack[] }[] = [];
   const events: CrossingEvent[] = [];
-  let allocated = 0;
 
   for (const frame of testCase.frames) {
     const detections: Detection[] = frame.detections.map((d) => ({
@@ -267,54 +263,24 @@ function replay(testCase: TrackerCase): ReplayResult {
       classId: d.classId,
       className: d.className,
     }));
-    const tracks = tracker.update(detections, frame.frameIndex);
-    const row: ExpectedTrack[] = [];
-
-    for (const track of tracks) {
-      const anchor = track.anchor;
-      lastSeen.set(track.trackId, frame.frameIndex);
-      allocated = Math.max(allocated, track.trackId);
-
-      speed.observe(track.trackId, anchor, frame.timestamp);
-      const speedKmh = speed.speedKmh(track.trackId);
-      row.push({ trackId: track.trackId, className: track.className, speedKmh });
-
-      const previous = previousAnchor.get(track.trackId);
-      if (previous !== undefined) {
-        for (const gate of gates) {
-          const event = (counters.get(gate.name) as GateCounter).update(
-            track.trackId,
-            track.className,
-            previous,
-            anchor,
-            frame.frameIndex,
-            frame.timestamp,
-            speedKmh,
-            FIXTURE.speedLimitKmh,
-          );
-          if (event !== null) {
-            events.push(event);
-          }
-        }
-      }
-      previousAnchor.set(track.trackId, anchor);
-    }
-
-    for (const [trackId, seen] of [...lastSeen]) {
-      if (frame.frameIndex - seen > FIXTURE.tracker.maxAge) {
-        lastSeen.delete(trackId);
-        for (const counter of counters.values()) {
-          counter.forget(trackId);
-        }
-        speed.forget(trackId);
-        previousAnchor.delete(trackId);
-      }
-    }
-
-    frames.push({ frameIndex: frame.frameIndex, tracks: row });
+    const step = pipeline.step(detections, frame.frameIndex, frame.timestamp);
+    events.push(...step.events);
+    frames.push({
+      frameIndex: frame.frameIndex,
+      tracks: step.tracks.map((t) => ({
+        trackId: t.trackId,
+        className: t.className,
+        speedKmh: t.speedKmh,
+      })),
+    });
   }
 
-  return { frames, events, counts: countsOf(counters), tracksAllocated: allocated };
+  return {
+    frames,
+    events,
+    counts: pipeline.counts(),
+    tracksAllocated: pipeline.tracksAllocated,
+  };
 }
 
 // -- assertions ---------------------------------------------------------------

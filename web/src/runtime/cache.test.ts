@@ -52,9 +52,14 @@ function fakeStorage() {
       entries.set(url, new Uint8Array(await response.arrayBuffer()));
     },
   };
+  const full = {
+    ...cache,
+    keys: async () => [...entries.keys()].map((url) => ({ url })),
+    delete: async (url: string) => entries.delete(url),
+  };
   return {
     entries,
-    storage: { open: async () => cache },
+    storage: { open: async () => full },
   };
 }
 
@@ -139,5 +144,65 @@ describe("loadCachedBytes", () => {
       }),
     ).rejects.toThrow(/404/);
     expect(entries.size).toBe(0);
+  });
+
+  // -- content versioning ------------------------------------------------------
+  //
+  // Cache Storage is keyed by request and bypasses HTTP freshness entirely, so
+  // a model replaced at the same path is invisible to a returning visitor: they
+  // keep running the old graph while the page claims the new one's accuracy.
+  // The fix is to key on the CONTENT, which makes a replacement a miss.
+
+  it("re-downloads when the content version changes, though the url has not", async () => {
+    const { storage } = fakeStorage();
+    const OLD = new Uint8Array([9, 9, 9]);
+    let served = OLD;
+    let fetches = 0;
+    const fetchImpl = async () => {
+      fetches += 1;
+      return streamingResponse(served, 8, served.length);
+    };
+
+    const first = await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "aaaa" });
+    expect(new Uint8Array(first)).toEqual(OLD);
+    expect(fetches).toBe(1);
+
+    served = BODY;
+    const second = await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "bbbb" });
+    expect(fetches).toBe(2);
+    expect(new Uint8Array(second)).toEqual(BODY);
+  });
+
+  it("still serves an unchanged version from the cache", async () => {
+    // The control: versioning must not defeat caching, or every visit pays the
+    // 10.7 MB again and the fix is worse than the bug.
+    const { storage } = fakeStorage();
+    let fetches = 0;
+    const fetchImpl = async () => {
+      fetches += 1;
+      return streamingResponse(BODY, 8, BODY.length);
+    };
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "aaaa" });
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "aaaa" });
+    expect(fetches).toBe(1);
+  });
+
+  it("evicts the superseded copy instead of keeping both", async () => {
+    // 10.7 MB per stale version is a real cost to a visitor's disk, and the old
+    // bytes can never be wanted again once the page asks for a new version.
+    const { storage, entries } = fakeStorage();
+    const fetchImpl = async () => streamingResponse(BODY, 8, BODY.length);
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "aaaa" });
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "bbbb" });
+    expect([...entries.keys()]).toEqual(["/m.onnx?v=bbbb"]);
+  });
+
+  it("leaves an unrelated url in the cache alone", async () => {
+    const { storage, entries } = fakeStorage();
+    const fetchImpl = async () => streamingResponse(BODY, 8, BODY.length);
+    await loadCachedBytes("/other.onnx", { fetchImpl, storage, version: "aaaa" });
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "aaaa" });
+    await loadCachedBytes("/m.onnx", { fetchImpl, storage, version: "bbbb" });
+    expect([...entries.keys()].sort()).toEqual(["/m.onnx?v=bbbb", "/other.onnx?v=aaaa"]);
   });
 });
