@@ -1,0 +1,784 @@
+{
+  "schema": 1,
+  "tier": 1,
+  "what_this_is": "Absolute speed accuracy where the ground truth is exact. The truth is an INPUT -- the caller's own list of speeds -- and is invariant under the seed, the noise level and the box model, i.e. under every knob that changes what the estimator is shown. Nothing the estimator produces feeds back into it.",
+  "limitations": "This measures the tracking -> homography -> speed chain and NOT the detector. The boxes are generated from a known 3-D scene, not detected, so nothing here says anything about detection accuracy, recall, class confusion, or how a real detector places a box on a real vehicle. The box-noise sigma is taken from reports/detection_noise.json, which labels itself a PROXY for detector jitter and is not a measurement of the detector either.",
+  "camera": {
+    "focal_px": 1400.0,
+    "principal_point_px": [
+      640.0,
+      360.0
+    ],
+    "height_m": 8.0,
+    "pitch_deg": 12.0,
+    "frame_px": [
+      1280,
+      720
+    ],
+    "note": "A camera on an overpass above a motorway, the deployment this product is built for. Vehicles are scored over world y = 30 to 140 m, the band in which the projected box spans about 66 px down to 15 px -- the near end matches the real clip's measured median box of 66.8 x 48.8 px."
+  },
+  "road_plane": {
+    "how_fitted": "RoadPlane.from_correspondences over six surveyed dash centroids on two divider lines 3.75 m apart, plus a two-point holdout -- the same SHAPE of survey a deployment does. Deliberately NOT the camera's analytic inverse.",
+    "holdout_max_error_m": 6.186672121032756e-06,
+    "holdout_mean_error_m": 6.142267506321332e-06
+  },
+  "settled_definition": {
+    "window_s": 2.0,
+    "meaning": "A sample is 'settled' once the track has been observed for a full speed window. Below that the estimator fits a slope over a partly-filled window while the Kalman filter's velocity is still converging from its zero-velocity initialisation. Both are reported; the headline figures are the settled ones."
+  },
+  "speed_bands_kmh": [
+    30.0,
+    50.0,
+    70.0,
+    90.0,
+    110.0,
+    130.0
+  ],
+  "noise_calibration": {
+    "source": "reports/detection_noise.json",
+    "source_caveat": "That report labels itself a PROXY for detector box noise, and its distribution is heavy-tailed -- the std exceeds the p95 on both box centres, because a few large excursions dominate the variance. Read p95 for the typical case and std for the tail. Neither is a measurement of the detector.",
+    "sigma_px": {
+      "std_px": {
+        "centre_x": 0.33438352404010824,
+        "centre_y": 0.09713000150521812,
+        "box_width": 1.0293801649318595,
+        "box_height": 0.5231548635399471
+      },
+      "p95_abs_px": {
+        "centre_x": 0.1407348632812495,
+        "centre_y": 0.08974914550781249,
+        "box_width": 1.5659790039062498,
+        "box_height": 1.0368530273437495
+      }
+    },
+    "sweep_anchored_on": "std_px",
+    "why": "The std vector is the larger of the two on the box centres, and the anchor -- hence the speed -- is most sensitive to centre noise. Multiple 1.0 on the sweep IS the measured point."
+  },
+  "zero_noise": {
+    "homography_chain_only": {
+      "what": "The simulator's noise-free detections fed straight to SpeedEstimator, tracker bypassed. This is the requirement's own chain: where the plane is known the recovery must be exact.",
+      "requirement_kmh": 0.1,
+      "settled": {
+        "n": 776,
+        "mean_error_kmh": 3.0116296197729993e-05,
+        "mean_abs_error_kmh": 3.0117556237472643e-05,
+        "max_abs_error_kmh": 9.843993646541094e-05,
+        "rmse_kmh": 3.675066399463733e-05,
+        "mean_relative_percent": 5.500670911957302e-05,
+        "max_relative_percent": 0.00011078839510976952
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 337,
+          "mean_error_kmh": 1.6479082204940682e-05,
+          "mean_abs_error_kmh": 1.6481983661440076e-05,
+          "max_abs_error_kmh": 3.323651853293086e-05,
+          "rmse_kmh": 1.9118837758158014e-05,
+          "mean_relative_percent": 5.4939945538133586e-05,
+          "max_relative_percent": 0.00011078839510976952
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 178,
+          "mean_error_kmh": 2.7537386962865696e-05,
+          "mean_abs_error_kmh": 2.7537386962865696e-05,
+          "max_abs_error_kmh": 5.20757478668088e-05,
+          "rmse_kmh": 3.0988160902530234e-05,
+          "mean_relative_percent": 5.507477392573139e-05,
+          "max_relative_percent": 0.0001041514957336176
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 110,
+          "mean_error_kmh": 3.859313162760972e-05,
+          "mean_abs_error_kmh": 3.859313162760972e-05,
+          "max_abs_error_kmh": 6.826021797223802e-05,
+          "rmse_kmh": 4.226112868603227e-05,
+          "mean_relative_percent": 5.5133045182299595e-05,
+          "max_relative_percent": 9.751459710319718e-05
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 72,
+          "mean_error_kmh": 4.9828406836106685e-05,
+          "mean_abs_error_kmh": 4.9828406836106685e-05,
+          "max_abs_error_kmh": 8.17635531831229e-05,
+          "rmse_kmh": 5.319082508426789e-05,
+          "mean_relative_percent": 5.536489648456299e-05,
+          "max_relative_percent": 9.08483924256921e-05
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 48,
+          "mean_error_kmh": 6.059683040859909e-05,
+          "mean_abs_error_kmh": 6.059683040859909e-05,
+          "max_abs_error_kmh": 9.209648054309127e-05,
+          "rmse_kmh": 6.337817105806458e-05,
+          "mean_relative_percent": 5.508802764418099e-05,
+          "max_relative_percent": 8.372407322099207e-05
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 31,
+          "mean_error_kmh": 7.011621406883435e-05,
+          "mean_abs_error_kmh": 7.011621406883435e-05,
+          "max_abs_error_kmh": 9.843993646541094e-05,
+          "rmse_kmh": 7.20640476467749e-05,
+          "mean_relative_percent": 5.393554928371872e-05,
+          "max_relative_percent": 7.57230280503161e-05
+        }
+      ]
+    },
+    "full_chain": {
+      "what": "The same detections through the full tracker -> homography -> speed chain.",
+      "settled": {
+        "n": 759,
+        "mean_error_kmh": -0.029531815643874502,
+        "mean_abs_error_kmh": 0.030486327727961844,
+        "max_abs_error_kmh": 0.2536809771457911,
+        "rmse_kmh": 0.05566014192420679,
+        "mean_relative_percent": 0.038956397751180726,
+        "max_relative_percent": 0.19513921318907007
+      },
+      "all_samples_including_start_up": {
+        "n": 1097,
+        "mean_error_kmh": 0.10107026826964242,
+        "mean_abs_error_kmh": 0.14356937358475827,
+        "max_abs_error_kmh": 3.68149849433928,
+        "rmse_kmh": 0.39596072410507527,
+        "mean_relative_percent": 0.19063638578459635,
+        "max_relative_percent": 3.1704966288283507
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 335,
+          "mean_error_kmh": -0.0031422368275957225,
+          "mean_abs_error_kmh": 0.004023818925560511,
+          "max_abs_error_kmh": 0.027764838579905415,
+          "rmse_kmh": 0.005234684567347545,
+          "mean_relative_percent": 0.01341272975186837,
+          "max_relative_percent": 0.09254946193301805
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 176,
+          "mean_error_kmh": -0.0136605612877085,
+          "mean_abs_error_kmh": 0.015135664896625455,
+          "max_abs_error_kmh": 0.03974442334029504,
+          "rmse_kmh": 0.017738208726472745,
+          "mean_relative_percent": 0.03027132979325091,
+          "max_relative_percent": 0.07948884668059009
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 108,
+          "mean_error_kmh": -0.03494709661197511,
+          "mean_abs_error_kmh": 0.03632188709181579,
+          "max_abs_error_kmh": 0.08377249751848126,
+          "rmse_kmh": 0.04092564985038059,
+          "mean_relative_percent": 0.051888410131165415,
+          "max_relative_percent": 0.11967499645497323
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 69,
+          "mean_error_kmh": -0.0703897675256478,
+          "mean_abs_error_kmh": 0.07069482639538564,
+          "max_abs_error_kmh": 0.137950523470181,
+          "rmse_kmh": 0.0769529225637961,
+          "mean_relative_percent": 0.07854980710598404,
+          "max_relative_percent": 0.1532783594113122
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 46,
+          "mean_error_kmh": -0.12116064318416721,
+          "mean_abs_error_kmh": 0.12116064318416721,
+          "max_abs_error_kmh": 0.20613152317960726,
+          "rmse_kmh": 0.12873539510509005,
+          "mean_relative_percent": 0.11014603925833383,
+          "max_relative_percent": 0.18739229379964295
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 25,
+          "mean_error_kmh": -0.1901267987993913,
+          "mean_abs_error_kmh": 0.1901267987993913,
+          "max_abs_error_kmh": 0.2536809771457911,
+          "rmse_kmh": 0.19339328480688886,
+          "mean_relative_percent": 0.14625138369183943,
+          "max_relative_percent": 0.19513921318907007
+        }
+      ],
+      "finding": "The full chain does NOT meet the 0.1 km/h bar above about 70 km/h, and the miss is attributable rather than merely present. Three things identify it as the constant-velocity Kalman filter lagging image-space motion that accelerates as a vehicle approaches: the settled residual is signed NEGATIVE at every band (a lagging filter under-reads), it grows monotonically with speed, and it vanishes to under 1e-4 km/h on the identical detections with the tracker bypassed. It is a design trade, not a defect: at the measured noise the Kalman-smoothed anchor beats the raw detection anchor, so the lag is what the smoothing costs. The tolerance was not widened to accommodate it; tests/test_simulate.py asserts the mechanism.",
+      "start_up_transient": "Before the window fills, the first reported speed sits several km/h high and decays; SPEED_MIN_SAMPLES lets a number out after 5 samples, which is 0.13 s of data. Consumers wanting the accuracy figures above should ignore a track's first 2.0 s."
+    },
+    "box_model_comparison": {
+      "what": "'footprint' places the box's bottom-centre exactly on the vehicle's projected ground point; 'solid' uses the true bounding box of the projected 3-D vehicle, so the anchor carries the geometric offset a real detector's box would. The difference is reported rather than hidden.",
+      "footprint_settled": {
+        "n": 759,
+        "mean_error_kmh": -0.029531815643874502,
+        "mean_abs_error_kmh": 0.030486327727961844,
+        "max_abs_error_kmh": 0.2536809771457911,
+        "rmse_kmh": 0.05566014192420679,
+        "mean_relative_percent": 0.038956397751180726,
+        "max_relative_percent": 0.19513921318907007
+      },
+      "solid_settled": {
+        "n": 757,
+        "mean_error_kmh": -0.030306043431968622,
+        "mean_abs_error_kmh": 0.031232652188450536,
+        "max_abs_error_kmh": 0.24871464407800659,
+        "rmse_kmh": 0.0565268884506934,
+        "mean_relative_percent": 0.0403411902121175,
+        "max_relative_percent": 0.1963057428783734
+      },
+      "why_it_barely_moves": "The offset between the box's bottom-centre and the vehicle's ground reference point is very nearly constant in world metres, and a constant offset does not change a fitted slope."
+    }
+  },
+  "noise_sweep": [
+    {
+      "sigma_multiple_of_measured_std": 0.0,
+      "sigma_px": {
+        "centre_x": 0.0,
+        "centre_y": 0.0,
+        "box_width": 0.0,
+        "box_height": 0.0
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 0,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 6072,
+        "mean_error_kmh": -0.029531815643874502,
+        "mean_abs_error_kmh": 0.030486327727961844,
+        "max_abs_error_kmh": 0.2536809771457911,
+        "rmse_kmh": 0.05566014192420679,
+        "mean_relative_percent": 0.038956397751180726,
+        "max_relative_percent": 0.19513921318907007
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 2680,
+          "mean_error_kmh": -0.0031422368275957225,
+          "mean_abs_error_kmh": 0.004023818925560511,
+          "max_abs_error_kmh": 0.027764838579905415,
+          "rmse_kmh": 0.005234684567347545,
+          "mean_relative_percent": 0.01341272975186837,
+          "max_relative_percent": 0.09254946193301805
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 1408,
+          "mean_error_kmh": -0.0136605612877085,
+          "mean_abs_error_kmh": 0.015135664896625455,
+          "max_abs_error_kmh": 0.03974442334029504,
+          "rmse_kmh": 0.017738208726472745,
+          "mean_relative_percent": 0.03027132979325091,
+          "max_relative_percent": 0.07948884668059009
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 864,
+          "mean_error_kmh": -0.03494709661197511,
+          "mean_abs_error_kmh": 0.03632188709181579,
+          "max_abs_error_kmh": 0.08377249751848126,
+          "rmse_kmh": 0.04092564985038059,
+          "mean_relative_percent": 0.051888410131165415,
+          "max_relative_percent": 0.11967499645497323
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 552,
+          "mean_error_kmh": -0.0703897675256478,
+          "mean_abs_error_kmh": 0.07069482639538564,
+          "max_abs_error_kmh": 0.137950523470181,
+          "rmse_kmh": 0.0769529225637961,
+          "mean_relative_percent": 0.07854980710598404,
+          "max_relative_percent": 0.1532783594113122
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 368,
+          "mean_error_kmh": -0.12116064318416721,
+          "mean_abs_error_kmh": 0.12116064318416721,
+          "max_abs_error_kmh": 0.20613152317960726,
+          "rmse_kmh": 0.12873539510509005,
+          "mean_relative_percent": 0.11014603925833383,
+          "max_relative_percent": 0.18739229379964295
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 200,
+          "mean_error_kmh": -0.1901267987993913,
+          "mean_abs_error_kmh": 0.1901267987993913,
+          "max_abs_error_kmh": 0.2536809771457911,
+          "rmse_kmh": 0.19339328480688886,
+          "mean_relative_percent": 0.14625138369183943,
+          "max_relative_percent": 0.19513921318907007
+        }
+      ]
+    },
+    {
+      "sigma_multiple_of_measured_std": 0.25,
+      "sigma_px": {
+        "centre_x": 0.08359588101002706,
+        "centre_y": 0.02428250037630453,
+        "box_width": 0.25734504123296487,
+        "box_height": 0.13078871588498678
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 0,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 6075,
+        "mean_error_kmh": -0.02799119084747479,
+        "mean_abs_error_kmh": 0.05124772431159207,
+        "max_abs_error_kmh": 0.29022353863106787,
+        "rmse_kmh": 0.07119106636956168,
+        "mean_relative_percent": 0.09743048859653994,
+        "max_relative_percent": 0.697931297043984
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 2680,
+          "mean_error_kmh": -0.0011694292874362927,
+          "mean_abs_error_kmh": 0.034925380489100315,
+          "max_abs_error_kmh": 0.2093793891131952,
+          "rmse_kmh": 0.04893621585806989,
+          "mean_relative_percent": 0.11641793496366773,
+          "max_relative_percent": 0.697931297043984
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 1408,
+          "mean_error_kmh": -0.01720138701196573,
+          "mean_abs_error_kmh": 0.038125269723808704,
+          "max_abs_error_kmh": 0.2147424492575496,
+          "rmse_kmh": 0.05020056233761072,
+          "mean_relative_percent": 0.07625053944761741,
+          "max_relative_percent": 0.4294848985150992
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 864,
+          "mean_error_kmh": -0.024986077751338414,
+          "mean_abs_error_kmh": 0.041869940103393476,
+          "max_abs_error_kmh": 0.11740308620743178,
+          "rmse_kmh": 0.050268357420670116,
+          "mean_relative_percent": 0.05981420014770497,
+          "max_relative_percent": 0.1677186945820454
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 552,
+          "mean_error_kmh": -0.07563740498698907,
+          "mean_abs_error_kmh": 0.08612442608258399,
+          "max_abs_error_kmh": 0.18890355033197181,
+          "rmse_kmh": 0.09477343222744367,
+          "mean_relative_percent": 0.09569380675842666,
+          "max_relative_percent": 0.20989283370219092
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 368,
+          "mean_error_kmh": -0.11842334239848454,
+          "mean_abs_error_kmh": 0.1210868532648813,
+          "max_abs_error_kmh": 0.24104584149273478,
+          "rmse_kmh": 0.13495044018096483,
+          "mean_relative_percent": 0.11007895751352847,
+          "max_relative_percent": 0.21913258317521345
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 203,
+          "mean_error_kmh": -0.17622291754983088,
+          "mean_abs_error_kmh": 0.17622291754983088,
+          "max_abs_error_kmh": 0.29022353863106787,
+          "rmse_kmh": 0.18542581641004863,
+          "mean_relative_percent": 0.13555609042294683,
+          "max_relative_percent": 0.2232488758700522
+        }
+      ]
+    },
+    {
+      "sigma_multiple_of_measured_std": 0.5,
+      "sigma_px": {
+        "centre_x": 0.16719176202005412,
+        "centre_y": 0.04856500075260906,
+        "box_width": 0.5146900824659297,
+        "box_height": 0.26157743176997356
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 0,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 6076,
+        "mean_error_kmh": -0.02661992900764773,
+        "mean_abs_error_kmh": 0.07887844797894636,
+        "max_abs_error_kmh": 0.4470262678160921,
+        "rmse_kmh": 0.1063349146857872,
+        "mean_relative_percent": 0.16848860056044837,
+        "max_relative_percent": 1.379393263396776
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 2680,
+          "mean_error_kmh": 0.0006412859860569723,
+          "mean_abs_error_kmh": 0.06876971513162944,
+          "max_abs_error_kmh": 0.41381797901903283,
+          "rmse_kmh": 0.09702714328778311,
+          "mean_relative_percent": 0.22923238377209812,
+          "max_relative_percent": 1.379393263396776
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 1408,
+          "mean_error_kmh": -0.02093589175561281,
+          "mean_abs_error_kmh": 0.06856255522162816,
+          "max_abs_error_kmh": 0.4470262678160921,
+          "rmse_kmh": 0.09619664543438657,
+          "mean_relative_percent": 0.13712511044325632,
+          "max_relative_percent": 0.8940525356321842
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 864,
+          "mean_error_kmh": -0.015277464393496261,
+          "mean_abs_error_kmh": 0.062299704567082455,
+          "max_abs_error_kmh": 0.24446274340049,
+          "rmse_kmh": 0.07915606475258533,
+          "mean_relative_percent": 0.08899957795297493,
+          "max_relative_percent": 0.3492324905721286
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 552,
+          "mean_error_kmh": -0.08134826502106861,
+          "mean_abs_error_kmh": 0.11361177002545599,
+          "max_abs_error_kmh": 0.3445964547140079,
+          "rmse_kmh": 0.13139955219714342,
+          "mean_relative_percent": 0.12623530002828445,
+          "max_relative_percent": 0.382884949682231
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 368,
+          "mean_error_kmh": -0.11632244868922605,
+          "mean_abs_error_kmh": 0.13124763313775772,
+          "max_abs_error_kmh": 0.29914954557307283,
+          "rmse_kmh": 0.15086523564587495,
+          "mean_relative_percent": 0.11931603012523428,
+          "max_relative_percent": 0.2719541323391571
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 204,
+          "mean_error_kmh": -0.16212238654878258,
+          "mean_abs_error_kmh": 0.16464100402231857,
+          "max_abs_error_kmh": 0.36743760028684846,
+          "rmse_kmh": 0.18685156937434044,
+          "mean_relative_percent": 0.12664692617101428,
+          "max_relative_percent": 0.28264430791296036
+        }
+      ]
+    },
+    {
+      "sigma_multiple_of_measured_std": 1.0,
+      "sigma_px": {
+        "centre_x": 0.33438352404010824,
+        "centre_y": 0.09713000150521812,
+        "box_width": 1.0293801649318595,
+        "box_height": 0.5231548635399471
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 0,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 6076,
+        "mean_error_kmh": -0.025002401020513137,
+        "mean_abs_error_kmh": 0.13972329199698444,
+        "max_abs_error_kmh": 0.9116079436125659,
+        "rmse_kmh": 0.1911020425125869,
+        "mean_relative_percent": 0.3177841717383331,
+        "max_relative_percent": 2.734899117558953
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 2680,
+          "mean_error_kmh": 0.003742397116850929,
+          "mean_abs_error_kmh": 0.13691484278609756,
+          "max_abs_error_kmh": 0.820469735267686,
+          "rmse_kmh": 0.19318505004666645,
+          "mean_relative_percent": 0.45638280928699193,
+          "max_relative_percent": 2.734899117558953
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 1408,
+          "mean_error_kmh": -0.029102750063662673,
+          "mean_abs_error_kmh": 0.13280922411997576,
+          "max_abs_error_kmh": 0.9116079436125659,
+          "rmse_kmh": 0.18906743245594074,
+          "mean_relative_percent": 0.2656184482399515,
+          "max_relative_percent": 1.8232158872251318
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 864,
+          "mean_error_kmh": 0.003375359145225144,
+          "mean_abs_error_kmh": 0.11386967192668068,
+          "max_abs_error_kmh": 0.5050594319014152,
+          "rmse_kmh": 0.14948142618922253,
+          "mean_relative_percent": 0.16267095989525812,
+          "max_relative_percent": 0.7215134741448789
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 552,
+          "mean_error_kmh": -0.09561813361819915,
+          "mean_abs_error_kmh": 0.17568422568599606,
+          "max_abs_error_kmh": 0.6578410582784215,
+          "rmse_kmh": 0.22221106241123395,
+          "mean_relative_percent": 0.19520469520666228,
+          "max_relative_percent": 0.7309345091982462
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 367,
+          "mean_error_kmh": -0.11747785411337823,
+          "mean_abs_error_kmh": 0.17124215913661306,
+          "max_abs_error_kmh": 0.46786744426442795,
+          "rmse_kmh": 0.20329531872203327,
+          "mean_relative_percent": 0.1556746901241937,
+          "max_relative_percent": 0.42533404024038907
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 205,
+          "mean_error_kmh": -0.13652814082331727,
+          "mean_abs_error_kmh": 0.17963216790025005,
+          "max_abs_error_kmh": 0.5338728062741609,
+          "rmse_kmh": 0.21881587905401925,
+          "mean_relative_percent": 0.13817859069250005,
+          "max_relative_percent": 0.4106713894416622
+        }
+      ]
+    },
+    {
+      "sigma_multiple_of_measured_std": 2.0,
+      "sigma_px": {
+        "centre_x": 0.6687670480802165,
+        "centre_y": 0.19426000301043625,
+        "box_width": 2.058760329863719,
+        "box_height": 1.0463097270798942
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 5,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 5704,
+        "mean_error_kmh": -0.05678875434901463,
+        "mean_abs_error_kmh": 0.32661257753184936,
+        "max_abs_error_kmh": 10.071079374512834,
+        "rmse_kmh": 0.7760407600624845,
+        "mean_relative_percent": 0.7013503605402454,
+        "max_relative_percent": 7.781477104345147
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 2538,
+          "mean_error_kmh": 0.011509111719733626,
+          "mean_abs_error_kmh": 0.2948591364398281,
+          "max_abs_error_kmh": 2.3344431313035443,
+          "rmse_kmh": 0.4218815146418898,
+          "mean_relative_percent": 0.9828637881327604,
+          "max_relative_percent": 7.781477104345147
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 1362,
+          "mean_error_kmh": -0.04202176123841867,
+          "mean_abs_error_kmh": 0.26126145588282396,
+          "max_abs_error_kmh": 1.5159109923715093,
+          "rmse_kmh": 0.37703891247950433,
+          "mean_relative_percent": 0.5225229117656479,
+          "max_relative_percent": 3.0318219847430186
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 858,
+          "mean_error_kmh": 0.048623307047307746,
+          "mean_abs_error_kmh": 0.23986747985079393,
+          "max_abs_error_kmh": 1.0348480799096507,
+          "rmse_kmh": 0.32137698656008606,
+          "mean_relative_percent": 0.342667828358277,
+          "max_relative_percent": 1.4783543998709294
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 538,
+          "mean_error_kmh": -0.09784536391326626,
+          "mean_abs_error_kmh": 0.3275811358627172,
+          "max_abs_error_kmh": 1.285379567196017,
+          "rmse_kmh": 0.44595644206906243,
+          "mean_relative_percent": 0.36397903984746355,
+          "max_relative_percent": 1.4281995191066856
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 339,
+          "mean_error_kmh": -0.12543108015804666,
+          "mean_abs_error_kmh": 0.309429430231595,
+          "max_abs_error_kmh": 1.1118676556941125,
+          "rmse_kmh": 0.36807410269381186,
+          "mean_relative_percent": 0.28129948202872274,
+          "max_relative_percent": 1.0107887779037386
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 69,
+          "mean_error_kmh": -3.5138608265566975,
+          "mean_abs_error_kmh": 3.940087324497756,
+          "max_abs_error_kmh": 10.071079374512834,
+          "rmse_kmh": 6.07714842011017,
+          "mean_relative_percent": 3.0308364034598125,
+          "max_relative_percent": 7.746984134240642
+        }
+      ]
+    },
+    {
+      "sigma_multiple_of_measured_std": 4.0,
+      "sigma_px": {
+        "centre_x": 1.337534096160433,
+        "centre_y": 0.3885200060208725,
+        "box_width": 4.117520659727438,
+        "box_height": 2.0926194541597885
+      },
+      "scenes": 8,
+      "vehicles_the_tracker_lost": 36,
+      "vehicles_offered": 48,
+      "overall": {
+        "n": 1688,
+        "mean_error_kmh": -2.0854106418404568,
+        "mean_abs_error_kmh": 7.38210322521598,
+        "max_abs_error_kmh": 32.28453056587769,
+        "rmse_kmh": 11.785643443037925,
+        "mean_relative_percent": 19.330818781188647,
+        "max_relative_percent": 64.56906113175538
+      },
+      "by_band": [
+        {
+          "speed_kmh": 30.0,
+          "n": 1092,
+          "mean_error_kmh": 2.6846922025770166,
+          "mean_abs_error_kmh": 5.300717355960299,
+          "max_abs_error_kmh": 19.298384855101908,
+          "rmse_kmh": 8.977442921183862,
+          "mean_relative_percent": 17.669057853200993,
+          "max_relative_percent": 64.32794951700636
+        },
+        {
+          "speed_kmh": 50.0,
+          "n": 544,
+          "mean_error_kmh": -11.88969449854712,
+          "mean_abs_error_kmh": 12.235573333684455,
+          "max_abs_error_kmh": 32.28453056587769,
+          "rmse_kmh": 16.40758548911614,
+          "mean_relative_percent": 24.47114666736891,
+          "max_relative_percent": 64.56906113175538
+        },
+        {
+          "speed_kmh": 70.0,
+          "n": 52,
+          "mean_error_kmh": 0.3103222801700073,
+          "mean_abs_error_kmh": 0.31644226791508,
+          "max_abs_error_kmh": 0.6520235469866691,
+          "rmse_kmh": 0.360401308290845,
+          "mean_relative_percent": 0.45206038273582855,
+          "max_relative_percent": 0.9314622099809559
+        },
+        {
+          "speed_kmh": 90.0,
+          "n": 0
+        },
+        {
+          "speed_kmh": 110.0,
+          "n": 0
+        },
+        {
+          "speed_kmh": 130.0,
+          "n": 0
+        }
+      ]
+    }
+  ],
+  "monotonic": true,
+  "monotonic_note": "RMSE rises at every step. The jump between 1x and 2x the measured sigma is not the speed chain degrading gracefully: it is ASSOCIATION starting to fail, visible in 'vehicles_the_tracker_lost'. Beyond 4x, the perturbation makes neighbouring boxes overlap and the simulator refuses to produce a scene at all rather than score one across a possible identity swap.",
+  "check_c": {
+    "what": "Two gates a known ground distance apart give a time-of-flight speed per vehicle that shares no per-frame displacement with the homography estimate -- it is two crossing instants and the surveyed separation, nothing else.",
+    "run_on": "the SIMULATED scene only",
+    "why_not_on_real_footage": "On the real clip the ground distance between two gates is itself known only through the along-road scale that has no independent anchor, so the check would be calibrated by the quantity it was meant to check. On the simulated scene both estimators share a KNOWN scale, so their agreement tests the two estimators against each other -- which is a real result, and the one Check C was wanted for.",
+    "gate_far_y_m": 130.0,
+    "gate_near_y_m": 40.0,
+    "gate_separation_m": 90.0,
+    "agreement_requirement_kmh": 1.0,
+    "max_abs_difference_kmh": 0.07718150559917092,
+    "per_vehicle": [
+      {
+        "truth_kmh": 30.0,
+        "time_of_flight_kmh": 29.99653927194861,
+        "homography_kmh": 29.988139235563317,
+        "difference_kmh": 0.008400036385292964,
+        "time_of_flight_error_kmh": -0.003460728051390305
+      },
+      {
+        "truth_kmh": 50.0,
+        "time_of_flight_kmh": 49.9854321451043,
+        "homography_kmh": 49.960255576659705,
+        "difference_kmh": 0.025176568444592817,
+        "time_of_flight_error_kmh": -0.014567854895702226
+      },
+      {
+        "truth_kmh": 70.0,
+        "time_of_flight_kmh": 69.96267466108496,
+        "homography_kmh": 69.91622750248152,
+        "difference_kmh": 0.04644715860344206,
+        "time_of_flight_error_kmh": -0.0373253389150392
+      },
+      {
+        "truth_kmh": 90.0,
+        "time_of_flight_kmh": 89.92482266227901,
+        "homography_kmh": 89.86204947652982,
+        "difference_kmh": 0.06277318574919377,
+        "time_of_flight_error_kmh": -0.07517733772098723
+      },
+      {
+        "truth_kmh": 110.0,
+        "time_of_flight_kmh": 109.87104998241956,
+        "homography_kmh": 109.79386847682039,
+        "difference_kmh": 0.07718150559917092,
+        "time_of_flight_error_kmh": -0.12895001758043634
+      },
+      {
+        "truth_kmh": 130.0,
+        "time_of_flight_kmh": 129.79777841664995,
+        "homography_kmh": 129.7463190228542,
+        "difference_kmh": 0.051459393795738606,
+        "time_of_flight_error_kmh": -0.20222158335005247
+      }
+    ]
+  },
+  "reproduce": "PYTHONPATH=src .venv/bin/python scripts/bench_speed.py --figures",
+  "figures": [
+    "reports/figures/speed_zero_noise_by_band.png",
+    "reports/figures/speed_noise_sweep.png"
+  ]
+}

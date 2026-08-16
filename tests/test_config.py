@@ -291,17 +291,25 @@ def test_motorway_config_gates_stop_at_the_median():
     assert inbound_max_x < outbound_min_x
 
 
-def test_motorway_calibration_builds_a_validated_plane():
-    config = load_config(CONFIGS / "motorway.yaml")
-    assert config.calibration is not None
-    plane = config.calibration.to_plane(1280, 720, context="configs/motorway.yaml")
-    # the surveyed lane strip: two dash centroids 18 m apart on the first
-    # divider line must project ~18 m apart in world metres
-    import math
+def test_motorway_config_ships_uncalibrated_and_says_why():
+    """The flagship clip has NO calibration block, on purpose.
 
-    a = plane.to_world((204.5, 636.0))
-    b = plane.to_world((329.7, 585.5))
-    assert math.hypot(b[0] - a[0], b[1] - a[1]) == pytest.approx(18.0, abs=0.5)
+    Its along-road scale has no independent anchor and the correspondences
+    it used to ship were mutually inconsistent (see
+    reports/speed_real.json and tests/test_scale_survey.py), so the config
+    carries none and the engine reports no speed on it -- the behaviour
+    core.homography's policy exists to guarantee.
+
+    The comment is asserted too, not just the absence: a bare deletion is
+    exactly the thing a later reader would undo from history.
+    """
+    config = load_config(CONFIGS / "motorway.yaml")
+    assert config.calibration is None
+
+    text = (CONFIGS / "motorway.yaml").read_text()
+    assert "NO CALIBRATION BLOCK, DELIBERATELY" in text
+    assert "reports/speed_real.json" in text
+    assert "data/fixtures/motorway_scale_survey.json" in text
 
 
 def test_street_config_has_no_calibration_and_counts_people():

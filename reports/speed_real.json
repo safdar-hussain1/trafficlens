@@ -1,0 +1,264 @@
+{
+  "schema": 1,
+  "tier": 2,
+  "clip": "motorway-a40.webm",
+  "headline": "No usable independent along-road anchor exists in this clip, and the calibration that used to ship with it was internally inconsistent as well. Absolute km/h is not published from this footage, on any surface. configs/motorway.yaml ships with no calibration block, so the engine returns None for every speed on it -- the behaviour the engine's own policy was built to guarantee.",
+  "absolute_speed_published": false,
+  "shipped_config_calibrated": false,
+  "limitations": "This measures the tracking -> homography -> speed chain and NOT the detector. The boxes are generated from a known 3-D scene, not detected, so nothing here says anything about detection accuracy, recall, class confusion, or how a real detector places a box on a real vehicle. The box-noise sigma is taken from reports/detection_noise.json, which labels itself a PROXY for detector jitter and is not a measurement of the detector either.",
+  "what_this_replaces": "The plan's Tier 2 was to calibrate from German motorway lane-divider geometry (6 m stroke, 18 m period) and validate it three ways. Every part of that is unavailable. The 6 m + 18 m justification is falsified by the clip's own paint: measured in a perspective-free coordinate the stroke is about 0.50 of the period where that standard requires 0.333, and the three innocent explanations -- drift smear, resolution smearing at distance, mixed marking types -- were each tested and each fails. A reprojection residual on unused markings tests fit consistency, not absolute scale. A vehicle-footprint check measures the CROSS-road axis, and a homography admits an independent scale per world axis, so it cannot corroborate the along-road period at all. And two gates a known distance apart cannot give absolute km/h here because that distance is itself known only through the scale in dispute.",
+  "anchor_candidates": [
+    {
+      "candidate": "Guardrail (Schutzplanke) posts",
+      "verdict": "PRESENT BUT NOT MEASURABLE",
+      "what_was_measured": "Band-limited local period in the perspective-free coordinate u = 1 / (vp_x - x), over four windows across image x = 5 to 420, against matched controls processed identically.",
+      "matched_controls": [
+        {
+          "band": "guardrail post band",
+          "mean_period_u": 3.72e-05,
+          "spread_percent": 9.1
+        },
+        {
+          "band": "asphalt control A",
+          "mean_period_u": 3.01e-05,
+          "spread_percent": 31.8
+        },
+        {
+          "band": "asphalt control B",
+          "mean_period_u": 3.3e-05,
+          "spread_percent": 22.8
+        },
+        {
+          "band": "shoulder control",
+          "mean_period_u": 3.05e-05,
+          "spread_percent": 14.6
+        },
+        {
+          "band": "behind-rail control",
+          "mean_period_u": 3.32e-05,
+          "spread_percent": 14.2
+        },
+        {
+          "band": "positive control: divider-1 dashes",
+          "mean_period_u": 0.0003639,
+          "spread_percent": 1.3
+        }
+      ],
+      "why_the_controls_matter": "They are what make 'not measurable' a measurement rather than a shrug. The post band is statistically indistinguishable from featureless asphalt, its peaks repeatedly land on the search-band edge (the signature of broadband noise rather than a line), and a full-span comb correlation scores the asphalt control HIGHER than the posts. Meanwhile the positive control recovers the known dash period to 1.3 %, so the method demonstrably works where a periodicity exists."
+    },
+    {
+      "candidate": "Delineator posts (Leitpfosten)",
+      "verdict": "PRESENT AND MEASURABLE BUT UNUSABLE",
+      "what_was_measured": "Four posts on the right verge, transferred with the along-road identity: 68 to 82 m per interval, mean about 74 m, across every plausible horizon row.",
+      "why_unusable": "74 m matches no German Leitpfosten spacing (50 m straight, 25 m in curves). The three intervals rise monotonically by 15 %, which is not scatter; the section visibly curves and the two far posts sit in the bend, so the standard being compared against is not even fixed; camera roll of up to 1.97 degrees moves this particular transfer by up to 17 %; and plus or minus 2 px on the far posts is 10 % on the outermost interval alone. It is evidence AGAINST the 18 m assumption, not evidence FOR any alternative."
+    },
+    {
+      "candidate": "Median barrier segment joints",
+      "verdict": "ABSENT",
+      "what_was_measured": "The median at 3x and 6x: a raised earth and gravel bank carrying a steel W-beam guardrail, not a precast concrete barrier. No joints exist to measure."
+    },
+    {
+      "candidate": "Other repeating along-road structure",
+      "verdict": "ABSENT",
+      "what_was_measured": "One sign gantry, one direction sign, three round signs -- all singletons. No lighting columns, no bridge piers, no expansion joints, no distance markers, no resolvable drainage grates."
+    },
+    {
+      "candidate": "A second marking periodicity (divider 2)",
+      "verdict": "PRESENT AND MEASURABLE AND CONTRADICTORY",
+      "what_was_measured": "Consecutive, uniform dashes that read about 26 m per step under the scale calibrated on divider 1's assumed 18 m ladder -- see divider_disagreement below. It falsifies the existing calibration rather than anchoring it."
+    }
+  ],
+  "divider_disagreement": {
+    "what": "The defect that removed the calibration block, and it is independent of whether 18 m is the right absolute period. Both dividers' surveyed dashes are consecutive and uniform, so under one road plane and one along-road scale they must give the same step.",
+    "assumed_period_m": 18.0,
+    "by_horizon_row": [
+      {
+        "horizon_row": 340.0,
+        "divider_1_fit_rms_m": 1.235190439923948,
+        "divider_2_step_m": 26.783206144336532,
+        "ratio": 1.487955896907585
+      },
+      {
+        "horizon_row": 356.0,
+        "divider_1_fit_rms_m": 0.7549163599972156,
+        "divider_2_step_m": 26.54475851300525,
+        "ratio": 1.4747088062780693
+      },
+      {
+        "horizon_row": 364.0,
+        "divider_1_fit_rms_m": 0.48760151559036935,
+        "divider_2_step_m": 26.396829281370565,
+        "ratio": 1.466490515631698
+      },
+      {
+        "horizon_row": 372.468,
+        "divider_1_fit_rms_m": 0.20935278912987218,
+        "divider_2_step_m": 26.21365066916065,
+        "ratio": 1.4563139260644806
+      },
+      {
+        "horizon_row": 375.65,
+        "divider_1_fit_rms_m": 0.15556558536673562,
+        "divider_2_step_m": 26.13656378549784,
+        "ratio": 1.4520313214165468
+      },
+      {
+        "horizon_row": 380.0,
+        "divider_1_fit_rms_m": 0.2336142636031529,
+        "divider_2_step_m": 26.022868206461297,
+        "ratio": 1.4457149003589609
+      },
+      {
+        "horizon_row": 400.0,
+        "divider_1_fit_rms_m": 1.190452300746554,
+        "divider_2_step_m": 25.34169555175567,
+        "ratio": 1.4078719750975373
+      }
+    ],
+    "ratio_range": [
+      1.4078719750975373,
+      1.487955896907585
+    ],
+    "escape_hatch_closed": {
+      "what": "The horizon row that would make divider 2 read 18 m.",
+      "horizon_row": 463.0,
+      "divider_2_step_m": 18.06945799743523,
+      "divider_1_fit_rms_m": 8.282491287293656,
+      "verdict": "It destroys divider 1's own ladder and sits far below the visible horizon, so it is not a horizon row. Camera roll can move the divider-2 figure by at most about 3 %. There is no way to reconcile them."
+    },
+    "uniformity_in_the_perspective_free_coordinate": {
+      "divider_1": {
+        "delta_u": [
+          0.0003548266437373266,
+          0.0003541351942613067,
+          0.0003589598243395778,
+          0.00034689603978886466,
+          0.0003383805039888243
+        ],
+        "mean_delta_u": 0.00035063964122318,
+        "spread_percent": 2.069473590941783
+      },
+      "divider_2": {
+        "delta_u": [
+          0.0006467471241023062,
+          0.0006575328563627994
+        ],
+        "mean_delta_u": 0.0006521399902325528,
+        "spread_percent": 0.8269491537121558
+      }
+    },
+    "uniformity_note": "Equal world spacing is equal spacing in u = 1 / (vp_x - x), whatever the perspective. Both lines are uniform there and divider 2 -- the disputed one -- is the MORE uniform of the two, so the inconsistency is not one misplaced centroid. Whatever is wrong is wrong about the two lines' relationship.",
+    "cause": {
+      "identified": false,
+      "candidates_still_open": [
+        "the two lines are not parallel (a taper or diverge, or more road curvature than assumed)",
+        "the road plane is not planar over the surveyed range (the camera is on a bridge and the road may dip)",
+        "the divider-2 correspondences are mis-surveyed",
+        "divider 2 carries a different marking type"
+      ],
+      "new_evidence": "The three road-parallel image lines do not concur. The guardrail -- 110 sub-pixel points over 580 px, and wholly independent of the divider survey -- meets divider 1 within 7 px of the surveyed vanishing point but meets divider 2 nearly four times further out, and the two dividers meet each other furthest of all. The disagreement is therefore not symmetric between the two lines: divider 2 is the outlier against an independent reference. A Monte Carlo over plausible reading error puts those separations at only 1 to 3 sigma, so this narrows the candidates without settling them.",
+      "what_was_NOT_done": "No marking standard was guessed to reconcile the two lines. Guessing a standard is the error that produced the falsified 18 m in the first place."
+    },
+    "vanishing_points": {
+      "surveyed_homography_vp": [
+        858.3296937448886,
+        372.4683212816308
+      ],
+      "pairs": {
+        "divider_1_x_guardrail": {
+          "point": [
+            864.397,
+            369.633
+          ],
+          "distance_from_surveyed_vp_px": 6.698
+        },
+        "divider_2_x_guardrail": {
+          "point": [
+            881.512,
+            364.315
+          ],
+          "distance_from_surveyed_vp_px": 24.575
+        },
+        "divider_1_x_divider_2": {
+          "point": [
+            898.97,
+            355.677
+          ],
+          "distance_from_surveyed_vp_px": 43.972
+        }
+      }
+    }
+  },
+  "why_the_calibration_was_removed_rather_than_refitted": {
+    "attempted_repair": "Drop the disputed divider-2 correspondences and refit on divider 1 alone with an honest holdout.",
+    "outcome": "IMPOSSIBLE",
+    "error": "cv2.findHomography could not compute a homography for these correspondences (the point configuration is degenerate)",
+    "reason": "Divider 1's six surveyed points lie on one straight line in the image -- straight to 0.041 px maximum residual over a 354 px span -- and at one cross-road offset in the world. A collinear configuration determines no homography at all. The disputed divider-2 points were the ONLY cross-road information the survey ever had, so the calibration could not be repaired by subsetting it.",
+    "removed_calibration_residuals_for_the_record": {
+      "self_fit_mean_m": 0.07459303946690835,
+      "self_fit_max_m": 0.13097525861030693,
+      "holdout_mean_m": 0.3769991416853961,
+      "holdout_max_m": 0.6069130789952947,
+      "note": "A 0.12 m self-fit residual over correspondences that disagree with each other by a factor of 1.46. The out-of-sample figure is about three times worse and was already a warning in the config's own comment."
+    }
+  },
+  "the_one_clean_measurement": {
+    "what": "The guardrail beam. Committed as a regression fixture because it is the best independent check on the direction of the road available in this clip, and it costs nothing.",
+    "fixture": "data/fixtures/motorway_scale_survey.json",
+    "tracked_columns": 110,
+    "line": {
+      "slope": -0.310674325231131,
+      "intercept": 638.1786245833051
+    },
+    "robust_weighted_residual_rms_px": 0.2429878559203031,
+    "plain_residual_rms_px": 1.792259578131063,
+    "plain_residual_max_px": 6.3557012764749174,
+    "inliers_within_0_5px": 93,
+    "honesty_note": "The 0.243 px figure is a WEIGHTED rms from a robust fit and describes the beam, not every tracked column: about a tenth of the columns lock onto cast shadow or dead vegetation under the beam and sit several pixels off. Both figures are published so the robust one is not read as if it described all of them.",
+    "parallel_to_the_road": {
+      "surveyed_vanishing_point_px": [
+        858.3296937448886,
+        372.4683212816308
+      ],
+      "rail_row_at_that_column_px": 371.51762615326857,
+      "agreement_px": 0.9506951283622129
+    },
+    "also_shows": "Straightness at a quarter of a pixel over 580 px bounds lens distortion in the region every other measurement in this investigation was made in."
+  },
+  "suggestive_but_explicitly_not_an_anchor": {
+    "the_convergence": "If the true period were the ~12.2 m the delineator posts point to, the measured 0.499 stroke:period duty would put the painted stroke at 6.08 m -- exactly the standard 6 m stroke -- whereas an 18 m period puts it at 8.97 m, which matches no German marking.",
+    "why_it_is_not_an_anchor": "It rests entirely on the delineator measurement, which this same investigation rejects as unsound (non-uniform by 15 %, on a curving section, and matching no standard spacing). Both halves have to be said together.",
+    "the_roadworks_hypothesis": "Unusual marking geometry, unreadable round speed-restriction signs and separately-measured slow dense traffic are consistent with a roadworks layout. That is a HYPOTHESIS, not an anchor: it explains why no standard fits without rescuing the scale, and guessing roadworks marking geometry would repeat the original error."
+  },
+  "honest_bracket_on_the_along_road_scale": {
+    "upper_m": 18.0,
+    "lower_m": 12.2,
+    "band_percent": [
+      -33.0,
+      0.0
+    ],
+    "propagation": "Scale error transfers to speed one for one, so this is a plus-or-minus 33 % band on every speed. Publishing '82 plus or minus 27 km/h' is not a speed figure. Publishing nothing is the defensible product."
+  },
+  "what_this_clip_still_licenses": [
+    "counts and flow rate",
+    "occupancy",
+    "headway in seconds",
+    "lane changes",
+    "direction and wrong-way detection",
+    "speed RATIOS between vehicles"
+  ],
+  "consequences_of_shipping_uncalibrated": [
+    "Every speed reported for this clip is None.",
+    "Stopped-vehicle detection never fires on it: that feature requires calibrated speed by design.",
+    "The speed-limit violation feature can only be demonstrated on this clip with a limit the user sets explicitly. The posted limit in the footage is NOT legible -- upscaled 8x, the digits cannot be read -- so no published figure references it and no speed distribution is validated against it."
+  ],
+  "what_would_change_this": "A capture of the same site with a visible ground-truth baseline, or GNSS-tracked probe-vehicle passes. Not more analysis of this clip.",
+  "do_not_resurrect_without_new_evidence": [
+    "Vehicle-footprint scale checks: they measure the cross-road axis, and the two world axes carry independent scales.",
+    "Guardrail post spacing: dead unless a higher-resolution or lower-viewpoint capture of the same site appears. The matched controls above are the bar any revival must clear."
+  ],
+  "reproduce": "PYTHONPATH=src .venv/bin/python scripts/bench_speed.py; PYTHONPATH=src .venv/bin/python -m pytest tests/test_scale_survey.py",
+  "figures": [
+    "reports/figures/speed_scale_disagreement.png"
+  ]
+}

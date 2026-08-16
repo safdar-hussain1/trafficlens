@@ -37,81 +37,55 @@ gates:
     label_negative: toward
     expected_direction: away
 
-# Surveyed from lane-divider dash geometry on the inbound carriageway.
+# NO CALIBRATION BLOCK, DELIBERATELY. Do not restore one from history.
 #
-# Along-road scale: ASSUMED, an 18 m period between consecutive dash
-# centroids on each divider line.
+# This clip is uncalibrated, so the engine returns None for every speed on
+# it. That is not a gap and not a workaround -- it is the behaviour
+# core/homography.py and analytics/speed.py were built to guarantee: an
+# uncalibrated camera reports no speed, ever, never a pixel-derived guess.
+# The product's flagship clip exercises the product's own honesty feature.
 #
-# Where the 18 m came from: it is the period of the standard German
-# autobahn marking, a 6 m stroke repeating every 18 m. That standard
-# does not describe this road. The paint was measured off the clip and
-# its stroke fills about half of each period -- stroke:period 0.44 to
-# 0.50 across the runs measured -- where a 6 m stroke in an 18 m period
-# requires 0.333. Those paint landmarks are not committed either, so
-# this figure cannot be re-derived from tracked data. It is retained
-# anyway because it argues against the 18 m assumption rather than for
-# it -- it lowers confidence in the period rather than raising it --
-# but it is held to the same standard as the footprint check below and
-# is not treated as independent evidence. The ratio is scale-free, so
-# that refutation does not depend on the 18 m figure itself. The 18 m
-# is kept anyway, because the survey needs some absolute along-road
-# scale and this is the one number it took from that standard. It is a
-# working assumption. It is unverified.
+# Why the block that used to be here was removed, in one line: the
+# correspondences it was fitted from are mutually inconsistent, and the
+# along-road scale they encoded has no independent anchor anywhere in this
+# footage. Both halves are measured, not asserted:
 #
-# What a wrong period costs: the relationship is linear and unbounded.
-# Every reported speed scales directly with the assumed period, so if
-# the true period were 15 m, every km/h reported here would be 20 %
-# high. Scale error transfers to speeds one for one.
+#   1. The two surveyed lane dividers disagree with each other. Both lines'
+#      dashes are consecutive and uniform, yet the transfer that fits
+#      divider 1's assumed 18 m ladder reads ~26 m per step on divider 2 --
+#      a factor of ~1.46, at every plausible horizon row. Two dashed
+#      dividers on one carriageway cannot differ by that. The old 7-point
+#      fit scored 0.12 m against its own points while the data underneath
+#      it disagreed with itself.
+#   2. The obvious repair does not exist. Dropping the disputed divider-2
+#      points leaves six correspondences on ONE image line at ONE cross-road
+#      offset -- a collinear configuration, from which no homography can be
+#      computed at all. The disputed points were the only cross-road
+#      information the survey ever had.
+#   3. And the 18 m itself was never anchored. It was taken from the German
+#      autobahn standard (6 m stroke, 18 m period), but the painted stroke
+#      measures ~0.50 of the period here where that standard requires
+#      0.333. A survey for an independent along-road anchor -- guardrail
+#      posts, delineator posts, barrier joints, any other repeating
+#      structure -- found none usable.
 #
-# What the fit does and does not show: the nine surveyed centroids
-# (7 fit + 2 holdout) fit one homography with a 0.12 m mean residual
-# (max 0.18 m), which supports the period being uniform -- it says
-# nothing about its absolute value. Out of sample is markedly worse:
-# RoadPlane.validate() on the two held-out dashes measures a 0.377 m
-# mean and a 0.607 m max, the max at the 90 m point, about 3x the
-# self-fit figure. The along-road scale -- the axis every reported speed
-# depends on -- has NO independent corroboration; establishing one (for
-# example a two-gate time-of-flight cross-check over a known ground
-# distance) is outstanding work.
+# The full investigation, with its matched controls and the negative
+# result written up as content rather than as a footnote, is
+# reports/speed_real.json. The surveyed points themselves are kept in
+# data/fixtures/motorway_scale_survey.json so the finding stays
+# reproducible after this block was deleted; tests/test_scale_survey.py
+# re-runs it.
 #
-# Cross-road scale: a separate assumption, 3.75 m lane width between the
-# two dashed divider lines. It has no reproducible corroboration either.
-# A vehicle-footprint check made off the clip read 1.5-1.6 m for
-# passenger-car front-base spans, about 15 % under the ~1.8 m such a car
-# should measure; the image points it used are not committed anywhere in
-# this repository, so it cannot be re-derived from tracked data and it
-# is not treated as evidence. The second divider's dash phase along the
-# road is not observable from dash landmarks alone and is fixed at zero,
-# which shears cross-road coordinates slightly but leaves along-lane
-# distances -- and therefore speeds -- unchanged.
+# Consequences, stated rather than worked around: no speed is reported for
+# this clip; stopped-vehicle detection never fires on it, because that
+# feature requires calibrated speed by design; and the speed-limit
+# violation feature can only be demonstrated here with a limit the user
+# sets explicitly.
 #
-# World frame: x is metres across the road (0 on the first divider line),
-# y is metres along the road, away from the camera. Image points are
-# normalized dash centroids; the two holdout points are surveyed dashes
-# kept out of the fit for the out-of-sample validation check.
-calibration:
-  image_points:
-    - [0.1598, 0.8833]   # divider 1, dash centroid, y = 0 m
-    - [0.2576, 0.8132]   # divider 1, next dash,    y = 18 m
-    - [0.3729, 0.7304]   # divider 1,               y = 54 m
-    - [0.4087, 0.7047]   # divider 1,               y = 72 m
-    - [0.3069, 0.8419]   # divider 2, dash centroid, y = 0 m (phase fixed)
-    - [0.3930, 0.7660]   # divider 2, next dash,    y = 18 m
-    - [0.4472, 0.7185]   # divider 2,               y = 36 m
-  world_points:
-    - [0.0, 0.0]
-    - [0.0, 18.0]
-    - [0.0, 54.0]
-    - [0.0, 72.0]
-    - [3.75, 0.0]
-    - [3.75, 18.0]
-    - [3.75, 36.0]
-  holdout_image_points:
-    - [0.3241, 0.7654]   # divider 1, y = 36 m
-    - [0.4363, 0.6849]   # divider 1, y = 90 m
-  holdout_world_points:
-    - [0.0, 36.0]
-    - [0.0, 90.0]
+# What would change this: a calibrated capture of this site with a visible
+# ground-truth baseline, or GNSS-tracked probe-vehicle passes. Not more
+# analysis of this clip.
+#
 
 # No limit set: a limit sign is visible on the median in this clip but
 # its value is not legible at this resolution, and an invented limit

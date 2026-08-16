@@ -23,7 +23,8 @@ import cv2
 import numpy as np
 import pytest
 
-from trafficlens.config import load_config
+from trafficlens.config import CalibrationConfig, load_config
+from trafficlens.core.constants import INCIDENT_MIN_STOPPED_S
 from trafficlens.detect.base import Detection
 from trafficlens.pipeline import run_session
 
@@ -192,3 +193,88 @@ def test_a_reversed_track_on_either_carriageway_is_a_wrong_way_incident(
     incidents = wrong_ways(result)
     assert len(incidents) == 1
     assert gate_name in incidents[0].detail
+
+
+# --- the shipped config is UNCALIBRATED, and the pipeline honours that ---------
+
+
+#: A calibration for the synthetic 640x480 clip used above, in the config's
+#: own normalized coordinates. Nothing to do with the real motorway view --
+#: its only job is to be the CONTROL for the tests below, so "no speed" is
+#: shown to come from the shipped config's missing calibration rather than
+#: from a scripted track that could never have produced one anyway.
+_CONTROL_CALIBRATION_POINTS = {
+    "image_points": [
+        [0.20, 0.98], [0.20, 0.72], [0.20, 0.60],
+        [0.60, 0.98], [0.60, 0.72], [0.60, 0.60],
+    ],
+    "world_points": [
+        [0.0, 0.0], [0.0, 18.0], [0.0, 36.0],
+        [3.75, 0.0], [3.75, 18.0], [3.75, 36.0],
+    ],
+}
+CONTROL_CALIBRATION = CalibrationConfig(**_CONTROL_CALIBRATION_POINTS)
+
+
+def test_the_shipped_motorway_config_reports_no_speed_at_all(motorway_session):
+    """The flagship clip is uncalibrated, so every speed is None.
+
+    Asserted alongside evidence that the session was not simply empty:
+    both gates were crossed and both tracks reached the speed dictionary.
+    "No speeds" on a session where nothing was tracked would be true of a
+    broken pipeline too.
+    """
+    result = motorway_session(both_carriageways)
+
+    assert result.meta["calibrated"] is False
+    assert crossed_gates(result) == ["inbound", "outbound"]
+    assert len(result.speeds) == 2, result.speeds
+    assert set(result.speeds.values()) == {None}
+
+
+def test_a_calibrated_control_on_the_same_clip_does_report_speeds(
+    tmp_path, motorway_session
+):
+    """The must-succeed half of the pair, varying exactly one axis: the
+    presence of a calibration block. Without this, the test above would
+    pass just as well against a pipeline that had stopped estimating speed
+    for any reason at all."""
+    clip = write_clip(tmp_path / "control.avi")
+    config = load_config(MOTORWAY).model_copy(
+        update={"source": str(clip), "calibration": CONTROL_CALIBRATION}
+    )
+    result = run_session(config, ScriptedDetector(both_carriageways))
+
+    assert result.meta["calibrated"] is True
+    assert len(result.speeds) == 2, result.speeds
+    assert all(speed is not None for speed in result.speeds.values()), result.speeds
+
+
+def test_stopped_vehicle_detection_never_fires_on_the_uncalibrated_config(
+    tmp_path,
+):
+    """A stated consequence, pinned rather than discovered later: stopped
+    detection requires calibrated speed by design, so it cannot fire on
+    this clip. The calibrated control on the identical stationary script
+    is what shows the feature is otherwise alive."""
+    def stationary(i):
+        return [car(INBOUND_X, 460.0)]
+
+    # INCIDENT_MIN_STOPPED_S is 10 s of continuous sub-3 km/h speed, so the
+    # clip must be longer than that or neither side could fire and the
+    # control would prove nothing.
+    frames = int((INCIDENT_MIN_STOPPED_S + 2.0) * 30.0)
+
+    def run(calibration):
+        clip = write_clip(tmp_path / f"stopped-{bool(calibration)}.avi", frames=frames)
+        update = {"source": str(clip)}
+        if calibration is not None:
+            update["calibration"] = calibration
+        config = load_config(MOTORWAY).model_copy(update=update)
+        return run_session(config, ScriptedDetector(stationary))
+
+    shipped = run(None)
+    control = run(CONTROL_CALIBRATION)
+
+    assert [i for i in shipped.incidents if i.kind == "stopped"] == []
+    assert [i for i in control.incidents if i.kind == "stopped"] != []

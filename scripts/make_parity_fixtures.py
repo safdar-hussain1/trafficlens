@@ -92,6 +92,10 @@ from trafficlens.core.classes import COCO_CLASSES  # noqa: E402
 from trafficlens.core.gate import Gate, GateCounter  # noqa: E402
 from trafficlens.detect.base import Detection, decode_yolo, letterbox  # noqa: E402
 from trafficlens.track.associate import iou_matrix  # noqa: E402
+from trafficlens.bench.scale import (  # noqa: E402
+    load_scale_survey,
+    surveyed_homography,
+)
 from trafficlens.track.kalman import KalmanBoxFilter, xyxy_to_xyah  # noqa: E402
 from trafficlens.track.tracker import Tracker  # noqa: E402
 
@@ -779,7 +783,22 @@ def build_decode_tie_case() -> dict:
 def build_fixture() -> tuple[dict, dict]:
     config = load_config(CONFIG)
     gates = [gate_config.to_gate(WIDTH, HEIGHT) for gate_config in config.gates]
-    plane = config.calibration.to_plane(WIDTH, HEIGHT)
+    # The plane comes from the committed scale-survey fixture, NOT from the
+    # config: configs/motorway.yaml deliberately ships with no calibration
+    # block, because the correspondences it used to carry are mutually
+    # inconsistent and the clip has no independent along-road anchor (see
+    # reports/speed_real.json).
+    #
+    # Parity does not need those correspondences to be TRUE. What it needs
+    # is one fixed 3x3 matrix that both engines are handed, so that any
+    # disagreement is the two implementations disagreeing rather than two
+    # different calibrations. Rebuilding the old survey's homography here
+    # keeps the speed path -- the longest float64 chain in the engine, and
+    # the one most likely to diverge across languages -- covered by the
+    # parity suite, which removing the calibration would otherwise have
+    # silently deleted. It is an instrument, not a calibration, and nothing
+    # downstream of it reports a km/h figure about this clip.
+    plane = surveyed_homography(load_scale_survey())
     # The FITTED matrix, never the correspondences: the browser has no cv2
     # and no SVD, and web/src/engine/homography.ts deliberately omits the fit.
     image_to_world = [[float(v) for v in row] for row in np.asarray(plane._h)]
