@@ -163,7 +163,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -595,7 +601,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 2,
             "max_overlap_fraction": 0.2857142857142857,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -1022,7 +1034,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 2,
             "max_overlap_fraction": 0.2857142857142857,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -1451,7 +1469,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 3,
             "max_overlap_fraction": 0.375,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 732,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -1875,7 +1899,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 6,
             "max_overlap_fraction": 0.5454545454545454,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 732,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -2320,7 +2350,15 @@
             "overlapping_label_pairs": 3,
             "max_overlap_frames": 15,
             "max_overlap_fraction": 0.75,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 720,
+              "labels_after_the_last_retained_frame": [
+                726
+              ],
+              "recall_ceiling": 0.9411764705882353,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -4415,7 +4453,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -4845,7 +4889,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 3,
             "max_overlap_fraction": 0.375,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -5258,7 +5308,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 3,
             "max_overlap_fraction": 0.375,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -5678,7 +5734,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 5,
             "max_overlap_fraction": 0.5,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -6091,7 +6153,13 @@
             "overlapping_label_pairs": 2,
             "max_overlap_frames": 6,
             "max_overlap_fraction": 0.5454545454545454,
-            "resolution_limited": true
+            "resolution_limited": true,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -6511,7 +6579,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -6941,7 +7015,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -7367,7 +7447,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -7799,7 +7885,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -8231,7 +8323,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -8683,7 +8781,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -9113,7 +9217,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -9533,7 +9643,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -9945,7 +10061,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -10423,7 +10545,13 @@
             "overlapping_label_pairs": 1,
             "max_overlap_frames": 1,
             "max_overlap_fraction": 0.16666666666666666,
-            "resolution_limited": false
+            "resolution_limited": false,
+            "reachability": {
+              "last_retained_source_frame": 734,
+              "labels_after_the_last_retained_frame": [],
+              "recall_ceiling": 1.0,
+              "note": "A label past the last retained frame has no sample at or after it, so no method can report that crossing and the widening cannot help: the widening covers the wait for the NEXT sample, and here there is none. Every method is charged a miss for such a label by construction, so recall_ceiling -- not 1.0 -- is the best any method could score at this level, and the shortfall belongs to the sampling grid rather than to the engine."
+            }
           },
           "methods": {
             "engine+gate": {
@@ -11318,7 +11446,7 @@
   "questions": {
     "band_step_over": {
       "question": "Task 14 measured the gate approach at 1.13 px per frame, at which no band is ever stepped over, so the band rule's classic miss mode never occurred and miss rate and phantom rate rose together instead of trading. Does decimation restore it, and at which rate?",
-      "criterion": "A (tracker, rate, band) row counts as stepped over when the band rule emits FEWER events than the GATE rule driven by the same tracker over the same stream. Both rules see identical tracks and both count once per track, so a shortfall can only mean a track passed through with no sample landing inside the band. A bare under-count would NOT do: below 15 fps the engine's association collapses and the gate rule under-counts by exactly as much as every band, so 'misses exceed phantoms' reports step-over wherever tracking merely stopped. This criterion is also conservative -- the band's own phantoms inflate its count and can mask a few stepped-over vehicles -- so it under-reports the mode rather than manufacturing it.",
+      "criterion": "A (tracker, rate, band) row counts as stepped over when the band rule emits FEWER events than the GATE rule driven by the same tracker over the same stream. Both rules see identical tracks and both count once per track, so a shortfall means a track the gate rule counted reached the band and was declined. BandCounter declines for exactly two reasons: no sample landed inside the band -- step-over -- or a sample landed inside it with ZERO perpendicular displacement from its predecessor, which is a vehicle stopped on the band rather than one that jumped it. The second cause cannot explain any row observed here, because per-sample displacement only GROWS under decimation and this sweep's shortfalls all appear at the lowest rates; but it is a distinct cause, so the criterion is 'a declined band crossing' and step-over is the reading the measured displacement supports, not the only arithmetic possibility. A bare under-count would NOT do at all: below 15 fps the engine's association collapses and the gate rule under-counts by exactly as much as every band, so 'misses exceed phantoms' reports step-over wherever tracking merely stopped. This criterion is also conservative -- the band's own phantoms inflate its count and can mask a few stepped-over vehicles -- so it under-reports the mode rather than manufacturing it.",
       "band_px_default": 20.0,
       "band_px_swept": [
         5.0,

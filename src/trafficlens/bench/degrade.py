@@ -45,6 +45,15 @@ frames apart, so their windows already share one frame undegraded, and
 every widening enlarges the shared region. Figures scored with a widened
 window are resolution-limited, and the report says which.
 
+The widening also has a limit it cannot pass. It covers the wait for the
+NEXT retained sample, so a label past the LAST retained frame is not
+covered by anything: no sample exists at or after it, every method is
+charged a miss for it by construction, and recall is capped below 1.0
+before any engine runs. ``label_reachability`` computes that ceiling from
+the retained pattern and it is published beside every level, because a
+recall ceiling the report did not state would read as the engine missing
+a crossing it was never shown.
+
 The stream handed to the engine is renumbered
 ---------------------------------------------
 A resampled stream is renumbered from zero before the engine sees it, as
@@ -138,6 +147,7 @@ __all__ = [
     "frame_rate_streams",
     "jitter_boxes",
     "jitter_streams",
+    "label_reachability",
     "map_events_to_source",
     "run_protocol",
     "run_stream",
@@ -703,6 +713,45 @@ def window_resolution(
     }
 
 
+def label_reachability(
+    labels: Sequence[Crossing], source_frames: Sequence[int]
+) -> dict:
+    """Which labels the retained pattern can still be scored against at
+    all, and the recall ceiling that follows.
+
+    The widening covers a label whose crossing falls between two retained
+    frames, because there is a later sample to report it on. It cannot
+    cover a label past the LAST retained frame: no sample exists at or
+    after it, so no method can ever report that crossing and every method
+    is charged a miss for it by construction.
+
+    On the shipped clip that is not hypothetical. The last label sits at
+    frame 726 of 735, and 2 fps retains nothing after frame 720, so recall
+    at that one level is capped at 16/17 = 0.9412 before any engine runs.
+    A recall ceiling below 1.0 that the report does not state would read
+    as the engine missing a crossing it was never shown, so it is
+    published beside the level it applies to.
+    """
+    total = len(labels)
+    last = max(source_frames) if len(source_frames) else -1
+    unreachable = sorted(label.frame for label in labels if label.frame > last)
+    reachable = total - len(unreachable)
+    return {
+        "last_retained_source_frame": int(last),
+        "labels_after_the_last_retained_frame": unreachable,
+        "recall_ceiling": (reachable / total) if total else None,
+        "note": (
+            "A label past the last retained frame has no sample at or after "
+            "it, so no method can report that crossing and the widening "
+            "cannot help: the widening covers the wait for the NEXT sample, "
+            "and here there is none. Every method is charged a miss for such "
+            "a label by construction, so recall_ceiling -- not 1.0 -- is the "
+            "best any method could score at this level, and the shortfall "
+            "belongs to the sampling grid rather than to the engine."
+        ),
+    }
+
+
 # --- mapping predictions back onto the ground truth's clock -----------------
 
 
@@ -818,9 +867,10 @@ def run_stream(
     entry = stream.as_dict()
     entry["match_window"] = window.as_dict()
     entry["window_widened_by_frames"] = window.frames_after - base_window.frames_after
-    entry["resolution"] = window_resolution(
-        labels, window, baseline_window=base_window
-    )
+    entry["resolution"] = {
+        **window_resolution(labels, window, baseline_window=base_window),
+        "reachability": label_reachability(labels, stream.source_frames),
+    }
     entry["methods"] = records
     return entry
 

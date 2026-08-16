@@ -88,9 +88,14 @@ from trafficlens.track.tracker import Tracker  # noqa: E402
 #: The schema version of ``reports/robustness.json``.
 REPORT_SCHEMA_VERSION = 1
 
-#: Frame rates the decimation protocol sweeps, highest first. 30 is the
-#: identity and the anchor the whole family reduces to.
-DEFAULT_TARGET_RATES = (30.0, 25.0, 15.0, 10.0, 5.0, 2.0)
+#: Frame rates the decimation protocol sweeps BELOW the clip's own rate,
+#: highest first. The identity level is deliberately NOT in this tuple: it
+#: is the clip's own frame rate, taken from the ground truth, because that
+#: is what ``reduction.identity_levels`` publishes and what the whole
+#: family must reduce to. Hard-coding 30 here would put a rate the clip
+#: does not have at the head of the sweep on any clip that is not 30 fps,
+#: and ``decimate`` would refuse to invent frames.
+DEFAULT_DEGRADED_RATES = (25.0, 15.0, 10.0, 5.0, 2.0)
 
 #: Fractions of frames deleted outright. 0 is the identity.
 DEFAULT_DROP_FRACTIONS = (0.0, 0.05, 0.10, 0.20, 0.30)
@@ -125,6 +130,21 @@ _BAND_ROW_FIELDS = (
     "f1",
     "signed_bias",
 )
+
+
+def target_rates_for(source_fps: float, degraded_rates=DEFAULT_DEGRADED_RATES):
+    """The decimation sweep for a clip recorded at ``source_fps``.
+
+    The clip's own rate leads, because that is the identity level the
+    whole family reduces to, and only rates strictly below it follow --
+    ``decimate`` removes frames and cannot invent them, so a sweep point
+    above the source rate is not a degradation but a crash. On the shipped
+    30 fps clip this returns exactly ``(30, 25, 15, 10, 5, 2)``.
+    """
+    source = float(source_fps)
+    return [source] + [
+        float(rate) for rate in degraded_rates if float(rate) < source
+    ]
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -185,8 +205,15 @@ def _band_sweep(
     stopped. The signature published here is the band rule emitting FEWER
     events than the gate rule driven by the SAME tracker over the SAME
     stream. Both rules see identical tracks and both count once per track,
-    so the only way the band emits fewer is that a track passed through
-    without any sample landing inside the band -- which is step-over. It
+    so a shortfall means a track the gate rule counted reached the band and
+    was declined -- which ``BandCounter`` does for exactly two reasons: no
+    sample landed inside the band (step-over), or a sample landed inside it
+    with zero perpendicular displacement from its predecessor
+    (``baselines.BandCounter.update`` returns None when ``signed == 0``, so
+    a vehicle stopped on the band is never counted). The second cannot
+    explain anything observed under decimation, where per-sample
+    displacement only GROWS, but it is a distinct cause and the criterion
+    says so rather than claiming a shortfall can only be step-over. It
     is conservative: the band's phantoms inflate its own count, so a few
     stepped-over vehicles can be masked, and the flag never fires
     spuriously.
@@ -454,15 +481,25 @@ def _band_step_over_answer(report_protocols, band_values) -> dict:
             "A (tracker, rate, band) row counts as stepped over when the band "
             "rule emits FEWER events than the GATE rule driven by the same "
             "tracker over the same stream. Both rules see identical tracks and "
-            "both count once per track, so a shortfall can only mean a track "
-            "passed through with no sample landing inside the band. A bare "
-            "under-count would NOT do: below 15 fps the engine's association "
-            "collapses and the gate rule under-counts by exactly as much as "
-            "every band, so 'misses exceed phantoms' reports step-over "
-            "wherever tracking merely stopped. This criterion is also "
-            "conservative -- the band's own phantoms inflate its count and can "
-            "mask a few stepped-over vehicles -- so it under-reports the mode "
-            "rather than manufacturing it."
+            "both count once per track, so a shortfall means a track the gate "
+            "rule counted reached the band and was declined. BandCounter "
+            "declines for exactly two reasons: no sample landed inside the "
+            "band -- step-over -- or a sample landed inside it with ZERO "
+            "perpendicular displacement from its predecessor, which is a "
+            "vehicle stopped on the band rather than one that jumped it. The "
+            "second cause cannot explain any row observed here, because "
+            "per-sample displacement only GROWS under decimation and this "
+            "sweep's shortfalls all appear at the lowest rates; but it is a "
+            "distinct cause, so the criterion is 'a declined band crossing' "
+            "and step-over is the reading the measured displacement supports, "
+            "not the only arithmetic possibility. A bare under-count would NOT "
+            "do at all: below 15 fps the engine's association collapses and "
+            "the gate rule under-counts by exactly as much as every band, so "
+            "'misses exceed phantoms' reports step-over wherever tracking "
+            "merely stopped. This criterion is also conservative -- the band's "
+            "own phantoms inflate its count and can mask a few stepped-over "
+            "vehicles -- so it under-reports the mode rather than "
+            "manufacturing it."
         ),
         "band_px_default": float(BASELINE_BAND_PX),
         "band_px_swept": [float(value) for value in band_values],
@@ -589,7 +626,7 @@ def build_report(
     noise: dict,
     detector: dict | None,
     seed: int = ROBUSTNESS_SEED,
-    target_rates=DEFAULT_TARGET_RATES,
+    target_rates=None,
     drop_fractions=DEFAULT_DROP_FRACTIONS,
     dropout_probabilities=DEFAULT_DROPOUT_PROBABILITIES,
     jitter_sigmas=DEFAULT_JITTER_SIGMAS,
@@ -606,7 +643,20 @@ def build_report(
     """
     labels = list(truth.crossings)
     methods = build_methods(gate)
-    target_rates = [float(rate) for rate in target_rates]
+    # The identity rate is the CLIP's, never a constant: it is what
+    # reduction.identity_levels publishes below and what the family must
+    # reduce to.
+    target_rates = (
+        target_rates_for(truth.fps)
+        if target_rates is None
+        else [float(rate) for rate in target_rates]
+    )
+    if target_rates[0] != float(truth.fps):
+        raise ValueError(
+            f"the decimation sweep must lead with the clip's own rate "
+            f"({truth.fps} fps), because that is the identity level the "
+            f"whole family reduces to; got {target_rates[0]}"
+        )
 
     rate_streams = frame_rate_streams(
         detections, source_fps=truth.fps, target_rates=target_rates
@@ -782,11 +832,17 @@ def build_report(
                 label_frames[closest],
                 label_frames[closest + 1],
             ],
-            "first_rate_with_overlapping_windows": (
-                overlapping[0]["level"] if overlapping else None
+            # The HIGHEST qualifying rate, computed rather than taken from
+            # the head of a list that happens to be in descending sweep
+            # order. "First" means first as the rate falls; reordering
+            # DEFAULT_DEGRADED_RATES must not silently change a published
+            # answer. _band_step_over_answer takes the max for the same
+            # reason.
+            "first_rate_with_overlapping_windows": max(
+                (entry["level"] for entry in overlapping), default=None
             ),
-            "first_rate_with_a_second_overlapping_pair": (
-                second_pair[0]["level"] if second_pair else None
+            "first_rate_with_a_second_overlapping_pair": max(
+                (entry["level"] for entry in second_pair), default=None
             ),
             "note": (
                 "The closest labelled pair is five frames apart, so with the "

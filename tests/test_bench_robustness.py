@@ -58,6 +58,7 @@ from trafficlens.bench.degrade import (
     frame_rate_streams,
     jitter_boxes,
     jitter_streams,
+    label_reachability,
     map_events_to_source,
     run_protocol,
     run_stream,
@@ -237,29 +238,73 @@ def test_the_degradation_module_imports_no_tracker_and_no_counting_rule():
     against the engine's behaviour, and nothing downstream would show it.
     Methods arrive as opaque callables and labels as data, so the module's
     own import graph is asserted rather than trusted.
+
+    Asserted as an ALLOWLIST, not a blacklist. A blacklist of dotted
+    module paths is evaded by three forms a working programmer would
+    reach for without thinking: ``from trafficlens.track import tracker``
+    and ``from trafficlens.bench import harness`` name the PACKAGE and
+    bind the module as an attribute, and
+    ``from trafficlens.core.gate import GateCounter`` pulls the engine's
+    own counting rule out of a module the seam does legitimately need for
+    its ``CrossingEvent`` type. The allowlist is exactly the one the
+    module docstring states, and the second check names the symbols that
+    must never be bound however they are reached.
     """
     import ast
 
-    tree = ast.parse((ROOT / "src/trafficlens/bench/degrade.py").read_text())
+    source = (ROOT / "src/trafficlens/bench/degrade.py").read_text()
+    tree = ast.parse(source)
     imported: set[str] = set()
+    bound: set[str] = set()
+    star_from: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
+            for alias in node.names:
+                if alias.name == "*":
+                    star_from.add(node.module)
+                else:
+                    bound.add(alias.name)
         elif isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
 
-    forbidden = {
-        "trafficlens.track.tracker",
-        "trafficlens.track.associate",
-        "trafficlens.bench.baselines",
-        "trafficlens.bench.harness",
-        "trafficlens.pipeline",
-        "torch",
-        "ultralytics",
+    # The module docstring states this list; it is asserted here so the two
+    # cannot drift apart.
+    allowed = {
+        "trafficlens.bench.scoring",
+        "trafficlens.bench.slitscan",
+        "trafficlens.core.gate",
+        "trafficlens.detect.base",
     }
+    reached = {name for name in imported if name.startswith("trafficlens")}
+    assert reached <= allowed, sorted(reached - allowed)
+
+    # An allowed MODULE is not a licence to import anything inside it:
+    # trafficlens.core.gate carries both the CrossingEvent type this module
+    # needs and the GateCounter rule it must never see.
+    never_bound = {
+        "Tracker",
+        "GateCounter",
+        "BandCounter",
+        "PerFrameCounter",
+        "CentroidTracker",
+        "GreedyIoUTracker",
+    }
+    assert bound & never_bound == set(), sorted(bound & never_bound)
+    # A star import would smuggle every one of those in unnamed.
+    assert star_from == set(), sorted(star_from)
+
+    forbidden = {"torch", "ultralytics"}
     assert imported & forbidden == set(), sorted(imported & forbidden)
     assert "trafficlens.bench.scoring" in imported  # the scorer
     assert "trafficlens.detect.base" in imported  # the Detection type
+
+    # The docstring's own statement of the allowlist, so a future import
+    # cannot be waved through by editing only the test.
+    docstring = ast.get_docstring(tree) or ""
+    for module in sorted(allowed):
+        tail = module.split(".")[-1]
+        assert tail in docstring, module
 
 
 # -- the match window must widen with the sampling interval ------------------
@@ -312,9 +357,21 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
     The tightness assertion at the end is what stops this being vacuous:
     some (level, label) pair must realise the worst case exactly, or the
     bound is never actually pressed and any narrowing would slip through.
+
+    The property holds only for labels the retained pattern can still
+    reach. A label past the LAST retained frame has no later sample at
+    all, so there is nothing for the widening to cover and every method is
+    charged a miss for it by construction -- which happens on the real
+    clip, where 2 fps retains nothing after frame 720 and the last label
+    sits at 726. That case is exercised here rather than merely not
+    tripped over: a fixture in which every label happens to have a later
+    sample would leave ``assert later`` untested, and the real clip would
+    then fire an assertion whose message says nothing about a recall
+    ceiling.
     """
     stream = _synthetic_stream()
-    labels = [label.frame for label in _synthetic_labels()]
+    labels = _synthetic_labels()
+    label_frames = [label.frame for label in labels]
     streams = list(
         frame_rate_streams(stream, source_fps=30.0, target_rates=(30, 25, 15, 10, 5, 2))
     ) + list(
@@ -324,9 +381,19 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
     for degraded in streams:
         window = widen_for_gap(DEFAULT_MATCH_WINDOW, degraded.max_gap)
         widening = window.frames_after - DEFAULT_MATCH_WINDOW.frames_after
-        for label_frame in labels:
+        reach = label_reachability(labels, degraded.source_frames)
+        unreachable = set(reach["labels_after_the_last_retained_frame"])
+        for label_frame in label_frames:
             later = [s for s in degraded.source_frames if s >= label_frame]
-            assert later, (degraded.level_label, label_frame)
+            # The two halves must agree on which labels have no later
+            # sample, or the ceiling the report publishes is not the one
+            # this property is checked against.
+            assert bool(later) == (label_frame not in unreachable), (
+                degraded.level_label,
+                label_frame,
+            )
+            if not later:
+                continue
             wait = later[0] - label_frame
             assert wait <= widening, (
                 degraded.protocol,
@@ -340,6 +407,78 @@ def test_the_widening_covers_the_first_retained_frame_after_every_label():
         "no label in any swept level waits the full quantisation, so this "
         "fixture never presses the bound and could not see it narrowed"
     )
+
+
+def test_a_label_past_the_last_retained_frame_caps_recall_below_one():
+    """The tail case the widening cannot cover, on the real clip's own
+    numbers.
+
+    2 fps keeps nothing after frame 720 of 735 while the last label sits
+    at 726, so that crossing has no sample at or after it: every method is
+    charged a miss for it before any engine runs, and recall at that one
+    level is capped at 16/17. The report must say so, because a ceiling it
+    did not state would read as the engine missing a crossing it was never
+    shown.
+    """
+    labels = _synthetic_labels() + [Crossing(4, 199, "car", "toward", "certain")]
+    stream = _synthetic_stream()
+
+    # A label inside the retained pattern is reachable at every rate.
+    fast = decimate(stream, source_fps=30.0, target_fps=30.0)
+    intact = label_reachability(labels, fast.source_frames)
+    assert intact["labels_after_the_last_retained_frame"] == []
+    assert intact["recall_ceiling"] == 1.0
+
+    # ... and one past the last retained frame is not, at any widening.
+    slow = decimate(stream, source_fps=30.0, target_fps=2.0)
+    assert slow.source_frames[-1] < 199
+    capped = label_reachability(labels, slow.source_frames)
+    assert capped["labels_after_the_last_retained_frame"] == [199]
+    assert capped["last_retained_source_frame"] == slow.source_frames[-1]
+    assert capped["recall_ceiling"] == 3 / 4
+    # The widening covers the wait for the NEXT sample; there is none.
+    widened = widen_for_gap(DEFAULT_MATCH_WINDOW, slow.max_gap)
+    assert 199 + widened.frames_after > slow.source_frames[-1]
+
+    # No method can beat the ceiling, which is what makes it a ceiling.
+    entry = run_stream(slow, build_methods(_gate()), labels, gate_name=GATE_NAME)
+    assert entry["resolution"]["reachability"] == capped
+    for name, record in entry["methods"].items():
+        assert record["recall"] <= capped["recall_ceiling"] + 1e-12, name
+
+
+def test_the_published_report_states_the_recall_ceiling_at_every_level():
+    """The same property on the committed artefact, where the real clip
+    puts label 726 past 2 fps's last retained frame at 720."""
+    report = _report()
+    labels = report["labels"]["total"]
+    capped = []
+    for protocol, block in report["protocols"].items():
+        for entry in block["entries"]:
+            reach = entry["resolution"]["reachability"]
+            missing = len(reach["labels_after_the_last_retained_frame"])
+            assert reach["recall_ceiling"] == (labels - missing) / labels, (
+                protocol,
+                entry["level"],
+            )
+            for frame in reach["labels_after_the_last_retained_frame"]:
+                assert frame > reach["last_retained_source_frame"]
+            if missing:
+                capped.append(f"{protocol}@{entry['level_label']}")
+                # No method may exceed a ceiling that is a ceiling.
+                for name, record in entry["methods"].items():
+                    assert record["recall"] <= reach["recall_ceiling"], (
+                        protocol,
+                        entry["level"],
+                        name,
+                    )
+
+    # The one level where it bites, named so it cannot quietly spread.
+    assert capped == ["frame_rate@2 fps"]
+    slowest = _entry(report, PROTOCOL_FRAME_RATE, 2.0)["resolution"]["reachability"]
+    assert slowest["last_retained_source_frame"] == 720
+    assert slowest["labels_after_the_last_retained_frame"] == [726]
+    assert slowest["recall_ceiling"] == 16 / 17
 
 
 def test_scoring_a_decimated_run_against_the_undegraded_window_manufactures_errors():
@@ -868,8 +1007,19 @@ def test_every_protocol_at_its_identity_level_reproduces_the_undegraded_score():
     EXACTLY what the undegraded stream scores, for every one of the nine
     methods. A protocol that does not reduce to the baseline is measuring
     something other than the degradation it names.
+
+    The stream and the labels MUST correspond. A fixture whose traffic
+    crosses at frames the labels never name scores TP = 0 and
+    P = R = F1 = 0 on both sides of the comparison, so every
+    crossing-level assertion below compares zero against zero and the
+    test degenerates into a count check wearing a timing check's name --
+    a protocol that shifted every prediction two frames late at every
+    identity level would still pass it. ``_synthetic_stream`` crosses at
+    exactly the frames ``_synthetic_labels`` names, so the gate
+    compositions score F1 = 1.0 undegraded and any timing shift moves
+    them.
     """
-    stream = _traffic([(50, 60.0), (80, 160.0), (120, 260.0)])
+    stream = _synthetic_stream()
     labels = _synthetic_labels()
     methods = build_methods(_gate())
 
@@ -879,6 +1029,15 @@ def test_every_protocol_at_its_identity_level_reproduces_the_undegraded_score():
         ).as_dict()
         for name, method in methods.items()
     }
+
+    # The fixture must be able to SEE a timing shift, or the comparison
+    # below is zero against zero. Every gate composition lands all three
+    # crossings inside the undegraded window; a protocol that moved a
+    # prediction off its label would drop these off 1.0 and the equality
+    # assertions would then have something to disagree about.
+    for name in ("engine+gate", "centroid+gate", "greedy-iou+gate"):
+        assert undegraded[name]["true_positives"] == len(labels), name
+        assert undegraded[name]["f1"] == 1.0, (name, undegraded[name]["f1"])
 
     identity = {
         PROTOCOL_FRAME_RATE: frame_rate_streams(
@@ -1056,9 +1215,13 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
     # "misses exceed phantoms" test reports step-over wherever tracking
     # merely stopped. The confound-free signature is the band rule emitting
     # FEWER events than the gate rule driven by the SAME tracker over the
-    # SAME stream: both see identical tracks, and the only way the band
-    # emits fewer is that a track passed through without a sample landing
-    # inside the band.
+    # SAME stream: both see identical tracks, so a shortfall means a track
+    # the gate rule counted reached the band and was DECLINED. BandCounter
+    # declines for two reasons -- no sample inside the band (step-over) and
+    # a sample inside it with zero perpendicular displacement (a vehicle
+    # stopped on the band) -- and the published criterion names both,
+    # because only the measured displacement, not the arithmetic, rules the
+    # second one out here.
     sweep = report["protocols"][PROTOCOL_FRAME_RATE]["band_sweep_by_rate"]
     rows = [row for block in sweep for row in block["entries"]]
     assert rows, "the band sweep must publish rows"
@@ -1069,10 +1232,32 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
         assert row["gate_rule_n_predicted"] == gate_predicted, row
         assert row["stepped_over"] == (row["n_predicted"] < gate_predicted), row
 
+    stepped = [row for row in rows if row["stepped_over"]]
     observed = any(row["stepped_over"] for row in rows)
     assert question["step_over_trade_off_reappears"] == observed
-    assert question["step_over_rows"] == [row for row in rows if row["stepped_over"]]
+    assert question["step_over_rows"] == stepped
     assert question["verdict"].strip() != ""
+
+    # The two fields carrying the INTERESTING half of the answer, both
+    # recomputed rather than trusted. "NOT with the engine's own tracker at
+    # any rate" is the whole point of the finding -- and it is printed into
+    # the figure's own title -- while the rate is what says where the mode
+    # begins. Neither follows from the rows above unless it is derived from
+    # them here.
+    assert question["step_over_with_the_engine_tracker"] == any(
+        row["tracker"] == "engine" for row in stepped
+    )
+    assert question["first_rate_with_step_over"] == max(
+        (row["level"] for row in stepped), default=None
+    )
+    assert question["trackers_swept"] == sorted({row["tracker"] for row in rows})
+
+    # The criterion must state both ways BandCounter can decline a track
+    # the gate rule counted, not just the interesting one -- see
+    # test_a_band_shortfall_has_a_second_cause_besides_step_over.
+    criterion = question["criterion"]
+    assert "can only mean" not in criterion
+    assert "ZERO" in criterion and "perpendicular displacement" in criterion
 
     # A sweep driven only by a tracker that dies before the displacement
     # grows could never observe step-over at all, so the question is also
@@ -1083,20 +1268,84 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
     )
 
 
+def test_a_band_shortfall_has_a_second_cause_besides_step_over():
+    """Why the published criterion no longer says "can only mean".
+
+    A band shortfall against the gate rule means a track reached the band
+    and was DECLINED. ``BandCounter.update`` declines for two reasons, not
+    one: no sample landed inside the band -- step-over -- and a sample
+    landed inside it with zero perpendicular displacement from its
+    predecessor. The second is demonstrated here rather than argued, so
+    the criterion's wording is pinned to a fact about the rule.
+
+    It cannot explain either row this sweep observed, because per-sample
+    displacement only GROWS under decimation while a stopped vehicle needs
+    it to reach zero. That is a claim about the measurement, though, not
+    about the arithmetic, and the criterion now says which.
+    """
+    from trafficlens.bench.baselines import BandCounter
+
+    gate = _gate()
+    counter = BandCounter(gate, band_px=20.0)
+
+    # Sitting exactly on the band, having moved not at all across the gate.
+    on_band = (100.0, GATE_Y)
+    assert counter.update(1, "car", on_band, on_band, 10, 10 / 30.0) is None
+    assert counter.total() == 0
+
+    # The same track, once it actually moves through: counted.
+    assert (
+        counter.update(1, "car", (100.0, GATE_Y - 2.0), (100.0, GATE_Y + 2.0), 11, 0.36)
+        is not None
+    )
+    assert counter.total() == 1
+
+    # And the two causes are distinct: a track that never lands in the band
+    # is declined for the OTHER reason, while moving perfectly well.
+    stepped = BandCounter(gate, band_px=5.0)
+    assert (
+        stepped.update(
+            2, "car", (200.0, GATE_Y - 40.0), (200.0, GATE_Y + 40.0), 12, 0.4
+        )
+        is None
+    )
+    assert stepped.total() == 0
+
+
 def test_the_published_report_answers_the_tracker_separation_question():
     """Task 14's sharpest negative was that all three trackers scored
     identically on clean footage. Whether degradation separates them is
     recomputed here from the published per-level F1s rather than trusted.
+
+    Everything the verdict rests on is recomputed from the PER-LEVEL
+    RECORDS -- the same numbers the figures are drawn from -- and never
+    from the question block's own summary of them. ``f1_by_level`` is a
+    convenience copy; reading the engine's score out of it and comparing
+    that against the records would let a fabricated copy agree with
+    itself, and the strongest negative claim this session makes could be
+    inverted by editing one number and two lists.
     """
     report = _report()
     question = report["questions"]["tracker_separation"]
     trackers = ("engine+gate", "centroid+gate", "greedy-iou+gate")
 
+    records: dict[str, dict[str, float]] = {}
     spreads = {}
     for protocol, block in report["protocols"].items():
         for entry in block["entries"]:
-            scores = [entry["methods"][name]["f1"] for name in trackers]
-            spreads[f"{protocol}@{entry['level_label']}"] = max(scores) - min(scores)
+            key = f"{protocol}@{entry['level_label']}"
+            scores = {name: entry["methods"][name]["f1"] for name in trackers}
+            records[key] = scores
+            spreads[key] = max(scores.values()) - min(scores.values())
+
+    # The convenience copy must BE the records, to the last digit, or
+    # nothing derived from it means anything.
+    assert set(question["f1_by_level"]) == set(records)
+    for key, scores in records.items():
+        assert question["f1_by_level"][key] == scores, key
+    assert question["f1_spread_by_level"] == pytest.approx(spreads)
+    assert question["levels_measured"] == len(records)
+    assert question["methods_compared"] == list(trackers)
 
     assert question["max_f1_spread"] == pytest.approx(max(spreads.values()))
     assert question["trackers_separate"] == (max(spreads.values()) > 0.0)
@@ -1107,24 +1356,37 @@ def test_the_published_report_answers_the_tracker_separation_question():
 
     # Separating is not the same as separating in the engine's favour, and
     # a headline that said only "they separate" would read as the opposite
-    # of what the numbers show. The DIRECTION is recomputed here.
-    best = {}
-    for protocol, block in report["protocols"].items():
-        for entry in block["entries"]:
-            scores = {name: entry["methods"][name]["f1"] for name in trackers}
-            best[f"{protocol}@{entry['level_label']}"] = max(scores.values())
+    # of what the numbers show. The DIRECTION is recomputed here, from the
+    # records.
     engine_best = sorted(
         key
-        for key in spreads
-        if report["questions"]["tracker_separation"]["f1_by_level"][key][
-            "engine+gate"
-        ]
-        == best[key]
+        for key, scores in records.items()
+        if scores["engine+gate"] == max(scores.values())
+    )
+    engine_worst = sorted(
+        key
+        for key, scores in records.items()
+        if scores["engine+gate"] == min(scores.values())
     )
     assert question["levels_where_the_engine_scores_highest"] == engine_best
-    assert question["engine_leads_at_any_degraded_level"] == any(
-        spreads[key] > 0.0 for key in engine_best
-    )
+    assert question["levels_where_the_engine_scores_lowest"] == engine_worst
+    engine_leads = any(spreads[key] > 0.0 for key in engine_best)
+    assert question["engine_leads_at_any_degraded_level"] == engine_leads
+
+    # The prose headline must point the same way as the booleans under it.
+    # A reader sees the verdict, not the lists, so an inverted verdict is
+    # the cheapest way to launder this result and the one worth pinning.
+    verdict = question["verdict"]
+    if engine_leads:
+        assert "separate AGAINST the engine" not in verdict
+    else:
+        assert "separate AGAINST the engine" in verdict
+        assert "LEADS" not in verdict
+        # ... and the count it quotes must be the recomputed one.
+        differing = sorted(key for key, spread in spreads.items() if spread > 0.0)
+        trails = sorted(set(engine_worst) & set(differing))
+        assert f"at {len(trails)} of them it scores LOWEST" in verdict
+        assert f"{len(differing)} of the {len(spreads)} degradation levels" in verdict
 
 
 def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor():
@@ -1303,6 +1565,111 @@ def test_the_assembled_report_names_the_label_file_and_never_a_filesystem_path()
     text = json.dumps(report)
     assert "/Us" + "ers/" not in text
     assert str(ROOT) not in text
+
+
+def test_the_decimation_sweep_takes_its_identity_rate_from_the_clip():
+    """The identity level is the CLIP's frame rate, not the constant 30.
+
+    ``reduction.identity_levels`` already derives it from ``truth.fps``, so
+    a hard-coded 30 at the head of the sweep is a second source of truth
+    for the same number -- and on any clip that is not 30 fps it is the
+    wrong one. ``decimate`` removes frames and cannot invent them, so the
+    old constant did not merely mislabel the identity: it killed the run.
+    """
+    script = _load_script("bench_robustness")
+
+    # The shipped clip, unchanged.
+    assert script.target_rates_for(30.0) == [30.0, 25.0, 15.0, 10.0, 5.0, 2.0]
+
+    # A clip below some of the sweep points keeps only the ones it can
+    # actually be decimated to, and still leads with its own rate.
+    assert script.target_rates_for(24.0) == [24.0, 15.0, 10.0, 5.0, 2.0]
+    assert script.target_rates_for(12.0) == [12.0, 10.0, 5.0, 2.0]
+    for source in (30.0, 25.0, 24.0, 12.0, 59.94):
+        rates = script.target_rates_for(source)
+        assert rates[0] == source
+        assert all(rate < source for rate in rates[1:])
+        assert rates == sorted(rates, reverse=True)
+
+    # And the assembled report agrees with itself: the sweep's top level
+    # IS the identity level the reduction block names.
+    truth = _synthetic_ground_truth(_synthetic_labels())
+    report = script.build_report(
+        _synthetic_stream(),
+        truth,
+        _gate(),
+        noise=json.loads(NOISE_REPORT.read_text()),
+        detector={"model": "yolo11s.pt"},
+        drop_fractions=(0.0,),
+        dropout_probabilities=(0.0,),
+        jitter_sigmas=(0.0,),
+        band_values=(20.0,),
+    )
+    levels = [e["level"] for e in report["protocols"][PROTOCOL_FRAME_RATE]["entries"]]
+    assert levels[0] == truth.fps
+    assert report["reduction"]["identity_levels"][PROTOCOL_FRAME_RATE] == truth.fps
+    assert levels == script.target_rates_for(truth.fps)
+
+
+def test_the_first_overlapping_rate_is_the_highest_one_not_the_first_listed():
+    """"First" means first as the rate FALLS, so it must be computed from
+    the qualifying levels rather than read off the head of a list that
+    happens to be in descending sweep order. Reordering the sweep must not
+    move a published answer.
+
+    The fixture is chosen so both fields can actually SEE the difference:
+    labels seven frames apart start overlapping at 10 fps and stay
+    overlapping at 5, so each field has two qualifying levels and the head
+    of the list differs between the two sweep orders while the maximum
+    does not. On the shipped ``_synthetic_labels`` no level overlaps at
+    all, both fields are ``None`` under every ordering, and a test built on
+    them would agree with itself while measuring nothing.
+    """
+    script = _load_script("bench_robustness")
+    labels = [
+        Crossing(1, 31, "car", "toward", "certain"),
+        Crossing(2, 38, "car", "toward", "certain"),
+        Crossing(3, 45, "car", "toward", "certain"),
+        Crossing(4, 104, "car", "toward", "certain"),
+    ]
+    stream = _traffic([(31, 60.0), (38, 160.0), (45, 260.0), (104, 360.0)])
+    truth = _synthetic_ground_truth(labels)
+    common = dict(
+        noise=json.loads(NOISE_REPORT.read_text()),
+        detector={"model": "yolo11s.pt"},
+        drop_fractions=(0.0,),
+        dropout_probabilities=(0.0,),
+        jitter_sigmas=(0.0,),
+        band_values=(20.0,),
+    )
+    descending = script.build_report(
+        stream, truth, _gate(), target_rates=(30.0, 10.0, 5.0), **common
+    )
+    scrambled = script.build_report(
+        stream, truth, _gate(), target_rates=(30.0, 5.0, 10.0), **common
+    )
+
+    # The fixture must qualify at more than one rate, or "highest" and
+    # "first listed" cannot disagree and this test is vacuous.
+    qualifying = [
+        entry["level"]
+        for entry in descending["protocols"][PROTOCOL_FRAME_RATE]["entries"]
+        if entry["resolution"]["overlapping_label_pairs"] >= 2
+    ]
+    assert sorted(qualifying) == [5.0, 10.0], qualifying
+
+    for field in (
+        "first_rate_with_overlapping_windows",
+        "first_rate_with_a_second_overlapping_pair",
+    ):
+        assert descending["label_resolution"][field] == 10.0, field
+        assert scrambled["label_resolution"][field] == 10.0, field
+
+    # Same property for the step-over rate, which already took the max.
+    assert (
+        descending["questions"]["band_step_over"]["first_rate_with_step_over"]
+        == scrambled["questions"]["band_step_over"]["first_rate_with_step_over"]
+    )
 
 
 def test_the_ablation_actually_varies_the_association_floor():
