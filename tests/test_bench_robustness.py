@@ -1623,6 +1623,47 @@ def test_the_published_report_answers_the_tracker_separation_question():
         assert f"at {len(trails)} of them it scores LOWEST" in verdict
         assert f"{len(differing)} of the {len(spreads)} degradation levels" in verdict
 
+    # The CLEAN-footage clause, recomputed the same way.
+    #
+    # This is the one that went wrong. The verdict used to assert, in fixed
+    # prose, that Task 14 "found all three identical on clean 30 fps footage",
+    # and Task 20's interpolation correction made that false -- while the same
+    # report recorded the contradicting spread three keys away and this test
+    # checked only that the verdict was non-empty. The whole argument depends
+    # on the clean-footage baseline, so it is derived and pinned rather than
+    # recalled.
+    identity_levels = report["reduction"]["identity_levels"]
+    identity_keys = sorted(
+        f"{protocol}@{entry['level_label']}"
+        for protocol, block in report["protocols"].items()
+        for entry in block["entries"]
+        if entry["level"] == identity_levels[protocol]
+    )
+    assert identity_keys, "no identity level was identified"
+    assert question["identity_levels_compared"] == identity_keys
+    identity_spreads = {key: spreads[key] for key in identity_keys}
+    assert question["identity_f1_spread_by_level"] == identity_spreads
+    separates_clean = any(spread > 0.0 for spread in identity_spreads.values())
+    assert question["trackers_separate_on_undegraded_footage"] == separates_clean
+
+    if separates_clean:
+        # The trackers differ undegraded, so the verdict must NOT claim a tie
+        # there -- in any wording -- and must quote the measured spread.
+        assert "identical on clean" not in verdict
+        assert "still tie exactly" not in verdict
+        assert "includes the UNDEGRADED footage" in verdict
+        assert f"{max(identity_spreads.values()):.4f} crossing F1" in verdict
+        lowest_everywhere = all(key in set(engine_worst) for key in identity_keys)
+        assert question["engine_lowest_on_every_identity_level"] == lowest_everywhere
+        if lowest_everywhere:
+            assert "with the engine lowest at each one" in verdict
+    else:
+        # The must-not-fire half: if a later change restores the tie, the
+        # verdict has to say so and must not keep asserting a separation that
+        # is no longer there.
+        assert "still tie exactly" in verdict
+        assert "includes the UNDEGRADED footage" not in verdict
+
 
 def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor():
     """The mechanism behind question (b), measured rather than inferred.

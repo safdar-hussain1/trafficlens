@@ -6,11 +6,19 @@
  *
  * The onnxruntime bundle is imported at RUNTIME from `public/`, not bundled.
  * That is deliberate: `web/public/ort.webgpu.mjs` and the two
- * `ort-wasm-simd-threaded.jsep.*` files are byte-identical copies of what npm
- * published, and `vendored.test.ts` asserts it. If the bundler inlined and
+ * `ort-wasm-simd-threaded.asyncify.*` files are byte-identical copies of what
+ * npm published, and `vendored.test.ts` asserts it. If the bundler inlined and
  * transformed its own copy instead, that assertion would be about a file the
  * browser never executes. Importing the vendored URL keeps the bytes the test
- * checks and the bytes that run the model the same bytes. */
+ * checks and the bytes that run the model the same bytes.
+ *
+ * That last sentence is only true while `env.wasm.wasmPaths` also points at
+ * `public/`. It is a one-line change to send it at a CDN instead, and
+ * `vendored.test.ts` would stay green while the browser fetched a completely
+ * different wasm binary -- the files in `public/` would be provably pristine
+ * and provably unused. So `browserDeps` is exported and
+ * `session.test.ts` asserts the resolved paths land beside the vendored entry
+ * and on the page's own origin. */
 
 import { loadCachedBytes, type LoadProgress } from "./cache";
 import type { ExecutionProvider } from "./backend";
@@ -37,34 +45,69 @@ export interface SessionDeps {
   create(model: ArrayBuffer, options: Record<string, unknown>): Promise<InferenceSession>;
 }
 
-/** Resolve a vendored asset against the page, so the site works from a
- * project subpath on Pages as well as from a domain root. */
-function vendoredUrl(name: string): string {
-  return new URL(name, document.baseURI).href;
+/** The slice of the onnxruntime module this file configures and calls. */
+export interface OrtModule {
+  readonly env: { readonly wasm: { wasmPaths: string; numThreads: number } };
+  readonly InferenceSession: {
+    create(model: ArrayBuffer, options: Record<string, unknown>): Promise<InferenceSession>;
+  };
 }
 
-function browserDeps(): SessionDeps {
+/** The name of the vendored entry point, and so of the directory every other
+ * vendored runtime asset is resolved against. */
+export const ORT_ENTRY = "ort.webgpu.mjs";
+
+/** Threads to request when the page IS cross-origin isolated. Never reached on
+ * GitHub Pages; see `browserDeps`. */
+export const ISOLATED_WASM_THREADS = 4;
+
+export interface BrowserDepsOptions {
+  /** Defaults to the live `document.baseURI`. */
+  readonly baseUri?: string | undefined;
+  /** Defaults to a real dynamic `import()`. */
+  readonly importOrt?: ((url: string) => Promise<OrtModule>) | undefined;
+  /** Defaults to the live `crossOriginIsolated`. */
+  readonly isolated?: boolean | undefined;
+}
+
+/** Resolve a vendored asset against the page, so the site works from a project
+ * subpath on Pages as well as from a domain root. Relative, never rooted: an
+ * absolute "/ort.webgpu.mjs" would 404 under a project subpath. */
+export function vendoredUrl(name: string, baseUri?: string): string {
+  return new URL(name, baseUri ?? document.baseURI).href;
+}
+
+/** The directory the runtime loads its wasm loader and binary from.
+ *
+ * Derived from the entry point rather than written out, so it cannot drift away
+ * from the file the bundle is actually imported from. */
+export function vendoredDirectory(baseUri?: string): string {
+  return new URL("./", vendoredUrl(ORT_ENTRY, baseUri)).href;
+}
+
+export function browserDeps(options: BrowserDepsOptions = {}): SessionDeps {
+  const importOrt =
+    options.importOrt ??
+    // @vite-ignore: resolved by the browser at run time and must not be
+    // rewritten into a bundled chunk; see the module comment.
+    ((url: string) => import(/* @vite-ignore */ url) as Promise<OrtModule>);
   return {
     load: (url, onProgress) => loadCachedBytes(url, { ...(onProgress ? { onProgress } : {}) }),
-    create: async (model, options) => {
-      const entry = vendoredUrl("ort.webgpu.mjs");
-      // @vite-ignore: this URL is resolved by the browser at runtime and must
-      // not be rewritten into a bundled chunk; see the module comment.
-      const ort = (await import(/* @vite-ignore */ entry)) as {
-        env: { wasm: { wasmPaths: string; numThreads: number } };
-        InferenceSession: {
-          create(model: ArrayBuffer, options: Record<string, unknown>): Promise<InferenceSession>;
-        };
-      };
-      // The loader glue and the .wasm binary sit beside the entry point.
-      ort.env.wasm.wasmPaths = new URL("./", entry).href;
+    create: async (model, sessionOptions) => {
+      const entry = vendoredUrl(ORT_ENTRY, options.baseUri);
+      const ort = await importOrt(entry);
+      // The loader glue and the .wasm binary sit beside the entry point -- and
+      // must keep doing so, or the vendored-identity test is checking files the
+      // browser never fetches.
+      ort.env.wasm.wasmPaths = vendoredDirectory(options.baseUri);
       // GitHub Pages cannot send COOP/COEP, so `crossOriginIsolated` is false
       // and SharedArrayBuffer -- and therefore multi-threaded wasm -- is
       // unavailable. Asking for threads anyway makes onnxruntime probe, fail
       // and fall back noisily; asking for one is the honest configuration and
       // is the one the published fallback figure was measured under.
-      ort.env.wasm.numThreads = globalThis.crossOriginIsolated === true ? 4 : 1;
-      return ort.InferenceSession.create(model, options);
+      const isolated = options.isolated ?? globalThis.crossOriginIsolated === true;
+      ort.env.wasm.numThreads = isolated ? ISOLATED_WASM_THREADS : 1;
+      return ort.InferenceSession.create(model, sessionOptions);
     },
   };
 }

@@ -11506,7 +11506,7 @@
       "verdict": "The step-over mode DOES reappear under decimation. 2 of the 84 swept (tracker, rate, band) combinations emit FEWER events than the gate rule fed by the same tracker over the same stream -- the confound-free signature of a band jumped clean over -- and the highest frame rate at which that happens is 5 fps. It appears with greedy-iou, but NOT with the engine's own tracker at any rate. That is the more interesting half of the answer: the engine's association collapses at a HIGHER frame rate than the band's step-over threshold, so on this clip the rule's classic failure mode is pre-empted by the tracker's. The step-over mode is real and this sweep reaches it, but only through an association loose enough to still be tracking when the displacement gets that large."
     },
     "tracker_separation": {
-      "question": "Task 14's sharpest honest negative was that on clean 30 fps footage all three trackers score identically with the gate rule, while the engine's Kalman plus second association stage costs about 21x the CPU of a baseline tracker. Dropout and dropped frames are exactly the conditions a motion model exists for. Does degradation separate them?",
+      "question": "Task 14 reported that on clean 30 fps footage all three trackers scored identically with the gate rule, while the engine's Kalman plus second association stage costs about 21x the CPU of a baseline tracker. Dropout and dropped frames are exactly the conditions a motion model exists for. Does degradation separate them -- and do they still tie undegraded? Both halves are re-measured here rather than carried over, because this family's identity levels ARE clean footage: see identity_f1_spread_by_level.",
       "methods_compared": [
         "engine+gate",
         "centroid+gate",
@@ -11694,7 +11694,22 @@
       "engine_leads_at_any_degraded_level": false,
       "levels_measured": 21,
       "trackers_separate": true,
-      "verdict": "The three trackers DO separate under degradation -- and they separate AGAINST the engine. The widest crossing-F1 spread with the gate rule is 0.7592, at frame_rate@5 fps, where centroid+gate scores highest; they differ at 19 of the 21 degradation levels measured. At not one of those 19 levels does the engine's Kalman-plus-Hungarian tracker score highest, and at 19 of them it scores LOWEST of the three. Task 14 found all three identical on clean 30 fps footage while the engine cost about 21x the CPU of a baseline tracker; degradation is where a motion model is supposed to earn that, and on this clip it does the opposite. The cause is measured rather than guessed at: see association_floor_ablation, which varies the engine's 0.8 IoU association floor and nothing else. This is a result about this product's own engine and it is published as measured."
+      "identity_levels_compared": [
+        "box_jitter@sigma=0 px",
+        "detection_dropout@p=0.00",
+        "dropped_frames@0% dropped",
+        "frame_rate@30 fps"
+      ],
+      "identity_f1_spread_by_level": {
+        "box_jitter@sigma=0 px": 0.026890756302521024,
+        "detection_dropout@p=0.00": 0.026890756302521024,
+        "dropped_frames@0% dropped": 0.026890756302521024,
+        "frame_rate@30 fps": 0.026890756302521024
+      },
+      "max_identity_f1_spread": 0.026890756302521024,
+      "trackers_separate_on_undegraded_footage": true,
+      "engine_lowest_on_every_identity_level": true,
+      "verdict": "The three trackers DO separate under degradation -- and they separate AGAINST the engine. The widest crossing-F1 spread with the gate rule is 0.7592, at frame_rate@5 fps, where centroid+gate scores highest; they differ at 19 of the 21 degradation levels measured. At not one of those 19 levels does the engine's Kalman-plus-Hungarian tracker score highest, and at 19 of them it scores LOWEST of the three. That now includes the UNDEGRADED footage this family reduces to: at every protocol's identity level the three trackers differ, by up to 0.0269 crossing F1, with the engine lowest at each one, so the engine does not start level either. The engine's Kalman plus second association stage costs about 21x the CPU of a baseline tracker, and degradation is where a motion model is supposed to earn that; on this clip it does the opposite. The cause is measured rather than guessed at: see association_floor_ablation, which varies the engine's 0.8 IoU association floor and nothing else. This is a result about this product's own engine and it is published as measured."
     }
   },
   "figures": [

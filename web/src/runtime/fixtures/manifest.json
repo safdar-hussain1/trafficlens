@@ -1,8 +1,9 @@
 {
   "decode": {
     "boundary": {
-      "columns": 18,
+      "columns": 19,
       "constructedCases": {
+        "argmax_tie": 18,
         "below_iou_pair": [
           13,
           14
@@ -81,6 +82,15 @@
           "x2": 426.6666564941406,
           "y1": 1000.0,
           "y2": 1106.6666259765625
+        },
+        {
+          "classId": 2,
+          "className": "car",
+          "score": 0.6600000262260437,
+          "x1": 2626.666748046875,
+          "x2": 2706.666748046875,
+          "y1": 1546.6666259765625,
+          "y2": 1626.6666259765625
         },
         {
           "classId": 3,
@@ -287,6 +297,8 @@
       "padY": 105.0,
       "scale": 0.375,
       "size": 480,
+      "sourceSha256": "a9a2fafe4b10cef1f95b1b122c0d66ea8a8d47b7a1ea4dcbe29c709d3baa6e63",
+      "tensorSha256": "b776e04a65c230bd9d9d99114f7a2305ba45e4b383a3310859f7bbaefadbec70",
       "width": 1280
     }
   },

@@ -142,6 +142,27 @@ describe("decodeYolo", () => {
     expect(got.filter((d) => d.classId === 7).length).toBe(1);
   });
 
+  // numpy's argmax returns the FIRST maximum. Column 18 ties car and truck at
+  // the identical float32 score, and both are kept, so a mirror scanning with
+  // `>=` takes the LAST and emits a truck where Python emits a car -- the same
+  // detection, a different class. Task 21 asserts class agreement, so this is
+  // the case that has to decide the same way in both languages.
+  it("labels an exact class tie with the FIRST maximum, as numpy's argmax does", () => {
+    const tie = runCase("boundary").filter((d) => d.score === Math.fround(0.66));
+    expect(tie.length).toBe(1);
+    expect(tie[0]?.className).toBe("car");
+    expect(tie[0]?.classId).toBe(2);
+  });
+
+  // Its control on the same axis -- how a maximum is chosen among the class
+  // rows -- with no tie present: the ordinary case must still pick the genuine
+  // maximum rather than the first row scanned.
+  it("still picks the strict maximum when the classes are not tied", () => {
+    const got = runCase("boundary").filter((d) => d.classId === 5);
+    expect(got.length).toBe(1);
+    expect(got[0]?.className).toBe("bus");
+  });
+
   it("drops a class outside the keep set even when it outscores everything", () => {
     const got = runCase("boundary");
     expect(got.every((d) => keepClassIds.includes(d.classId))).toBe(true);

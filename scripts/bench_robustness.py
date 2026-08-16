@@ -523,10 +523,19 @@ def _band_step_over_answer(report_protocols, band_values) -> dict:
     }
 
 
-def _tracker_separation_answer(report_protocols) -> dict:
-    """Question (b), answered from the published per-level F1s."""
+def _tracker_separation_answer(report_protocols, identity_levels) -> dict:
+    """Question (b), answered from the published per-level F1s.
+
+    ``identity_levels`` is passed in rather than assumed so the clean-footage
+    claim below is DERIVED from the same numbers the reduction proof uses. It
+    was hardcoded prose once -- "Task 14 found all three identical on clean 30
+    fps footage" -- and Task 20's interpolation correction made that false
+    while the sentence carried on asserting it, in a report that recorded the
+    contradicting spread three keys further down.
+    """
     spreads: dict[str, float] = {}
     detail: dict[str, dict] = {}
+    identity_keys: list[str] = []
     for protocol, block in report_protocols.items():
         for entry in block["entries"]:
             scores = {
@@ -535,6 +544,9 @@ def _tracker_separation_answer(report_protocols) -> dict:
             key = f"{protocol}@{entry['level_label']}"
             spreads[key] = max(scores.values()) - min(scores.values())
             detail[key] = scores
+            if entry["level"] == identity_levels.get(protocol):
+                identity_keys.append(key)
+    identity_keys.sort()
 
     widest = max(spreads.values()) if spreads else 0.0
     separating = sorted(key for key, spread in spreads.items() if spread > 0.0)
@@ -553,6 +565,32 @@ def _tracker_separation_answer(report_protocols) -> dict:
     engine_leads = any(spreads[key] > 0.0 for key in engine_highest)
     engine_trails = sorted(set(engine_lowest) & set(separating))
 
+    # The clean-footage half of the argument, measured rather than recalled.
+    identity_spreads = {key: spreads[key] for key in identity_keys}
+    identity_separates = any(spread > 0.0 for spread in identity_spreads.values())
+    identity_widest = max(identity_spreads.values()) if identity_spreads else 0.0
+    engine_lowest_on_identity = bool(identity_keys) and all(
+        key in set(engine_lowest) for key in identity_keys
+    )
+    if identity_separates:
+        clean_sentence = (
+            f"That now includes the UNDEGRADED footage this family reduces "
+            f"to: at every protocol's identity level the three trackers "
+            f"differ, by up to {identity_widest:.4f} crossing F1"
+            + (
+                ", with the engine lowest at each one"
+                if engine_lowest_on_identity
+                else ""
+            )
+            + f", so the engine does not start level either. "
+        )
+    else:
+        clean_sentence = (
+            f"On undegraded footage the three still tie exactly, at every "
+            f"protocol's identity level, which is where the comparison "
+            f"starts. "
+        )
+
     if separate:
         argmax = max(spreads, key=lambda key: spreads[key])
         best = max(detail[argmax], key=lambda name: detail[argmax][name])
@@ -568,10 +606,11 @@ def _tracker_separation_answer(report_protocols) -> dict:
                 f"At not one of those {len(separating)} levels does the "
                 f"engine's Kalman-plus-Hungarian tracker score highest, and at "
                 f"{len(engine_trails)} of them it scores LOWEST of the three. "
-                f"Task 14 found all three identical on clean 30 fps footage "
-                f"while the engine cost about 21x the CPU of a baseline "
-                f"tracker; degradation is where a motion model is supposed to "
-                f"earn that, and on this clip it does the opposite. The cause "
+                + clean_sentence
+                + f"The engine's Kalman plus second association stage costs "
+                f"about 21x the CPU of a baseline tracker, and degradation is "
+                f"where a motion model is supposed to earn that; on this clip "
+                f"it does the opposite. The cause "
                 f"is measured rather than guessed at: see "
                 f"association_floor_ablation, which varies the engine's "
                 f"{TRACK_MATCH_IOU:g} IoU association floor and nothing else. "
@@ -597,12 +636,15 @@ def _tracker_separation_answer(report_protocols) -> dict:
 
     return {
         "question": (
-            "Task 14's sharpest honest negative was that on clean 30 fps "
-            "footage all three trackers score identically with the gate rule, "
-            "while the engine's Kalman plus second association stage costs "
-            "about 21x the CPU of a baseline tracker. Dropout and dropped "
-            "frames are exactly the conditions a motion model exists for. Does "
-            "degradation separate them?"
+            "Task 14 reported that on clean 30 fps footage all three trackers "
+            "scored identically with the gate rule, while the engine's Kalman "
+            "plus second association stage costs about 21x the CPU of a "
+            "baseline tracker. Dropout and dropped frames are exactly the "
+            "conditions a motion model exists for. Does degradation separate "
+            "them -- and do they still tie undegraded? Both halves are "
+            "re-measured here rather than carried over, because this family's "
+            "identity levels ARE clean footage: see "
+            "identity_f1_spread_by_level."
         ),
         "methods_compared": list(GATE_RULE_METHODS),
         "f1_by_level": detail,
@@ -614,6 +656,14 @@ def _tracker_separation_answer(report_protocols) -> dict:
         "engine_leads_at_any_degraded_level": engine_leads,
         "levels_measured": len(spreads),
         "trackers_separate": separate,
+        # The undegraded baseline, published so the verdict's clean-footage
+        # clause can be checked against numbers in the same document rather
+        # than against a claim carried in from another task.
+        "identity_levels_compared": identity_keys,
+        "identity_f1_spread_by_level": identity_spreads,
+        "max_identity_f1_spread": identity_widest,
+        "trackers_separate_on_undegraded_footage": identity_separates,
+        "engine_lowest_on_every_identity_level": engine_lowest_on_identity,
         "verdict": verdict,
     }
 
@@ -947,7 +997,9 @@ def build_report(
 
     report["questions"] = {
         "band_step_over": _band_step_over_answer(protocols, band_values),
-        "tracker_separation": _tracker_separation_answer(protocols),
+        "tracker_separation": _tracker_separation_answer(
+            protocols, report["reduction"]["identity_levels"]
+        ),
     }
     return report
 

@@ -124,7 +124,7 @@ def test_authored_files_under_web_public_are_scanned(tmp_path, monkeypatch):
     card = tmp_path / "web" / "public" / "models" / "MODEL_CARD.md"
     card.parent.mkdir(parents=True)
     card.write_text(f"These weights were {banned} from the upstream export.\n")
-    vendored = tmp_path / "web" / "public" / "ort-wasm-simd-threaded.jsep.mjs"
+    vendored = tmp_path / "web" / "public" / "ort-wasm-simd-threaded.asyncify.mjs"
     vendored.write_text(f"// {banned} by the vendor toolchain\n")
 
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
@@ -167,8 +167,8 @@ def test_vendored_runtime_assets_stay_excluded_from_the_content_guards():
     the exclusion is scoped rather than merely firing.
     """
     # Must be skipped: machine-produced, under web/public/.
-    for path in ["web/public/ort-wasm-simd-threaded.jsep.wasm",
-                 "web/public/ort-wasm-simd-threaded.jsep.mjs",
+    for path in ["web/public/ort-wasm-simd-threaded.asyncify.wasm",
+                 "web/public/ort-wasm-simd-threaded.asyncify.mjs",
                  "web/public/models/yolo11n-480.onnx"]:
         assert _is_skipped(path), f"{path} is vendored and must not be scanned"
 
@@ -197,7 +197,7 @@ def test_the_vendored_exclusion_still_discriminates_once_mjs_is_scannable(
     first half and fails the second.
     """
     banned = BANNED[0]
-    vendored = tmp_path / "web" / "public" / "ort-wasm-simd-threaded.jsep.mjs"
+    vendored = tmp_path / "web" / "public" / "ort-wasm-simd-threaded.asyncify.mjs"
     vendored.parent.mkdir(parents=True)
     vendored.write_text(f"// {banned} by the vendor toolchain\n")
     authored = tmp_path / "web" / "src" / "authored-helper.mjs"
@@ -212,7 +212,7 @@ def test_the_vendored_exclusion_still_discriminates_once_mjs_is_scannable(
     )
 
     collected = sorted(str(p.relative_to(tmp_path)) for p in _text_files())
-    assert collected == ["web/public/ort-wasm-simd-threaded.jsep.mjs",
+    assert collected == ["web/public/ort-wasm-simd-threaded.asyncify.mjs",
                          "web/src/authored-helper.mjs"], collected
 
     with pytest.raises(AssertionError) as caught:
@@ -249,7 +249,8 @@ def test_published_web_assets_are_not_git_ignored():
 # Widening the exclusion to "anything under web/src/" would have been the wrong
 # fix -- a process doc can be committed anywhere -- so the narrowing is by
 # extension, and the pair below proves it still bites.
-_PROCESS_DOC_SUFFIXES = {".md", ".txt", ".rst", ".pdf", ".doc", ".docx", ".odt"}
+_PROCESS_DOC_SUFFIXES = {".md", ".markdown", ".mdx", ".txt", ".rst",
+                         ".pdf", ".doc", ".docx", ".odt"}
 _PROCESS_DOC_NAMES = r"(^|/)(plan|spec|design-doc|session|notes|handbook)[-_.]"
 
 
@@ -271,7 +272,10 @@ def test_the_process_doc_rule_still_catches_documents_and_spares_source():
     anything would pass the first half on its own.
     """
     caught = ["plan-2026.md", "docs/session-notes.md", "spec.txt",
-              "private/handbook.pdf", "a/b/notes.rst"]
+              "private/handbook.pdf", "a/b/notes.rst",
+              # .markdown and .mdx are markdown too; the old, extension-blind
+              # rule caught these and the narrowing must not lose them.
+              "docs/plan-x.markdown", "plan-x.mdx"]
     assert _process_docs(caught) == caught, "the guard stopped catching process docs"
 
     spared = ["web/src/runtime/session.ts", "web/src/runtime/session.test.ts",

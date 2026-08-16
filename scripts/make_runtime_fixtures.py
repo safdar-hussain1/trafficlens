@@ -28,6 +28,7 @@ Usage:
     PYTHONPATH=src .venv/bin/python scripts/make_runtime_fixtures.py
 """
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -125,15 +126,31 @@ def write_letterbox_cases(manifest: dict) -> None:
         print(f"letterbox {name}: {w}x{h} -> {size} "
               f"resized {new_w}x{new_h} pad ({pad_x}, {pad_y})")
 
+    # The shipped shape, pinned by DIGEST rather than by fixture.
+    #
+    # 1280x720 into 480 is what the product actually runs, and it is the shape
+    # the module comment claims 0 of 388800 pixels differ on -- but its tensor
+    # is 2.7 MB, too large to commit beside two 48 KB ones. A sha256 costs 32
+    # bytes and pins it exactly.
+    #
+    # Two digests, not one. `sourceSha256` lets the TypeScript side prove it
+    # reproduced this generator's `synthetic_frame` recipe before it letterboxes
+    # anything: without it, a drifting recipe would fail the tensor digest with
+    # no way to tell a broken letterbox from a different input.
     w, h, size = SHIPPED_FRAME
-    _, scale, pad_x, pad_y = letterbox(synthetic_frame(w, h), size)
+    frame = synthetic_frame(w, h)
+    tensor, scale, pad_x, pad_y = letterbox(frame, size)
     manifest["letterbox"] = {
         "cases": cases,
         "shipped": {
             "width": w, "height": h, "size": size,
             "scale": scale, "padX": pad_x, "padY": pad_y,
+            "sourceSha256": hashlib.sha256(frame[:, :, ::-1].copy().tobytes()).hexdigest(),
+            "tensorSha256": hashlib.sha256(tensor.tobytes()).hexdigest(),
         },
     }
+    print(f"letterbox shipped: {w}x{h} -> {size} "
+          f"tensor sha256 {manifest['letterbox']['shipped']['tensorSha256'][:16]}...")
 
 
 #: A shape whose interpolation weights land exactly on a half-step, so the
@@ -190,7 +207,7 @@ def build_boundary() -> tuple[np.ndarray, dict]:
     assert {bicycle, car, motorcycle, bus, truck} <= set(ids), ids
     not_kept = 0  # person: a real class the product deliberately ignores
 
-    n = 18
+    n = 19
     raw = np.zeros((1, 4 + N_CLASSES, n), dtype=np.float32)
     notes = {}
 
@@ -271,6 +288,19 @@ def build_boundary() -> tuple[np.ndarray, dict]:
     # without upsetting the ordering.
     notes["empty_column"] = 17
 
+    # 18: TWO kept classes tied at the identical float32 score, so which one
+    # the column is labelled with depends entirely on the argmax tie rule.
+    # numpy's argmax returns the FIRST maximum, so this is a car; a mirror
+    # that scanned with `>=` would take the LAST and call it a truck. Both
+    # classes are kept, so the column survives either way and the disagreement
+    # is a wrong class_id rather than a missing detection -- which is precisely
+    # the kind of difference Task 21's class-agreement assertion exists to
+    # catch, and precisely the kind that is invisible without a tie to test.
+    # Placed clear of every other box so no NMS interaction can mask it.
+    _put(raw, 18, (1000, 700, 30, 30), car, 0.66)
+    _put(raw, 18, (1000, 700, 30, 30), truck, 0.66)
+    notes["argmax_tie"] = 18
+
     return raw, notes
 
 
@@ -349,7 +379,12 @@ def write_decode_cases(manifest: dict) -> None:
 
     assert classes == sorted(classes), "output must be sorted by ascending class id"
     assert 0 not in classes, "the excluded class survived the keep filter"
-    assert len(by_class.get(2, [])) == 4, ["cols 0,2,10,12 expected", by_class.get(2)]
+    assert len(by_class.get(2, [])) == 5, [
+        "cols 0,2,10,12,18 expected", by_class.get(2)]
+    tie_box = [d for d in by_class[2] if abs(d["score"] - float(np.float32(0.66))) < 1e-9]
+    assert len(tie_box) == 1, [
+        "the argmax tie column must be labelled with the FIRST maximum (car), "
+        "not the last (truck)", by_class.get(2), by_class.get(7)]
     assert len(by_class.get(7, [])) == 3, ["cols 3,13,14 expected", by_class.get(7)]
     # Cols 15/16 are exactly 0.5 in exact arithmetic but 0.5000001788139343 in
     # the float32 the decode actually runs in, so the nested box IS
@@ -367,8 +402,8 @@ def write_decode_cases(manifest: dict) -> None:
         "the score tie kept the HIGHER column index: the sort is not stable",
         tie[0]["x1"], undo(100 - 20), undo(103 - 20)]
     chain = sorted(d["score"] for d in by_class[2])
-    assert len(chain) == 4 and len(set(chain)) == 4, ["chain scores", chain]
-    assert len(boundary) == 10, [len(boundary), boundary]
+    assert len(chain) == 5 and len(set(chain)) == 5, ["chain scores", chain]
+    assert len(boundary) == 11, [len(boundary), boundary]
     print(f"decode boundary: {len(boundary)} detections from {raw.shape[2]} columns "
           f"({ {c: len(v) for c, v in sorted(by_class.items())} })")
 

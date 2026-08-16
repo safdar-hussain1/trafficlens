@@ -59,10 +59,18 @@ NMS at confidence 0.35 and IoU 0.5.
 
 | | float32 | int8 dynamic |
 |---|---|---|
-| File size | 10 667 814 B | 2 976 427 B |
+| File size | 10 667 814 B [^1] | 2 976 427 B |
 | Detections over 40 frames | 244 | 214 |
 | Recall against float32 | — | 0.8238 |
 | Mean IoU of matched boxes | — | 0.9301 |
+
+[^1]: 10 667 814 B, nine bytes short of the 10 667 823 B in the table above.
+    The two are the same graph measured at different times: the comparison was
+    run against an earlier export, and the exporter writes its own version
+    string into the graph metadata, so a later toolchain produces a file a few
+    bytes longer with identical weights. Nothing about the trade-off below
+    turns on nine bytes, but two tables in one document disagreeing is worth a
+    line rather than a puzzled reader.
 
 int8 saves 7.69 MB of download and loses 17.6% of detections. The boxes that
 survive quantisation are placed well — a mean IoU of 0.93 says the damage is

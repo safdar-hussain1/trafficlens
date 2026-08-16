@@ -84,6 +84,8 @@ export interface Manifest {
       readonly scale: number;
       readonly padX: number;
       readonly padY: number;
+      readonly sourceSha256: string;
+      readonly tensorSha256: string;
     };
   };
   readonly resize: { readonly halfstep: ResizeCase };

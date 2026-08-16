@@ -287,57 +287,125 @@ export type FrameSource =
   | OffscreenCanvas
   | ImageBitmap;
 
-function sourceSize(source: FrameSource): { width: number; height: number } {
-  if (typeof HTMLVideoElement !== "undefined" && source instanceof HTMLVideoElement) {
-    // videoWidth/Height are the decoded frame; width/height are CSS pixels and
-    // would silently letterbox the wrong thing on a styled element.
-    return { width: source.videoWidth, height: source.videoHeight };
+/** The DECODED size of a frame source, which for a video is not its layout
+ * size.
+ *
+ * Detected by duck-typing rather than `instanceof HTMLVideoElement`, for two
+ * reasons: the check then works on an element from another document or an
+ * iframe, where `instanceof` silently fails across realms; and it is reachable
+ * from a test without a DOM, which is what lets the rule below be asserted
+ * rather than merely commented. */
+export function frameSize(source: FrameSource): { width: number; height: number } {
+  const video = source as { videoWidth?: unknown; videoHeight?: unknown };
+  if (typeof video.videoWidth === "number" && typeof video.videoHeight === "number") {
+    // videoWidth/Height are the decoded frame; width/height are CSS pixels, so
+    // a styled <video> would letterbox its layout box and every box the model
+    // returned would be mapped back through the wrong scale.
+    return { width: video.videoWidth, height: video.videoHeight };
   }
   const sized = source as { width: number; height: number };
   return { width: sized.width, height: sized.height };
 }
 
-let scratch: OffscreenCanvas | HTMLCanvasElement | undefined;
-let scratchContext: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | undefined;
+/** RGBA pixels straight out of a frame source, at its decoded size. */
+export interface FramePixels {
+  readonly data: Uint8ClampedArray | Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
+export type PixelReader = (source: FrameSource, width: number, height: number) => FramePixels;
+
+/** The 2d-canvas surface `createCanvasPixelReader` drives. Narrower than
+ * `HTMLCanvasElement` so a test can supply one without a DOM. */
+export interface ScratchCanvas {
+  width: number;
+  height: number;
+  getContext(
+    contextId: "2d",
+    options?: unknown,
+  ): {
+    drawImage(source: unknown, dx: number, dy: number): void;
+    getImageData(sx: number, sy: number, sw: number, sh: number): FramePixels;
+  } | null;
+}
+
+export type CanvasFactory = (width: number, height: number) => ScratchCanvas;
+
+function defaultCanvasFactory(width: number, height: number): ScratchCanvas {
+  const canvas =
+    typeof OffscreenCanvas === "undefined"
+      ? document.createElement("canvas")
+      : new OffscreenCanvas(width, height);
+  canvas.width = width;
+  canvas.height = height;
+  return canvas as unknown as ScratchCanvas;
+}
+
+/** Build a pixel reader over a 2d canvas, reusing one surface across frames.
+ *
+ * The canvas is sized to the SOURCE, and `drawImage` is called with a
+ * destination point and NO destination size. Both matter: passing a size would
+ * let the browser resample, and the browser's filter is implementation-defined
+ * and is not the one Python uses. Every resample in this pipeline happens in
+ * `resizeBitExact`, or the tensors stop matching Python's. */
+export function createCanvasPixelReader(
+  makeCanvas: CanvasFactory = defaultCanvasFactory,
+): PixelReader {
+  let canvas: ScratchCanvas | undefined;
+  let context: ReturnType<ScratchCanvas["getContext"]> | undefined;
+
+  return (source, width, height) => {
+    if (canvas === undefined || canvas.width !== width || canvas.height !== height) {
+      canvas = makeCanvas(width, height);
+      canvas.width = width;
+      canvas.height = height;
+      context = undefined;
+    }
+    if (context === undefined || context === null) {
+      // willReadFrequently keeps the surface on the CPU; without it every
+      // getImageData round-trips the GPU and costs more than the inference.
+      context = canvas.getContext("2d", { willReadFrequently: true });
+      if (context === null || context === undefined) {
+        throw new Error("could not obtain a 2d context to read frame pixels");
+      }
+    }
+    context.drawImage(source, 0, 0);
+    return context.getImageData(0, 0, width, height);
+  };
+}
+
+const canvasPixelReader = createCanvasPixelReader();
 
 /** Read a frame's pixels at their natural size and letterbox them.
  *
- * The scratch canvas is sized to the SOURCE, never to `size`: letting
- * `drawImage` do the scaling would hand the resampling to the browser, whose
- * filter is implementation-defined and is not the one Python uses. Every
- * resample happens in `resizeBitExact`. */
+ * MIND THE DEFAULT. `DETECT_DEFAULT_INPUT_SIZE` is 640 -- the size the PYTHON
+ * engine runs, and the size the generated constants carry -- while the graph
+ * shipped to the browser is exported at 480. So omitting `size` here builds a
+ * `[1, 3, 640, 640]` tensor that onnxruntime rejects against the model's
+ * `[1, 3, 480, 480]` input. That failure is loud and immediate rather than
+ * silent, but it is not obvious from the call site, so Task 22 should pass 480
+ * explicitly (or read it from the session's own input shape) rather than lean
+ * on this default. */
 export function letterbox(
   source: FrameSource,
   size: number = DETECT_DEFAULT_INPUT_SIZE,
+  readPixels: PixelReader = canvasPixelReader,
 ): LetterboxResult {
-  const { width, height } = sourceSize(source);
+  const { width, height } = frameSize(source);
   if (width === 0 || height === 0) {
     throw new Error("frame source has no decoded pixels yet");
   }
-  if (scratch === undefined || scratch.width !== width || scratch.height !== height) {
-    scratch =
-      typeof OffscreenCanvas === "undefined"
-        ? document.createElement("canvas")
-        : new OffscreenCanvas(width, height);
-    scratch.width = width;
-    scratch.height = height;
-    scratchContext = undefined;
+  const { data } = readPixels(source, width, height);
+  const expected = width * height * 4;
+  if (data.length !== expected) {
+    throw new Error(`frame pixels are ${data.length} bytes, expected ${expected} RGBA`);
   }
-  if (scratchContext === undefined) {
-    // willReadFrequently keeps the surface on the CPU; without it every
-    // getImageData round-trips the GPU and costs more than the inference.
-    scratchContext = (scratch as HTMLCanvasElement).getContext("2d", {
-      willReadFrequently: true,
-    }) as CanvasRenderingContext2D;
-    if (scratchContext === null || scratchContext === undefined) {
-      throw new Error("could not obtain a 2d context to read frame pixels");
-    }
-  }
-  const context = scratchContext;
-  context.drawImage(source as CanvasImageSource, 0, 0);
-  const { data } = context.getImageData(0, 0, width, height);
 
-  // RGBA to RGB. The alpha channel is opaque for video and carries nothing.
+  // RGBA to RGB, in that order. The canvas hands back R, G, B, A; Python's
+  // frame is BGR and `letterbox` converts it at step 7, so both engines feed
+  // the model RGB. Reading these three in any other order swaps two channels
+  // of every detection's input and the model quietly gets worse.
   const rgb = new Uint8Array(width * height * 3);
   for (let pixel = 0, target = 0; target < rgb.length; pixel += 4, target += 3) {
     rgb[target] = data[pixel] as number;
