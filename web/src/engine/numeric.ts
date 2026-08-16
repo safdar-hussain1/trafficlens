@@ -374,7 +374,14 @@ export function hypot(a: number, b: number): number {
  * with an explicit `+=` loop -- `associate._ordered_total`, the numerator and
  * denominator loops in `speed.speed_kmh` -- CPython does no compensation and a
  * plain loop is the faithful mirror. Reaching for this there would be exactly
- * the same class of bug in the other direction. */
+ * the same class of bug in the other direction.
+ *
+ * A caveat that only applies to `float` inputs: CPython's `sum` takes an
+ * UNCOMPENSATED path for `int` items, so `sum([1e16, 3, -1e16])` is 4.0 while
+ * `sum([1e16, 3.0, -1e16])` is 3.0. TypeScript has no such distinction, so this
+ * always behaves like the all-float list. See the timestamp-coercion hazard in
+ * the task report: a fixture whose timestamps load as Python ints would put the
+ * two engines on different paths. */
 export function sumFloats(values: Iterable<number>): number {
   let total = 0.0;
   let compensation = 0.0;
@@ -387,5 +394,10 @@ export function sumFloats(values: Iterable<number>): number {
     }
     total = t;
   }
-  return total + compensation;
+  // CPython returns a non-finite total unfolded. Folding a finite compensation
+  // into an overflowed +-inf turns it into NaN, which is a different answer
+  // from Python's -- measured on 11 of 14 non-finite cases. Guarding here is
+  // what keeps `reprojectionError.meanM` reporting inf where Python reports
+  // inf, rather than a NaN that would slip past a later `> maxError` check.
+  return Number.isFinite(total) ? total + compensation : total;
 }

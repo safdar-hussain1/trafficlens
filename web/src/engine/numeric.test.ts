@@ -244,8 +244,37 @@ describe("sumFloats", () => {
   });
 
   it("handles the trivial cases", () => {
+    // Values measured from CPython, not expressions restating the algorithm --
+    // an assertion built out of the implementation's own arithmetic cannot
+    // disagree with it. sum([0.1, 0.2, 0.3]) is the interesting one: CPython
+    // gives 0.6 where a running total gives 0.6000000000000001.
     expect(sumFloats([])).toBe(0.0);
     expect(sumFloats([1.5])).toBe(1.5);
-    expect(sumFloats([0.1, 0.2])).toBe(0.1 + 0.2 + ((0.1 - (0.1 + 0.2)) + 0.2));
+    expect(sumFloats([0.1, 0.2])).toBe(0.30000000000000004);
+    expect(sumFloats([0.1, 0.2, 0.3])).toBe(0.6);
+    expect(runningTotal([0.1, 0.2, 0.3])).toBe(0.6000000000000001);
+  });
+
+  it("leaves a non-finite total unfolded, as CPython does", () => {
+    // CPython does not fold the compensation term into a non-finite total.
+    // Folding it turns an overflowed +-inf into NaN -- a different answer from
+    // Python's on 11 of these 14 measured cases, and the one direction in which
+    // the compensated version was WORSE than the plain running total it
+    // replaced. Values below are CPython's actual output.
+    expect(sumFloats([1e308, 1e308])).toBe(Infinity);
+    expect(sumFloats([1e308, 1e308, -1e308])).toBe(Infinity);
+    expect(sumFloats([1e308, 1e308, 1.0])).toBe(Infinity);
+    expect(sumFloats([1e308, 1e308, 0.1, 0.2])).toBe(Infinity);
+    expect(sumFloats([5e-324, 1e308, 1e308])).toBe(Infinity);
+    expect(sumFloats([-1e308, -1e308])).toBe(-Infinity);
+    expect(sumFloats([-1e308, -1e308, 1e308])).toBe(-Infinity);
+    expect(sumFloats([Infinity, 1.0])).toBe(Infinity);
+    expect(sumFloats([1.0, Infinity])).toBe(Infinity);
+    expect(sumFloats([Infinity, Infinity])).toBe(Infinity);
+    // These three are NaN in CPython too, so they pin that the guard did not
+    // over-correct into returning Infinity for a genuine NaN.
+    expect(sumFloats([Infinity, -Infinity])).toBeNaN();
+    expect(sumFloats([NaN, 1.0])).toBeNaN();
+    expect(sumFloats([1.0, NaN])).toBeNaN();
   });
 });

@@ -147,6 +147,37 @@ describe("reprojectionError", () => {
     expect(err.maxM).toBe(0.999999999999989);
   });
 
+  it("reports an overflowing mean as Python does, not as NaN", () => {
+    // The end-to-end shape of the compensated-sum guard in numeric.sumFloats.
+    // Folding a finite compensation term into an overflowed total turns +-inf
+    // into NaN, and `NaN > maxError` is false where `inf > maxError` is true --
+    // so a future validate() would silently accept a calibration Python
+    // rejects. Both values below are CPython's actual output.
+    const img: readonly Point[] = [
+      [878.9810899563789, 712.7097963942266],
+      [999.8924299063265, 850.6102205009837],
+    ];
+
+    // A single per-point error that overflows to Infinity.
+    const perPointInf = plane().reprojectionError(img, [
+      [-1.5, 12.0],
+      [1.5e308, 1.5e308],
+    ]);
+    expect(perPointInf.perPointM[1]).toBe(Infinity);
+    expect(perPointInf.meanM).toBe(Infinity);
+    expect(perPointInf.maxM).toBe(Infinity);
+
+    // Two large but finite per-point errors whose SUM overflows -- the case
+    // that reaches the guard rather than merely passing an Infinity through.
+    const sumOverflows = plane().reprojectionError(img, [
+      [1.5e308, 0.0],
+      [1.5e308, 0.0],
+    ]);
+    expect(sumOverflows.perPointM).toEqual([1.5e308, 1.5e308]);
+    expect(sumOverflows.meanM).toBe(Infinity);
+    expect(sumOverflows.maxM).toBe(1.5e308);
+  });
+
   it("detects a corrupted correspondence", () => {
     // Move one surveyed world point 3m off where the plane says it is: the
     // measured error must rise well past the noise floor above.
