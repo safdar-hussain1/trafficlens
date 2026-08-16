@@ -54,18 +54,23 @@ _SKIP_PATTERNS = [
     "docs/assets/",
 ]
 
-# Vendored runtime assets: byte-identical copies of what npm shipped, never
-# edited to appease a guard. Excluded by EXTENSION rather than by directory.
-# Excluding all of web/public/ would buy nothing -- none of these extensions
-# are in _TEXT_SUFFIXES, so they were never scanned anyway -- while covering
-# the hand-authored files that live beside them: a model card, a licence
-# note. Those are published straight to the site and are the likeliest route
-# for a banned word or an absolute path onto a public page, so they stay in
-# scope automatically rather than depending on anyone remembering.
+# Machine-produced binaries shipped from web/public/, never hand-edited and
+# never edited to appease a guard: .wasm and .mjs are byte-identical copies of
+# what npm shipped, .onnx is the exported browser model (a build artefact of
+# this project, not an npm one). Excluded by EXTENSION, and only under
+# web/public/. Excluding that whole directory would buy nothing -- none of
+# these extensions are in _TEXT_SUFFIXES, so they were never scanned anyway --
+# while covering the hand-authored files that live beside them: a model card,
+# a licence note. Those are published straight to the site and are the
+# likeliest route for a banned word or an absolute path onto a public page, so
+# they stay in scope automatically rather than depending on anyone
+# remembering. The directory scope matters for the same reason: an authored
+# .mjs anywhere else in the tree must still be scanned.
 _VENDORED_SUFFIXES = {".wasm", ".mjs", ".onnx"}
+_VENDORED_DIR = "web/public/"
 
 def _is_skipped(rel_path: str) -> bool:
-    if Path(rel_path).suffix in _VENDORED_SUFFIXES:
+    if rel_path.startswith(_VENDORED_DIR) and Path(rel_path).suffix in _VENDORED_SUFFIXES:
         return True
     for pat in _SKIP_PATTERNS:
         if pat.endswith("/"):
@@ -155,16 +160,71 @@ def test_vendored_runtime_assets_stay_excluded_from_the_content_guards():
     first -- so this pins the second line of defence: if a later task adds .mjs
     to _TEXT_SUFFIXES (reasonable, it is JavaScript), the vendored files must
     still not be scanned, and must still never be edited to appease a guard.
+
+    Asserted as a discriminating pair. A rule that skips every .mjs everywhere
+    would satisfy the must-skip half on its own while silently excusing an
+    authored file elsewhere in the tree, so the must-scan half is what proves
+    the exclusion is scoped rather than merely firing.
     """
+    # Must be skipped: machine-produced, under web/public/.
     for path in ["web/public/ort-wasm-simd-threaded.jsep.wasm",
                  "web/public/ort-wasm-simd-threaded.jsep.mjs",
                  "web/public/models/yolo11n-480.onnx"]:
         assert _is_skipped(path), f"{path} is vendored and must not be scanned"
 
+    # Must be scanned: authored, and/or outside web/public/. The .mjs and .onnx
+    # entries are the negative controls for the extension rule -- same
+    # extensions, different directory.
     for path in ["web/public/models/MODEL_CARD.md",
                  "web/public/models/LICENCE.txt",
-                 "web/index.html"]:
+                 "web/index.html",
+                 "web/src/authored.mjs",
+                 "src/trafficlens/thing.mjs",
+                 "docs/a.onnx"]:
         assert not _is_skipped(path), f"{path} is authored and must be scanned"
+
+
+def test_the_vendored_exclusion_still_discriminates_once_mjs_is_scannable(
+    tmp_path, monkeypatch
+):
+    """Wake the dormant mechanism and check it discriminates, not just fires.
+
+    _VENDORED_SUFFIXES does nothing today because _TEXT_SUFFIXES drops those
+    extensions first. This exercises the exact future the comment above names --
+    a later task adds .mjs to _TEXT_SUFFIXES because it is JavaScript -- and
+    asserts the pair: the vendored copy under web/public/ stays excluded, and an
+    authored .mjs anywhere else is scanned. An unscoped extension rule passes the
+    first half and fails the second.
+    """
+    banned = BANNED[0]
+    vendored = tmp_path / "web" / "public" / "ort-wasm-simd-threaded.jsep.mjs"
+    vendored.parent.mkdir(parents=True)
+    vendored.write_text(f"// {banned} by the vendor toolchain\n")
+    authored = tmp_path / "web" / "src" / "authored-helper.mjs"
+    authored.parent.mkdir(parents=True)
+    authored.write_text(f"// this helper was {banned} by hand\n")
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-f", "-A"], cwd=tmp_path, check=True)
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    monkeypatch.setattr(
+        sys.modules[__name__], "_TEXT_SUFFIXES", _TEXT_SUFFIXES | {".mjs"}
+    )
+
+    collected = sorted(str(p.relative_to(tmp_path)) for p in _text_files())
+    assert collected == ["web/public/ort-wasm-simd-threaded.jsep.mjs",
+                         "web/src/authored-helper.mjs"], collected
+
+    with pytest.raises(AssertionError) as caught:
+        test_no_banned_words_in_tracked_files()
+
+    reported = str(caught.value)
+    assert "web/src/authored-helper.mjs" in reported, (
+        "an authored .mjs outside web/public/ was not scanned"
+    )
+    assert "web/public/" not in reported, (
+        "a vendored .mjs under web/public/ should stay excluded"
+    )
 
 
 def test_published_web_assets_are_not_git_ignored():

@@ -234,3 +234,46 @@ def test_trailing_comments_are_carried_across_not_dropped(tmp_path):
         "export const A_VALUE = 1.5;  // measured, not chosen"
         in out.read_text(encoding="utf-8")
     )
+
+
+def test_non_ascii_values_do_not_shift_the_end_of_line_reckoning(tmp_path):
+    """A non-ASCII literal must not make the exporter misread its own line.
+
+    ast reports column offsets in UTF-8 BYTES, so slicing the line as a str
+    overshoots by one position per non-ASCII character and quotes text that is
+    not there. Asserted as a discriminating pair: the legal constant must
+    export cleanly AND a genuine same-line collision on the same non-ASCII line
+    must still be refused, so a fix that simply stopped checking would fail.
+    """
+    legal = tmp_path / "legal.py"
+    legal.write_text('A_VALUE = "ééééé"  # accented\n', encoding="utf-8")
+    out = tmp_path / "legal.ts"
+
+    result = _run_exporter("--source", str(legal), "--out", str(out))
+
+    assert result.returncode == 0, f"a legal non-ASCII constant was refused:\n{result.stderr}"
+    emitted = out.read_text(encoding="utf-8")
+
+    # The trailing comment surviving is the actual regression target: the byte
+    # overshoot made the exporter read the comment as a second statement.
+    assert "// accented" in emitted, emitted
+
+    # Values are escaped by json.dumps rather than emitted raw, which keeps the
+    # literal ASCII-safe. What matters is that it round-trips to the same
+    # string, so assert that rather than a particular spelling of it.
+    (declaration,) = [
+        line for line in emitted.splitlines() if line.startswith("export const A_VALUE")
+    ]
+    literal = declaration.split(" = ", 1)[1].split(";", 1)[0]
+    assert json.loads(literal) == "ééééé", literal
+
+    # Negative control: same non-ASCII line, genuinely two constants on it.
+    collision = tmp_path / "collision.py"
+    collision.write_text('A_BAD = "ééé"; A_OTHER = 2.0\n', encoding="utf-8")
+    collision_out = tmp_path / "collision.ts"
+
+    refused = _run_exporter("--source", str(collision), "--out", str(collision_out))
+
+    assert refused.returncode != 0, "a same-line collision was accepted"
+    assert "one constant on each line" in refused.stderr
+    assert not collision_out.exists()

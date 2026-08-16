@@ -172,7 +172,16 @@ def parse_constants(source: str, origin: str) -> list[Constant]:
                 f"put one constant on each line"
             )
             continue
-        trailing = lines[last_line - 1][node.end_col_offset :].strip()
+        # ast reports col_offset/end_col_offset as UTF-8 BYTE offsets, so the
+        # line has to be sliced as bytes. Slicing the str instead overshoots by
+        # one position per non-ASCII character already on the line, which
+        # rejects a legal constant while quoting text that is not there.
+        trailing = (
+            lines[last_line - 1]
+            .encode("utf-8")[node.end_col_offset :]
+            .decode("utf-8")
+            .strip()
+        )
         if trailing and not trailing.startswith("#"):
             problems.append(
                 f"{origin}:{last_line}: {name} shares its line with {trailing!r}; "
