@@ -11,9 +11,20 @@
  * does: `scripts/measure_backend.sh` reads it over the DevTools endpoint
  * without evaluating anything in the page.
  *
- * Every figure it prints carries the renderer string. A software rasteriser
- * pretending to be a GPU produces numbers that look like measurements and are
- * not, so `hardware=false` is printed loudly rather than left to be noticed. */
+ * Every figure it prints carries the renderer string, and a SOFTWARE renderer
+ * invalidates the number rather than annotating it. Chrome will happily run
+ * this whole harness on SwiftShader -- measured, it produced
+ * `ep=wasm ms=123.85 fps=8.05 hardware=false` -- and a line that says MEASURE
+ * is a line someone will quote. So the software case reports `MEASURE-FAIL`,
+ * which `scripts/verify_page.sh` exits non-zero on, and there is no number on
+ * that line to lift out of context.
+ *
+ * The renderer string is also NOT printed as though it validated the wasm
+ * figure. `glRenderer` describes the WebGL/WebGPU path; wasm inference never
+ * touches it. Under SwiftShader the renderer changed completely and the wasm
+ * median moved about 2%, which is exactly what "this string does not describe
+ * this number" looks like. The wasm line therefore says `renderer=n/a (wasm
+ * path)` and the detail block says why. */
 
 import {
   DETECT_DEFAULT_CONF,
@@ -121,14 +132,47 @@ export async function runMeasurePage(params: URLSearchParams): Promise<void> {
     const ms = median(samples) ?? Number.NaN;
     const fps = samples.length / wall;
 
+    // The wasm figure is not validated by the GL renderer string, so it is not
+    // printed as though it were. It still carries the machine's renderer in the
+    // detail block, where it can be read as context rather than as evidence.
+    const rendererField =
+      session.ep === "wasm" ? "n/a (wasm path)" : probe.renderer;
+    const detail = [
+      `requested ep      ${requested}`,
+      `created ep        ${session.ep}`,
+      `renderer          ${probe.renderer}`,
+      `hardware renderer ${probe.isHardwareRenderer}`,
+    ];
+
+    if (!probe.isHardwareRenderer) {
+      // Not a number with a caveat: not a measurement. Printed without the
+      // figure so there is nothing here to quote.
+      report(
+        `MEASURE-FAIL software renderer, so this machine cannot produce a ` +
+          `hardware timing — ep=${session.ep} renderer=${probe.renderer}`,
+        [
+          ...detail,
+          "",
+          "A software rasteriser was detected. The harness ran and produced",
+          `a median of ${ms.toFixed(3)} ms over ${samples.length} frames, which is`,
+          "deliberately not reported as a MEASURE line: it describes an",
+          "emulated device, not hardware anyone runs this page on.",
+        ].join("\n"),
+      );
+      return;
+    }
+
     report(
       `MEASURE ep=${session.ep} ms=${ms.toFixed(2)} fps=${fps.toFixed(2)} ` +
-        `n=${samples.length} hardware=${probe.isHardwareRenderer} renderer=${probe.renderer}`,
+        `n=${samples.length} hardware=${probe.isHardwareRenderer} renderer=${rendererField}`,
       [
-        `requested ep      ${requested}`,
-        `created ep        ${session.ep}`,
-        `renderer          ${probe.renderer}`,
-        `hardware renderer ${probe.isHardwareRenderer}`,
+        ...detail,
+        ...(session.ep === "wasm"
+          ? [
+              "renderer note     the GL renderer above does NOT validate this",
+              "                  number: wasm inference never touches that path.",
+            ]
+          : []),
         `adapter           ${probe.adapter}`,
         `source            ${source.id} (${source.url ?? "camera"})`,
         `input size        ${MODEL_INPUT_SIZE}`,

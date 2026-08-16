@@ -33,6 +33,43 @@ const SPEED_TOLERANCE_KMH = 1e-6;
 /** Crossing points are a pure float64 line intersection on both sides. */
 const POSITION_TOLERANCE_PX = 1e-9;
 
+/** Floors on the WORK PERFORMED, not on what the fixture says about itself.
+ *
+ * Every comparison in this file is `got` against `want`, and an empty `got`
+ * compares equal to an empty `want`. A fixture whose `frames` and `steps` arrays
+ * were all emptied therefore reports a full green board: `SessionPipeline` gets
+ * constructed and `step()` is never called, `GateCounter` gets constructed and
+ * `update()` is never called, and dozens of checks pass by comparing nothing to
+ * nothing. That was reproduced -- `PASS 38/38`, exit 0, with the engine never
+ * asked a single question. The straddle list above does not catch it either,
+ * because `straddles` is a label the fixture writes about itself.
+ *
+ * So these numbers are counted while the engine runs and asserted at the end.
+ * They are set at the committed fixture's own totals rather than at 1: a floor
+ * of "more than zero" is defeated by leaving one frame in place, and a fixture
+ * that legitimately shrinks should have to be re-justified here. They are `>=`
+ * so the fixture may grow.
+ *
+ * `MIN_CHECKS` is the last line of defence: `scripts/verify_page.sh` matches on
+ * the `PASS` prefix alone, so `PASS 0/0` would exit 0. It cannot arise now. */
+const MIN_TRACKER_CASES = 4;
+const MIN_GATE_CASES = 3;
+const MIN_DECODE_CASES = 1;
+/** `pipeline.step()` calls: 162 across the four committed tracker cases. */
+const MIN_PIPELINE_STEPS = 162;
+/** `counter.update()` calls in the gate cases: 12 committed. */
+const MIN_GATE_UPDATES = 12;
+/** Detections fed to the tracker across every tracker case: 1098 committed. */
+const MIN_DETECTIONS_REPLAYED = 1098;
+/** Crossing events the ENGINE emitted: 3 from the tracker cases, 4 from the
+ * gate cases. Zero here means nothing was ever counted. */
+const MIN_EVENTS_EMITTED = 7;
+/** Detections `decodeYolo` returned across the decode cases. */
+const MIN_DETECTIONS_DECODED = 2;
+/** Checks scored before this floor is itself scored: 67 on the committed
+ * fixture, 68 in the title once this one is counted. */
+const MIN_CHECKS = 67;
+
 /** Every boundary kind the fixture must carry, written out here rather than
  * read from the fixture: a list the fixture supplied would be satisfied by
  * whatever the fixture happened to contain. */
@@ -166,6 +203,13 @@ export function runSelftest(fixture: Fixture): SelftestReport {
     api.check(`fixture carries ${kind}`, seen.has(kind));
   }
 
+  // Counted as the engine runs, asserted at the end. See the floors above.
+  let pipelineSteps = 0;
+  let detectionsReplayed = 0;
+  let gateUpdates = 0;
+  let eventsEmitted = 0;
+  let detectionsDecoded = 0;
+
   for (const testCase of fixture.trackerCases as Fixture[]) {
     const pipeline = new SessionPipeline({
       gates: (testCase.gates as Fixture[]).map(toGate),
@@ -183,6 +227,11 @@ export function runSelftest(fixture: Fixture): SelftestReport {
     const events: CrossingEvent[] = [];
     const rows: { frameIndex: number; tracks: Fixture[] }[] = [];
 
+    api.check(
+      `${testCase.name}: fixture supplies frames to replay`,
+      (testCase.frames as Fixture[]).length > 0,
+      `${(testCase.frames as Fixture[]).length} frames`,
+    );
     for (const frame of testCase.frames as Fixture[]) {
       const detections = (frame.detections as Fixture[]).map(
         (d): Detection => ({
@@ -196,6 +245,9 @@ export function runSelftest(fixture: Fixture): SelftestReport {
         }),
       );
       const step = pipeline.step(detections, frame.frameIndex, frame.timestamp);
+      pipelineSteps += 1;
+      detectionsReplayed += detections.length;
+      eventsEmitted += step.events.length;
       events.push(...step.events);
       rows.push({
         frameIndex: frame.frameIndex,
@@ -258,7 +310,13 @@ export function runSelftest(fixture: Fixture): SelftestReport {
   for (const testCase of fixture.gateCases as Fixture[]) {
     const counter = new GateCounter(toGate(testCase.gate));
     const events: CrossingEvent[] = [];
+    api.check(
+      `${testCase.name}: fixture supplies steps to replay`,
+      (testCase.steps as Fixture[]).length > 0,
+      `${(testCase.steps as Fixture[]).length} steps`,
+    );
     for (const step of testCase.steps as Fixture[]) {
+      gateUpdates += 1;
       const event = counter.update(
         step.trackId,
         step.className,
@@ -271,6 +329,7 @@ export function runSelftest(fixture: Fixture): SelftestReport {
       );
       if (event !== null) {
         events.push(event);
+        eventsEmitted += 1;
       }
     }
     checkEvents(api, testCase.name, events, testCase.expected.events as Fixture[]);
@@ -291,6 +350,7 @@ export function runSelftest(fixture: Fixture): SelftestReport {
       testCase.padY,
       { conf: testCase.conf, iou: testCase.iou, keepClasses },
     );
+    detectionsDecoded += decoded.length;
     const shape = (d: Fixture): unknown => ({
       x1: d.x1,
       y1: d.y1,
@@ -324,6 +384,31 @@ export function runSelftest(fixture: Fixture): SelftestReport {
       ),
     );
   }
+
+  // The floors. Everything above this point compares `got` with `want` and is
+  // satisfied by an empty fixture; these are the only checks that fail when the
+  // engine was never actually asked anything.
+  const floors: readonly (readonly [string, number, number])[] = [
+    ["tracker cases replayed", (fixture.trackerCases as Fixture[]).length, MIN_TRACKER_CASES],
+    ["gate cases replayed", (fixture.gateCases as Fixture[]).length, MIN_GATE_CASES],
+    ["decode cases replayed", (fixture.decodeCases as Fixture[]).length, MIN_DECODE_CASES],
+    ["pipeline steps performed", pipelineSteps, MIN_PIPELINE_STEPS],
+    ["detections fed to the tracker", detectionsReplayed, MIN_DETECTIONS_REPLAYED],
+    ["gate counter updates performed", gateUpdates, MIN_GATE_UPDATES],
+    ["crossing events emitted by the engine", eventsEmitted, MIN_EVENTS_EMITTED],
+    ["detections decoded", detectionsDecoded, MIN_DETECTIONS_DECODED],
+  ];
+  for (const [name, got, floor] of floors) {
+    api.check(`floor: ${name}`, got >= floor, `${got} (floor ${floor})`);
+  }
+  // Counted before this check is pushed, so the floor is about the checks that
+  // scored work rather than about itself.
+  const scored = results.length;
+  api.check(
+    `floor: checks scored`,
+    scored >= MIN_CHECKS,
+    `${scored} (floor ${MIN_CHECKS})`,
+  );
 
   const failed = results.filter((r) => !r.passed).length;
   const passed = results.length - failed;

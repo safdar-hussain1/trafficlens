@@ -49,6 +49,12 @@ if ! command -v "$PYTHON" > /dev/null; then
   exit 2
 fi
 
+# Extra Chrome flags, space separated. The reason this exists is the software
+# renderer check: `CHROME_FLAGS="--use-angle=swiftshader --enable-unsafe-swiftshader"`
+# forces Chrome onto SwiftShader, which is how the measure harness's refusal to
+# report a software timing is exercised without unplugging a GPU.
+read -r -a EXTRA_FLAGS <<< "${CHROME_FLAGS:-}"
+
 PORT="${DEVTOOLS_PORT:-9222}"
 PROFILE="$(mktemp -d)"
 LOG="$PROFILE/chrome.log"
@@ -75,6 +81,7 @@ trap cleanup EXIT
   --autoplay-policy=no-user-gesture-required \
   --use-fake-ui-for-media-capture \
   --window-size=1440,1000 \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"} \
   "$URL" > "$LOG" 2>&1 &
 CHROME_PID=$!
 
@@ -101,14 +108,18 @@ for target in targets:
     print(target.get("title", ""))
     break
 ' "$URL" || true)"
+  # The failure arms come FIRST and that ordering is load-bearing: the measure
+  # harness is polled with EXPECT=MEASURE, and "MEASURE-FAIL ..." starts with
+  # "MEASURE". Matched the other way round, a refused measurement -- a software
+  # renderer, or an exception mid-run -- exited 0.
   case "$title" in
-    "$EXPECT"*)
-      echo "$title"
-      exit 0
-      ;;
     FAIL*|MEASURE-FAIL*)
       echo "$title" >&2
       exit 1
+      ;;
+    "$EXPECT"*)
+      echo "$title"
+      exit 0
       ;;
   esac
   sleep 1

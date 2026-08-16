@@ -104,6 +104,12 @@ export const SOURCES: readonly SourceSpec[] = [
     kind: "camera",
     url: null,
     fps: 30,
+    // Deliberately wider than `configs/webcam.yaml`, which keeps `person` only.
+    // That config describes one deployment; this is an arbitrary camera pointed
+    // at an unknown scene, and there is no reason to assume it sees only
+    // people. The wider set is also what makes the headless captureStream check
+    // meaningful -- it counts real crossings rather than passing on an empty
+    // scene. A divergence, on purpose, not a config that drifted.
     classes: [PERSON, BICYCLE, CAR, MOTORCYCLE, BUS, TRUCK],
     gate: {
       name: "midline",

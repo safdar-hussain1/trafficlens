@@ -42,7 +42,6 @@ import {
   collectElements,
   currentTheme,
   markSelectedSource,
-  renderAlerts,
   renderBadge,
   renderPanels,
   renderSwitcher,
@@ -111,6 +110,16 @@ export class ControlRoom {
   private detectionTimes: number[] = [];
   private cadence: Cadence = decideCadence(null, 30);
   private status = "";
+  /** The pipeline's frame clock, and it belongs to the PIPELINE, not to a run
+   * of the detect loop. It used to be a local in `detectLoop`, initialised to 0
+   * every time the loop started -- but `stop()` and `run()` deliberately keep
+   * the pipeline, so a visitor who stopped and restarted handed a fresh 0 to a
+   * pipeline whose `lastSeen` entries were at frame 400. `frameIndex - seen` is
+   * then negative, `SessionPipeline`'s reaping test never fires, and the stale
+   * `_counted` entries and previous anchors of long-gone vehicles sit there
+   * suppressing legitimate re-counts until the clock catches up. It is reset
+   * where the pipeline is constructed again, and only there. */
+  private frameIndex = 0;
   private lastTimestamp = 0;
   private palette: Palette | null = null;
   private paletteKey = "";
@@ -315,6 +324,9 @@ export class ControlRoom {
     this.frameMs.reset();
     this.detectionTimes = [];
     this.lastTimestamp = 0;
+    // Both callers construct a new pipeline, so the frame clock starts again with
+    // it. Resetting it anywhere else would desynchronise the two.
+    this.frameIndex = 0;
   }
 
   private resetCounts(): void {
@@ -370,7 +382,6 @@ export class ControlRoom {
       return;
     }
     const keepClasses = keepClassesOf(this.source);
-    let frameIndex = 0;
     let lastDetectedAt = -Infinity;
 
     while (this.running && generation === this.detectGeneration) {
@@ -408,8 +419,8 @@ export class ControlRoom {
           { conf: DETECT_DEFAULT_CONF, iou: DETECT_DEFAULT_NMS_IOU, keepClasses },
         );
         this.recordTiming(performance.now() - started);
-        this.consume(detections, frameIndex, now);
-        frameIndex += 1;
+        this.consume(detections, this.frameIndex, now);
+        this.frameIndex += 1;
       } catch (error) {
         this.setStatus(`Inference stopped: ${describe(error)}`);
         this.stop();
@@ -729,9 +740,9 @@ export class ControlRoom {
       countingSince: pipeline?.countingSinceTimestamp ?? null,
       wrongWay: this.wrongWay,
     });
-    if (this.wrongWay.length > 0) {
-      renderAlerts(this.elements, this.wrongWay);
-    }
+    // `renderPanels` owns the incidents panel now, alerts included. It used to
+    // be written twice -- a refusal, then the alerts over the top of it -- and
+    // the two disagreed about whether an incident was even possible.
   }
 
   private setStatus(message: string): void {

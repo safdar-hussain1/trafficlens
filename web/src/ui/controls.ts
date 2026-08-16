@@ -209,6 +209,43 @@ export interface PanelState {
   readonly wrongWay: readonly string[];
 }
 
+/** What the incidents panel is entitled to say.
+ *
+ * Split out from the rendering, and pure, because the panel used to contradict
+ * itself: an uncalibrated source printed "none possible" and returned, but the
+ * two incident kinds do not have the same precondition. Stopped-vehicle
+ * detection compares a CALIBRATED speed against a threshold, so it really is
+ * impossible without a survey. A wrong-way crossing needs no speed at all --
+ * only a gate that names the direction it expects, which the motorway gate
+ * does. So the panel would declare incidents impossible on the very source that
+ * can produce one, and then be overwritten with the list of them. */
+export type IncidentState =
+  | { readonly kind: "alerts"; readonly lines: readonly string[] }
+  | { readonly kind: "none"; readonly reason: string }
+  | { readonly kind: "impossible"; readonly reason: string };
+
+const WRONG_WAY_WATCHED =
+  "Stopped-vehicle detection needs a calibrated speed and this camera has none, so only wrong-way crossings are watched for here.";
+
+const NOTHING_WATCHED =
+  "Stopped-vehicle detection needs a calibrated speed, and this gate names no expected direction, so there is nothing here to flag.";
+
+export function incidentState(state: {
+  readonly calibrated: boolean;
+  readonly expectedDirection: string | null;
+  readonly wrongWay: readonly string[];
+}): IncidentState {
+  if (state.wrongWay.length > 0) {
+    return { kind: "alerts", lines: state.wrongWay };
+  }
+  if (state.calibrated) {
+    return { kind: "none", reason: "" };
+  }
+  return state.expectedDirection === null
+    ? { kind: "impossible", reason: NOTHING_WATCHED }
+    : { kind: "none", reason: WRONG_WAY_WATCHED };
+}
+
 export function renderPanels(elements: Elements, state: PanelState): void {
   elements.totalCount.textContent = formatCount(state.total);
   elements.totalUnit.textContent = `crossings of ${state.source.gate.name}`;
@@ -225,25 +262,19 @@ export function renderPanels(elements: Elements, state: PanelState): void {
   elements.speedReadout.textContent = state.source.calibrated ? NO_VALUE : "no speed";
   elements.speedReason.textContent = state.source.speedNote;
 
-  if (!state.source.calibrated) {
-    elements.incidents.replaceChildren(
-      text("span", "refusal", "none possible"),
-      text(
-        "p",
-        "reason",
-        "Stopped-vehicle detection compares a calibrated speed against a threshold, so it cannot fire on an unsurveyed camera.",
-      ),
-    );
+  const incidents = incidentState({
+    calibrated: state.source.calibrated,
+    expectedDirection: state.source.gate.expectedDirection,
+    wrongWay: state.wrongWay,
+  });
+  if (incidents.kind === "alerts") {
+    renderAlerts(elements, incidents.lines);
     return;
   }
-  if (state.wrongWay.length === 0) {
-    elements.incidents.replaceChildren(text("span", "refusal", "none"));
-    return;
-  }
-  const list = document.createElement("ul");
-  list.className = "alert-list";
-  list.append(...state.wrongWay.map((line) => text("li", "", line)));
-  elements.incidents.replaceChildren(list);
+  elements.incidents.replaceChildren(
+    text("span", "refusal", incidents.kind === "impossible" ? "none possible" : "none"),
+    ...(incidents.reason === "" ? [] : [text("p", "reason", incidents.reason)]),
+  );
 }
 
 /** Wrong-way crossings are alerts and get the amber treatment, on any source:

@@ -1,5 +1,12 @@
 # Fonts shipped with this site
 
+> This notice lives in `web/public/fonts/` so that it is COPIED INTO THE
+> PUBLISHED SITE. It used to sit beside the sources in `web/src/ui/fonts/`,
+> which the build does not copy, so the four woff2 files were served from
+> `assets/` with no notice anywhere near them — and the OFL asks this notice to
+> travel with the files. The bundler renames each file with a content hash on
+> its way into `assets/`, so match them by family below rather than by filename.
+
 Three families are served from this repository rather than from a font CDN.
 That is a consequence of the product's own claim: the page says nothing about a
 frame leaves your device after load, and a request to a third-party font host on

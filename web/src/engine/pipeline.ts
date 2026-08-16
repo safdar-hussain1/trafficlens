@@ -91,6 +91,19 @@ export class SessionPipeline {
     return this.allocated;
   }
 
+  /** How many track ids this pipeline is still holding state for -- gate
+   * `_counted` entries, previous anchors and speed history.
+   *
+   * Exposed because reaping is otherwise invisible from outside, and reaping is
+   * exactly what a non-monotonic frame clock breaks: `step()` reaps on
+   * `frameIndex - lastSeen > maxAge`, so a caller that restarts its frame
+   * counter at 0 while this pipeline survives makes that difference negative
+   * and nothing is ever released. `web/src/ui/app.ts` used to do that on
+   * stop -> start. */
+  get retainedTracks(): number {
+    return this.lastSeen.size;
+  }
+
   /** The clip timestamp the current counts started accumulating from: `null`
    * while they cover the whole session, and the moment of the change once the
    * gate has been moved. The interface says which. */
