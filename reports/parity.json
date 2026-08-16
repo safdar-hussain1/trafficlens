@@ -1,0 +1,64 @@
+{
+  "caseCount": 8,
+  "iouStraddle": {
+    "controlIou": 0.7999999999999999,
+    "controlIsOneUlpBelow": true,
+    "gatingChi2": 9.4877,
+    "gatingDistance": 1.084611450311015,
+    "iou": 0.8,
+    "matchThresh": 0.8
+  },
+  "realClip": {
+    "clip": "motorway-a40.webm",
+    "counts": {
+      "inbound": {
+        "car": {
+          "toward": 2
+        }
+      },
+      "outbound": {
+        "car": {
+          "away": 1
+        }
+      }
+    },
+    "detections": 1069,
+    "events": 3,
+    "frames": 150,
+    "maxSpeedKmh": 106.9631987969366,
+    "speedsReported": 473,
+    "speedsWithheld": 79,
+    "startFrame": 120,
+    "tracksAllocated": 133
+  },
+  "speedToleranceKmh": 1e-06,
+  "straddleCases": {
+    "anchorExactlyOnGate": [
+      "gate_anchor_exactly_on_line",
+      "gate_deferred_off_line_origin"
+    ],
+    "argmaxFloat32ClassTie": [
+      "decode_argmax_class_tie"
+    ],
+    "assignmentCostExactTie": [
+      "tracker_assignment_cost_tie"
+    ],
+    "deferredOnLineUsesLastOffLinePoint": [
+      "gate_deferred_off_line_origin"
+    ],
+    "iouExactlyAtMatchThresh": [
+      "tracker_iou_at_match_thresh"
+    ],
+    "scoreExactlyAtHighThresh": [
+      "tracker_score_at_high_thresh"
+    ]
+  },
+  "straddleKinds": [
+    "anchorExactlyOnGate",
+    "iouExactlyAtMatchThresh",
+    "scoreExactlyAtHighThresh",
+    "assignmentCostExactTie",
+    "argmaxFloat32ClassTie",
+    "deferredOnLineUsesLastOffLinePoint"
+  ]
+}

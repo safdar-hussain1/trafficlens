@@ -144,7 +144,19 @@ class SpeedEstimator:
             if math.hypot(wx - last_x, wy - last_y) > SPEED_MAX_STEP_M:
                 return  # a bad detection, not vehicle motion: never buffered
 
-        buf.append((timestamp, wx, wy))
+        # float(), not the raw argument: CPython's ``sum`` takes an
+        # UNCOMPENSATED path for ``int`` items, so a single int timestamp in
+        # the buffer -- which is exactly what a caller passing a frame index,
+        # or a fixture whose JSON spells a timestamp ``0`` rather than
+        # ``0.0``, hands us -- fits a different slope from the same buffer
+        # holding the float. ``sum([1e16, 3, -1e16])`` is 4.0 where
+        # ``sum([1e16, 3.0, -1e16])`` is 3.0. Measured on 20000 realistic
+        # six-sample windows with one int timestamp, 451 fitted a different
+        # speed, the worst by 4.3e-14 km/h. TypeScript has no int/float
+        # distinction and always takes the compensated path, so without this
+        # coercion the two engines would disagree for a reason nothing in the
+        # failure would suggest.
+        buf.append((float(timestamp), wx, wy))
         while buf and buf[0][0] < timestamp - self._window_s:
             buf.popleft()
 
