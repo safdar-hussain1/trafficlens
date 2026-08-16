@@ -242,10 +242,41 @@ def test_published_web_assets_are_not_git_ignored():
         assert r.returncode == 1, f"{path} IS git-ignored and would never ship"
 
 
+# Process docs are DOCUMENTS. Restricting the name rule to document
+# extensions is what stops it firing on source: Task 20 adds
+# web/src/runtime/session.ts, an execution-provider wrapper that has nothing to
+# do with a work session, and the bare name rule matched it on "session.".
+# Widening the exclusion to "anything under web/src/" would have been the wrong
+# fix -- a process doc can be committed anywhere -- so the narrowing is by
+# extension, and the pair below proves it still bites.
+_PROCESS_DOC_SUFFIXES = {".md", ".txt", ".rst", ".pdf", ".doc", ".docx", ".odt"}
+_PROCESS_DOC_NAMES = r"(^|/)(plan|spec|design-doc|session|notes|handbook)[-_.]"
+
+
+def _process_docs(paths) -> list[str]:
+    return [p for p in paths
+            if Path(p).suffix.lower() in _PROCESS_DOC_SUFFIXES
+            and re.search(_PROCESS_DOC_NAMES, p.lower())]
+
+
 def test_no_process_docs_tracked():
-    bad = [p for p in _tracked()
-           if re.search(r"(^|/)(plan|spec|design-doc|session|notes|handbook)[-_.]", p.lower())]
-    assert bad == [], bad
+    assert _process_docs(_tracked()) == [], _process_docs(_tracked())
+
+
+def test_the_process_doc_rule_still_catches_documents_and_spares_source():
+    """A discriminating pair, varying one axis: the file's extension.
+
+    The must-catch half is what the guard is for. The must-spare half is what
+    the narrowing bought, and without it a rule that simply stopped matching
+    anything would pass the first half on its own.
+    """
+    caught = ["plan-2026.md", "docs/session-notes.md", "spec.txt",
+              "private/handbook.pdf", "a/b/notes.rst"]
+    assert _process_docs(caught) == caught, "the guard stopped catching process docs"
+
+    spared = ["web/src/runtime/session.ts", "web/src/runtime/session.test.ts",
+              "src/trafficlens/planner.py", "web/src/notes.ts", "specimen.py"]
+    assert _process_docs(spared) == [], "the guard is still firing on source files"
 
 def test_private_paths_are_git_ignored():
     for path in ["yolo11n.pt", "data/samples/motorway-a40.webm", "private/handbook.pdf",

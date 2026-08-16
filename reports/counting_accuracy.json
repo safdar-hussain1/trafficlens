@@ -71,22 +71,23 @@
   "methods": {
     "engine+gate": {
       "full": {
-        "n_predicted": 17,
+        "n_predicted": 18,
         "n_ground_truth": 17,
         "true_positives": 16,
         "false_positives": [
-          197
+          197,
+          417
         ],
         "misses": [
           192
         ],
-        "precision": 0.9411764705882353,
+        "precision": 0.8888888888888888,
         "recall": 0.9411764705882353,
-        "f1": 0.9411764705882353,
-        "count_error": 0,
-        "signed_bias": 0,
+        "f1": 0.9142857142857143,
+        "count_error": 1,
+        "signed_bias": 1,
         "miss_rate": 0.058823529411764705,
-        "phantom_rate": 0.058823529411764705,
+        "phantom_rate": 0.11764705882352941,
         "matched_frame_delta": {
           "mean": 2.1875,
           "min": 1,
@@ -100,13 +101,18 @@
         },
         "class_consistency": {
           "matched": 16,
-          "same_class": 15,
-          "rate": 0.9375,
+          "same_class": 14,
+          "rate": 0.875,
           "confusions": {
+            "truck -> bus": 1,
             "truck -> car": 1
           }
         },
         "per_class": {
+          "bus": {
+            "predicted": 1,
+            "ground_truth": 0
+          },
           "car": {
             "predicted": 14,
             "ground_truth": 13
@@ -118,7 +124,7 @@
         },
         "per_direction": {
           "toward": {
-            "predicted": 17,
+            "predicted": 18,
             "ground_truth": 17,
             "true_positives": 16
           }
@@ -126,22 +132,23 @@
         "max_cardinality_true_positives": 16
       },
       "certain_only": {
-        "n_predicted": 7,
+        "n_predicted": 8,
         "n_ground_truth": 7,
         "true_positives": 6,
         "false_positives": [
-          197
+          197,
+          417
         ],
         "misses": [
           192
         ],
-        "precision": 0.8571428571428571,
+        "precision": 0.75,
         "recall": 0.8571428571428571,
-        "f1": 0.8571428571428571,
-        "count_error": 0,
-        "signed_bias": 0,
+        "f1": 0.7999999999999999,
+        "count_error": 1,
+        "signed_bias": 1,
         "miss_rate": 0.14285714285714285,
-        "phantom_rate": 0.14285714285714285,
+        "phantom_rate": 0.2857142857142857,
         "matched_frame_delta": {
           "mean": 2.3333333333333335,
           "min": 1,
@@ -162,11 +169,15 @@
           "car": {
             "predicted": 7,
             "ground_truth": 7
+          },
+          "truck": {
+            "predicted": 1,
+            "ground_truth": 0
           }
         },
         "per_direction": {
           "toward": {
-            "predicted": 7,
+            "predicted": 8,
             "ground_truth": 7,
             "true_positives": 6
           }
@@ -175,7 +186,7 @@
         "labels_ignored": 10
       },
       "certain_only_naive": {
-        "n_predicted": 17,
+        "n_predicted": 18,
         "n_ground_truth": 7,
         "true_positives": 6,
         "false_positives": [
@@ -184,6 +195,7 @@
           167,
           197,
           412,
+          417,
           417,
           474,
           531,
@@ -194,13 +206,13 @@
         "misses": [
           192
         ],
-        "precision": 0.35294117647058826,
+        "precision": 0.3333333333333333,
         "recall": 0.8571428571428571,
-        "f1": 0.5,
-        "count_error": 10,
-        "signed_bias": 10,
+        "f1": 0.48,
+        "count_error": 11,
+        "signed_bias": 11,
         "miss_rate": 0.14285714285714285,
-        "phantom_rate": 1.5714285714285714,
+        "phantom_rate": 1.7142857142857142,
         "matched_frame_delta": {
           "mean": 2.3333333333333335,
           "min": 1,
@@ -218,6 +230,10 @@
           "confusions": {}
         },
         "per_class": {
+          "bus": {
+            "predicted": 1,
+            "ground_truth": 0
+          },
           "car": {
             "predicted": 14,
             "ground_truth": 7
@@ -229,7 +245,7 @@
         },
         "per_direction": {
           "toward": {
-            "predicted": 17,
+            "predicted": 18,
             "ground_truth": 7,
             "true_positives": 6
           }
@@ -239,7 +255,7 @@
     },
     "engine+band": {
       "full": {
-        "n_predicted": 18,
+        "n_predicted": 19,
         "n_ground_truth": 17,
         "true_positives": 2,
         "false_positives": [
@@ -253,6 +269,7 @@
           303,
           393,
           400,
+          404,
           453,
           514,
           584,
@@ -277,13 +294,13 @@
           647,
           670
         ],
-        "precision": 0.1111111111111111,
+        "precision": 0.10526315789473684,
         "recall": 0.11764705882352941,
-        "f1": 0.11428571428571428,
-        "count_error": 1,
-        "signed_bias": 1,
+        "f1": 0.1111111111111111,
+        "count_error": 2,
+        "signed_bias": 2,
         "miss_rate": 0.8823529411764706,
-        "phantom_rate": 0.9411764705882353,
+        "phantom_rate": 1.0,
         "matched_frame_delta": {
           "mean": 1.5,
           "min": 0,
@@ -300,6 +317,10 @@
           "confusions": {}
         },
         "per_class": {
+          "bus": {
+            "predicted": 1,
+            "ground_truth": 0
+          },
           "car": {
             "predicted": 15,
             "ground_truth": 13
@@ -311,7 +332,7 @@
         },
         "per_direction": {
           "toward": {
-            "predicted": 18,
+            "predicted": 19,
             "ground_truth": 17,
             "true_positives": 2
           }
@@ -319,77 +340,6 @@
         "max_cardinality_true_positives": 2
       },
       "certain_only": {
-        "n_predicted": 17,
-        "n_ground_truth": 7,
-        "true_positives": 1,
-        "false_positives": [
-          3,
-          54,
-          80,
-          116,
-          152,
-          177,
-          240,
-          303,
-          393,
-          400,
-          453,
-          514,
-          584,
-          634,
-          654,
-          706
-        ],
-        "misses": [
-          12,
-          75,
-          192,
-          256,
-          321,
-          598
-        ],
-        "precision": 0.058823529411764705,
-        "recall": 0.14285714285714285,
-        "f1": 0.08333333333333333,
-        "count_error": 10,
-        "signed_bias": 10,
-        "miss_rate": 0.8571428571428571,
-        "phantom_rate": 2.2857142857142856,
-        "matched_frame_delta": {
-          "mean": 0.0,
-          "min": 0,
-          "max": 0,
-          "histogram": {
-            "0": 1
-          }
-        },
-        "class_consistency": {
-          "matched": 1,
-          "same_class": 1,
-          "rate": 1.0,
-          "confusions": {}
-        },
-        "per_class": {
-          "car": {
-            "predicted": 14,
-            "ground_truth": 7
-          },
-          "truck": {
-            "predicted": 3,
-            "ground_truth": 0
-          }
-        },
-        "per_direction": {
-          "toward": {
-            "predicted": 17,
-            "ground_truth": 7,
-            "true_positives": 1
-          }
-        },
-        "predictions_moved_to_ignore": 1,
-        "labels_ignored": 10
-      },
-      "certain_only_naive": {
         "n_predicted": 18,
         "n_ground_truth": 7,
         "true_positives": 1,
@@ -404,13 +354,13 @@
           303,
           393,
           400,
+          404,
           453,
           514,
           584,
           634,
           654,
-          706,
-          729
+          706
         ],
         "misses": [
           12,
@@ -442,8 +392,12 @@
           "confusions": {}
         },
         "per_class": {
+          "bus": {
+            "predicted": 1,
+            "ground_truth": 0
+          },
           "car": {
-            "predicted": 15,
+            "predicted": 14,
             "ground_truth": 7
           },
           "truck": {
@@ -458,12 +412,89 @@
             "true_positives": 1
           }
         },
+        "predictions_moved_to_ignore": 1,
+        "labels_ignored": 10
+      },
+      "certain_only_naive": {
+        "n_predicted": 19,
+        "n_ground_truth": 7,
+        "true_positives": 1,
+        "false_positives": [
+          3,
+          54,
+          80,
+          116,
+          152,
+          177,
+          240,
+          303,
+          393,
+          400,
+          404,
+          453,
+          514,
+          584,
+          634,
+          654,
+          706,
+          729
+        ],
+        "misses": [
+          12,
+          75,
+          192,
+          256,
+          321,
+          598
+        ],
+        "precision": 0.05263157894736842,
+        "recall": 0.14285714285714285,
+        "f1": 0.07692307692307693,
+        "count_error": 12,
+        "signed_bias": 12,
+        "miss_rate": 0.8571428571428571,
+        "phantom_rate": 2.5714285714285716,
+        "matched_frame_delta": {
+          "mean": 0.0,
+          "min": 0,
+          "max": 0,
+          "histogram": {
+            "0": 1
+          }
+        },
+        "class_consistency": {
+          "matched": 1,
+          "same_class": 1,
+          "rate": 1.0,
+          "confusions": {}
+        },
+        "per_class": {
+          "bus": {
+            "predicted": 1,
+            "ground_truth": 0
+          },
+          "car": {
+            "predicted": 15,
+            "ground_truth": 7
+          },
+          "truck": {
+            "predicted": 3,
+            "ground_truth": 0
+          }
+        },
+        "per_direction": {
+          "toward": {
+            "predicted": 19,
+            "ground_truth": 7,
+            "true_positives": 1
+          }
+        },
         "false_positives_matching_probable_labels": 1
       }
     },
     "engine+per-frame": {
       "full": {
-        "n_predicted": 551,
+        "n_predicted": 565,
         "n_ground_truth": 17,
         "true_positives": 17,
         "false_positives": [
@@ -671,6 +702,7 @@
           209,
           210,
           211,
+          212,
           240,
           241,
           242,
@@ -759,6 +791,7 @@
           403,
           404,
           404,
+          404,
           405,
           405,
           406,
@@ -778,13 +811,17 @@
           413,
           414,
           414,
+          414,
+          415,
           415,
           415,
           416,
           417,
           417,
+          417,
           418,
           418,
+          419,
           419,
           419,
           420,
@@ -795,18 +832,26 @@
           422,
           423,
           423,
+          423,
+          424,
           424,
           424,
           425,
           425,
+          425,
+          426,
           426,
           426,
           427,
           427,
+          427,
+          428,
           428,
           428,
           429,
           429,
+          429,
+          430,
           430,
           453,
           454,
@@ -1003,13 +1048,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.030852994555353903,
+        "precision": 0.03008849557522124,
         "recall": 1.0,
-        "f1": 0.05985915492957746,
-        "count_error": 534,
-        "signed_bias": 534,
+        "f1": 0.058419243986254296,
+        "count_error": 548,
+        "signed_bias": 548,
         "miss_rate": 0.0,
-        "phantom_rate": 31.41176470588235,
+        "phantom_rate": 32.23529411764706,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -1027,8 +1072,12 @@
           }
         },
         "per_class": {
+          "bus": {
+            "predicted": 13,
+            "ground_truth": 0
+          },
           "car": {
-            "predicted": 462,
+            "predicted": 463,
             "ground_truth": 13
           },
           "truck": {
@@ -1043,7 +1092,7 @@
             "true_positives": 0
           },
           "toward": {
-            "predicted": 549,
+            "predicted": 563,
             "ground_truth": 17,
             "true_positives": 17
           }
@@ -1051,7 +1100,7 @@
         "max_cardinality_true_positives": 17
       },
       "certain_only": {
-        "n_predicted": 541,
+        "n_predicted": 555,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -1259,6 +1308,7 @@
           209,
           210,
           211,
+          212,
           240,
           241,
           242,
@@ -1347,6 +1397,7 @@
           403,
           404,
           404,
+          404,
           405,
           405,
           406,
@@ -1366,13 +1417,17 @@
           413,
           414,
           414,
+          414,
+          415,
           415,
           415,
           416,
           417,
           417,
+          417,
           418,
           418,
+          419,
           419,
           419,
           420,
@@ -1383,18 +1438,26 @@
           422,
           423,
           423,
+          423,
+          424,
           424,
           424,
           425,
           425,
+          425,
+          426,
           426,
           426,
           427,
           427,
+          427,
+          428,
           428,
           428,
           429,
           429,
+          429,
+          430,
           430,
           453,
           454,
@@ -1591,13 +1654,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012939001848428836,
+        "precision": 0.012612612612612612,
         "recall": 1.0,
-        "f1": 0.025547445255474456,
-        "count_error": 534,
-        "signed_bias": 534,
+        "f1": 0.024911032028469747,
+        "count_error": 548,
+        "signed_bias": 548,
         "miss_rate": 0.0,
-        "phantom_rate": 76.28571428571429,
+        "phantom_rate": 78.28571428571429,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -1613,8 +1676,12 @@
           "confusions": {}
         },
         "per_class": {
+          "bus": {
+            "predicted": 13,
+            "ground_truth": 0
+          },
           "car": {
-            "predicted": 454,
+            "predicted": 455,
             "ground_truth": 7
           },
           "truck": {
@@ -1629,7 +1696,7 @@
             "true_positives": 0
           },
           "toward": {
-            "predicted": 539,
+            "predicted": 553,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -1638,7 +1705,7 @@
         "labels_ignored": 10
       },
       "certain_only_naive": {
-        "n_predicted": 551,
+        "n_predicted": 565,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -1849,6 +1916,7 @@
           209,
           210,
           211,
+          212,
           240,
           241,
           242,
@@ -1937,6 +2005,7 @@
           403,
           404,
           404,
+          404,
           405,
           405,
           406,
@@ -1957,14 +2026,18 @@
           413,
           414,
           414,
+          414,
+          415,
           415,
           415,
           416,
           416,
           417,
           417,
+          417,
           418,
           418,
+          419,
           419,
           419,
           420,
@@ -1975,18 +2048,26 @@
           422,
           423,
           423,
+          423,
+          424,
           424,
           424,
           425,
           425,
+          425,
+          426,
           426,
           426,
           427,
           427,
+          427,
+          428,
           428,
           428,
           429,
           429,
+          429,
+          430,
           430,
           453,
           454,
@@ -2188,13 +2269,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012704174228675136,
+        "precision": 0.012389380530973451,
         "recall": 1.0,
-        "f1": 0.025089605734767026,
-        "count_error": 544,
-        "signed_bias": 544,
+        "f1": 0.024475524475524476,
+        "count_error": 558,
+        "signed_bias": 558,
         "miss_rate": 0.0,
-        "phantom_rate": 77.71428571428571,
+        "phantom_rate": 79.71428571428571,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -2210,8 +2291,12 @@
           "confusions": {}
         },
         "per_class": {
+          "bus": {
+            "predicted": 13,
+            "ground_truth": 0
+          },
           "car": {
-            "predicted": 462,
+            "predicted": 463,
             "ground_truth": 7
           },
           "truck": {
@@ -2226,7 +2311,7 @@
             "true_positives": 0
           },
           "toward": {
-            "predicted": 549,
+            "predicted": 563,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -2630,7 +2715,7 @@
     },
     "centroid+per-frame": {
       "full": {
-        "n_predicted": 555,
+        "n_predicted": 554,
         "n_ground_truth": 17,
         "true_positives": 17,
         "false_positives": [
@@ -2670,7 +2755,6 @@
           20,
           21,
           21,
-          22,
           22,
           23,
           24,
@@ -3174,13 +3258,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.03063063063063063,
+        "precision": 0.030685920577617327,
         "recall": 1.0,
-        "f1": 0.05944055944055945,
-        "count_error": 538,
-        "signed_bias": 538,
+        "f1": 0.0595446584938704,
+        "count_error": 537,
+        "signed_bias": 537,
         "miss_rate": 0.0,
-        "phantom_rate": 31.647058823529413,
+        "phantom_rate": 31.58823529411765,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -3200,7 +3284,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 465,
+            "predicted": 464,
             "ground_truth": 13
           },
           "truck": {
@@ -3210,12 +3294,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 493,
+            "predicted": 490,
             "ground_truth": 17,
             "true_positives": 17
           }
@@ -3223,7 +3307,7 @@
         "max_cardinality_true_positives": 17
       },
       "certain_only": {
-        "n_predicted": 545,
+        "n_predicted": 544,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -3263,7 +3347,6 @@
           20,
           21,
           21,
-          22,
           22,
           23,
           24,
@@ -3767,13 +3850,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012844036697247707,
+        "precision": 0.012867647058823529,
         "recall": 1.0,
-        "f1": 0.025362318840579712,
-        "count_error": 538,
-        "signed_bias": 538,
+        "f1": 0.02540834845735027,
+        "count_error": 537,
+        "signed_bias": 537,
         "miss_rate": 0.0,
-        "phantom_rate": 76.85714285714286,
+        "phantom_rate": 76.71428571428571,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -3790,7 +3873,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 459,
+            "predicted": 458,
             "ground_truth": 7
           },
           "truck": {
@@ -3800,12 +3883,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 483,
+            "predicted": 480,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -3814,7 +3897,7 @@
         "labels_ignored": 10
       },
       "certain_only_naive": {
-        "n_predicted": 555,
+        "n_predicted": 554,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -3854,7 +3937,6 @@
           20,
           21,
           21,
-          22,
           22,
           23,
           24,
@@ -4368,13 +4450,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012612612612612612,
+        "precision": 0.01263537906137184,
         "recall": 1.0,
-        "f1": 0.024911032028469747,
-        "count_error": 548,
-        "signed_bias": 548,
+        "f1": 0.024955436720142603,
+        "count_error": 547,
+        "signed_bias": 547,
         "miss_rate": 0.0,
-        "phantom_rate": 78.28571428571429,
+        "phantom_rate": 78.14285714285714,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -4391,7 +4473,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 465,
+            "predicted": 464,
             "ground_truth": 7
           },
           "truck": {
@@ -4401,12 +4483,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 493,
+            "predicted": 490,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -4810,7 +4892,7 @@
     },
     "greedy-iou+per-frame": {
       "full": {
-        "n_predicted": 555,
+        "n_predicted": 554,
         "n_ground_truth": 17,
         "true_positives": 17,
         "false_positives": [
@@ -4851,7 +4933,6 @@
           21,
           21,
           22,
-          22,
           23,
           24,
           25,
@@ -5354,13 +5435,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.03063063063063063,
+        "precision": 0.030685920577617327,
         "recall": 1.0,
-        "f1": 0.05944055944055945,
-        "count_error": 538,
-        "signed_bias": 538,
+        "f1": 0.0595446584938704,
+        "count_error": 537,
+        "signed_bias": 537,
         "miss_rate": 0.0,
-        "phantom_rate": 31.647058823529413,
+        "phantom_rate": 31.58823529411765,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -5379,7 +5460,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 465,
+            "predicted": 464,
             "ground_truth": 13
           },
           "truck": {
@@ -5389,12 +5470,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 493,
+            "predicted": 490,
             "ground_truth": 17,
             "true_positives": 17
           }
@@ -5402,7 +5483,7 @@
         "max_cardinality_true_positives": 17
       },
       "certain_only": {
-        "n_predicted": 545,
+        "n_predicted": 544,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -5442,7 +5523,6 @@
           20,
           21,
           21,
-          22,
           22,
           23,
           24,
@@ -5946,13 +6026,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012844036697247707,
+        "precision": 0.012867647058823529,
         "recall": 1.0,
-        "f1": 0.025362318840579712,
-        "count_error": 538,
-        "signed_bias": 538,
+        "f1": 0.02540834845735027,
+        "count_error": 537,
+        "signed_bias": 537,
         "miss_rate": 0.0,
-        "phantom_rate": 76.85714285714286,
+        "phantom_rate": 76.71428571428571,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -5969,7 +6049,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 457,
+            "predicted": 456,
             "ground_truth": 7
           },
           "truck": {
@@ -5979,12 +6059,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 483,
+            "predicted": 480,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -5993,7 +6073,7 @@
         "labels_ignored": 10
       },
       "certain_only_naive": {
-        "n_predicted": 555,
+        "n_predicted": 554,
         "n_ground_truth": 7,
         "true_positives": 7,
         "false_positives": [
@@ -6033,7 +6113,6 @@
           20,
           21,
           21,
-          22,
           22,
           23,
           24,
@@ -6547,13 +6626,13 @@
           734
         ],
         "misses": [],
-        "precision": 0.012612612612612612,
+        "precision": 0.01263537906137184,
         "recall": 1.0,
-        "f1": 0.024911032028469747,
-        "count_error": 548,
-        "signed_bias": 548,
+        "f1": 0.024955436720142603,
+        "count_error": 547,
+        "signed_bias": 547,
         "miss_rate": 0.0,
-        "phantom_rate": 78.28571428571429,
+        "phantom_rate": 78.14285714285714,
         "matched_frame_delta": {
           "mean": 0.0,
           "min": 0,
@@ -6570,7 +6649,7 @@
         },
         "per_class": {
           "car": {
-            "predicted": 465,
+            "predicted": 464,
             "ground_truth": 7
           },
           "truck": {
@@ -6580,12 +6659,12 @@
         },
         "per_direction": {
           "away": {
-            "predicted": 62,
+            "predicted": 64,
             "ground_truth": 0,
             "true_positives": 0
           },
           "toward": {
-            "predicted": 493,
+            "predicted": 490,
             "ground_truth": 7,
             "true_positives": 7
           }
@@ -6596,131 +6675,107 @@
   },
   "timing": {
     "engine+gate": {
-      "seconds": 0.49440645903814584,
+      "seconds": 0.48923083301633596,
       "frames": 735,
-      "ms_per_frame": 0.672661849031491
+      "ms_per_frame": 0.6656201809746067
     },
     "engine+band": {
-      "seconds": 0.5148159590316936,
+      "seconds": 0.4796974170021713,
       "frames": 735,
-      "ms_per_frame": 0.7004298762335968
+      "ms_per_frame": 0.6526495469417296
     },
     "engine+per-frame": {
-      "seconds": 0.5056032920256257,
+      "seconds": 0.48416058404836804,
       "frames": 735,
-      "ms_per_frame": 0.6878956354090145
+      "ms_per_frame": 0.6587218830590041
     },
     "centroid+gate": {
-      "seconds": 0.022732375073246658,
+      "seconds": 0.02249804208986461,
       "frames": 735,
-      "ms_per_frame": 0.030928401460199536
+      "ms_per_frame": 0.03060958107464573
     },
     "centroid+band": {
-      "seconds": 0.020598124945536256,
+      "seconds": 0.02024587499909103,
       "frames": 735,
-      "ms_per_frame": 0.028024659789845245
+      "ms_per_frame": 0.02754540816202861
     },
     "centroid+per-frame": {
-      "seconds": 0.022661334020085633,
+      "seconds": 0.021822334034368396,
       "frames": 735,
-      "ms_per_frame": 0.030831746966102903
+      "ms_per_frame": 0.029690250386895777
     },
     "greedy-iou+gate": {
-      "seconds": 0.02567962498869747,
+      "seconds": 0.02472579199820757,
       "frames": 735,
-      "ms_per_frame": 0.034938265290744855
+      "ms_per_frame": 0.03364053333089465
     },
     "greedy-iou+band": {
-      "seconds": 0.023490082938224077,
+      "seconds": 0.0229214170249179,
       "frames": 735,
-      "ms_per_frame": 0.031959296514590584
+      "ms_per_frame": 0.031185601394446122
     },
     "greedy-iou+per-frame": {
-      "seconds": 0.025056291953660548,
+      "seconds": 0.024625665973871946,
       "frames": 735,
-      "ms_per_frame": 0.03409019313423204
+      "ms_per_frame": 0.03350430744744483
     }
   },
   "band_sweep": {
     "tracker": "engine",
-    "median_gate_approach_px_per_frame": 1.1326310188320008,
+    "median_gate_approach_px_per_frame": 1.142117260926284,
     "note": "Miss rate and phantom rate are separate series because in general they trade: a wider band cures step-over misses and creates phantoms, so no single band-versus-gate number is a result rather than a choice of operating point. On THIS clip they do not trade, and the reason is the approach speed recorded above -- see the entries note.",
     "entries_note": "A band of half-width b fires when the anchor first comes within b of the gate line, roughly b / v frames before the line is reached. At the measured approach speed no band in this sweep is ever stepped over, so the classic step-over miss mode never appears; the band rule's dominant error here is the crossing FRAME, and a mistimed crossing costs a miss AND a phantom at once, which is why both series rise together. On faster traffic or a lower frame rate the step-over mode would reappear and the two would trade as usual.",
     "entries": [
       {
         "band_px": 5.0,
-        "n_predicted": 17,
+        "n_predicted": 18,
         "true_positives": 11,
         "misses": 6,
-        "false_positives": 6,
+        "false_positives": 7,
         "miss_rate": 0.35294117647058826,
-        "phantom_rate": 0.35294117647058826,
-        "precision": 0.6470588235294118,
+        "phantom_rate": 0.4117647058823529,
+        "precision": 0.6111111111111112,
         "recall": 0.6470588235294118,
-        "f1": 0.6470588235294118
+        "f1": 0.6285714285714287
       },
       {
         "band_px": 10.0,
-        "n_predicted": 17,
+        "n_predicted": 18,
         "true_positives": 2,
         "misses": 15,
-        "false_positives": 15,
+        "false_positives": 16,
         "miss_rate": 0.8823529411764706,
-        "phantom_rate": 0.8823529411764706,
-        "precision": 0.11764705882352941,
+        "phantom_rate": 0.9411764705882353,
+        "precision": 0.1111111111111111,
         "recall": 0.11764705882352941,
-        "f1": 0.11764705882352941
+        "f1": 0.11428571428571428
       },
       {
         "band_px": 20.0,
-        "n_predicted": 18,
+        "n_predicted": 19,
         "true_positives": 2,
         "misses": 15,
-        "false_positives": 16,
+        "false_positives": 17,
         "miss_rate": 0.8823529411764706,
-        "phantom_rate": 0.9411764705882353,
-        "precision": 0.1111111111111111,
+        "phantom_rate": 1.0,
+        "precision": 0.10526315789473684,
         "recall": 0.11764705882352941,
-        "f1": 0.11428571428571428
+        "f1": 0.1111111111111111
       },
       {
         "band_px": 30.0,
-        "n_predicted": 18,
+        "n_predicted": 19,
         "true_positives": 2,
         "misses": 15,
-        "false_positives": 16,
+        "false_positives": 17,
         "miss_rate": 0.8823529411764706,
-        "phantom_rate": 0.9411764705882353,
-        "precision": 0.1111111111111111,
+        "phantom_rate": 1.0,
+        "precision": 0.10526315789473684,
         "recall": 0.11764705882352941,
-        "f1": 0.11428571428571428
+        "f1": 0.1111111111111111
       },
       {
         "band_px": 45.0,
-        "n_predicted": 19,
-        "true_positives": 2,
-        "misses": 15,
-        "false_positives": 17,
-        "miss_rate": 0.8823529411764706,
-        "phantom_rate": 1.0,
-        "precision": 0.10526315789473684,
-        "recall": 0.11764705882352941,
-        "f1": 0.1111111111111111
-      },
-      {
-        "band_px": 60.0,
-        "n_predicted": 19,
-        "true_positives": 2,
-        "misses": 15,
-        "false_positives": 17,
-        "miss_rate": 0.8823529411764706,
-        "phantom_rate": 1.0,
-        "precision": 0.10526315789473684,
-        "recall": 0.11764705882352941,
-        "f1": 0.1111111111111111
-      },
-      {
-        "band_px": 90.0,
         "n_predicted": 20,
         "true_positives": 2,
         "misses": 15,
@@ -6730,6 +6785,30 @@
         "precision": 0.1,
         "recall": 0.11764705882352941,
         "f1": 0.1081081081081081
+      },
+      {
+        "band_px": 60.0,
+        "n_predicted": 20,
+        "true_positives": 2,
+        "misses": 15,
+        "false_positives": 18,
+        "miss_rate": 0.8823529411764706,
+        "phantom_rate": 1.0588235294117647,
+        "precision": 0.1,
+        "recall": 0.11764705882352941,
+        "f1": 0.1081081081081081
+      },
+      {
+        "band_px": 90.0,
+        "n_predicted": 21,
+        "true_positives": 2,
+        "misses": 15,
+        "false_positives": 19,
+        "miss_rate": 0.8823529411764706,
+        "phantom_rate": 1.1176470588235294,
+        "precision": 0.09523809523809523,
+        "recall": 0.11764705882352941,
+        "f1": 0.10526315789473684
       }
     ]
   }

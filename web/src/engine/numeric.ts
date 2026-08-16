@@ -358,6 +358,52 @@ export function hypot(a: number, b: number): number {
   return h / scale;
 }
 
+// -- CPython's round ----------------------------------------------------------
+
+/** C's `round`: nearest, halves away from zero.
+ *
+ * Written as trunc-then-compare rather than the usual `Math.floor(x + 0.5)`,
+ * which is not the same function: for x = 0.49999999999999994, the largest
+ * double below a half, `x + 0.5` rounds UP to exactly 1.0 in float64 and the
+ * shortcut returns 1 where C returns 0. `x - Math.trunc(x)` is exact for every
+ * |x| < 2**52, and above that there are no fractions left to round. */
+function roundHalfAwayFromZero(x: number): number {
+  const whole = Math.trunc(x);
+  const fraction = x - whole;
+  if (fraction >= 0.5) {
+    return whole + 1;
+  }
+  if (fraction <= -0.5) {
+    return whole - 1;
+  }
+  return whole;
+}
+
+/** `round(x)` the way CPython's builtin rounds a float with no `ndigits`:
+ * nearest, and HALVES TO EVEN.
+ *
+ * `Math.round` is not this. It rounds halves up, so the two disagree on every
+ * exact half -- and `letterbox` rounds `h * scale` to pick the resized height,
+ * where that disagreement is a whole pixel. The measured case is a 1280x717
+ * frame at size 640: `scale` is exactly 0.5, `717 * 0.5` is exactly 358.5,
+ * Python gives 358 and `Math.round` gives 359. One row out shifts the pad and
+ * therefore every box in the frame.
+ *
+ * Mirrors CPython's `float___round___impl` literally, including its two-step
+ * shape: round half away from zero first, then, only when the input sat
+ * exactly on a half, redo it as `2 * round(x / 2)`. Halving is exact (it is a
+ * power of two), so that second round lands on the even neighbour. */
+export function roundHalfEven(x: number): number {
+  const rounded = roundHalfAwayFromZero(x);
+  const result = Math.abs(x - rounded) === 0.5 ? 2 * roundHalfAwayFromZero(x / 2) : rounded;
+  // CPython returns an int, and Python ints have no signed zero: `round(-0.5)`
+  // is `0`, not `-0`. `Math.trunc` and the doubling below both preserve the
+  // sign, so -0.5 and -0.0 would otherwise come back as -0 -- equal under
+  // `===` but a different value under `Object.is`, and a different string when
+  // it reaches a UI. Normalised here so the mirror returns what Python does.
+  return result === 0 ? 0 : result;
+}
+
 // -- CPython's builtin sum ----------------------------------------------------
 
 /** Total of `values` the way CPython's builtin `sum` totals floats.

@@ -1045,13 +1045,26 @@ def test_the_committed_counting_report_is_self_consistent():
                 assert delta["max"] <= DEFAULT_MATCH_WINDOW.frames_after, where
 
     # The headline that lands on the site, pinned explicitly.
+    #
+    # These moved once, in Task 20, and the reason is recorded here rather than
+    # only in a report: `detect.base.letterbox` changed from `cv2.INTER_LINEAR`
+    # to `cv2.INTER_LINEAR_EXACT`, because plain INTER_LINEAR is intercepted by
+    # a vendor resize HAL on some builds and so cannot be mirrored in the
+    # browser (see that function's docstring). Preprocessing therefore shifted
+    # by at most one grey level per pixel, which moved 8901 of the clip's 8914
+    # cached detections by a median of 0.055 px, and one of those shifts was
+    # enough to produce a second phantom crossing at frame 417.
+    #
+    # Recall did not move: still 16 of 17, still missing only frame 192. The
+    # cost is one false positive, so precision and F1 dropped from 16/17.
+    # Before: n_predicted 17, precision = recall = f1 = 16/17 = 0.9411764706.
     engine = methods["engine+gate"]["full"]
-    assert engine["n_predicted"] == 17
+    assert engine["n_predicted"] == 18
     assert engine["n_ground_truth"] == 17
     assert engine["true_positives"] == 16
-    assert engine["precision"] == pytest.approx(16 / 17)
+    assert engine["precision"] == pytest.approx(16 / 18)
     assert engine["recall"] == pytest.approx(16 / 17)
-    assert engine["f1"] == pytest.approx(16 / 17)
+    assert engine["f1"] == pytest.approx(2 * (16 / 18) * (16 / 17) / (16 / 18 + 16 / 17))
     assert engine["matched_frame_delta"]["max"] <= 4
     # Greedy matching is conservative; the report says by how much.
     assert engine["max_cardinality_true_positives"] >= engine["true_positives"]

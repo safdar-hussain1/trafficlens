@@ -4,34 +4,34 @@
   "median_filter_frames": 5,
   "association": "GreedyIoUTracker, whose Track.box is the last OBSERVED detection box; the engine's tracker would report its own Kalman-smoothed boxes instead.",
   "frames": 735,
-  "tracks_seen": 49,
+  "tracks_seen": 48,
   "tracks_contributing": 41,
-  "median_box_width_px": 66.8232421875,
-  "median_box_height_px": 48.84375,
+  "median_box_width_px": 66.77780151367188,
+  "median_box_height_px": 48.82861328125,
   "residuals": {
     "box_width": {
-      "n": 4025,
-      "std_px": 0.9796636222286654,
-      "mae_px": 0.3505421874241799,
-      "p95_abs_px": 1.5411621093749985
+      "n": 4032,
+      "std_px": 1.0293801649318595,
+      "mae_px": 0.36225790636880056,
+      "p95_abs_px": 1.5659790039062498
     },
     "box_height": {
-      "n": 4025,
-      "std_px": 0.525577890348344,
-      "mae_px": 0.22488023461762421,
-      "p95_abs_px": 1.002734374999999
+      "n": 4032,
+      "std_px": 0.5231548635399471,
+      "mae_px": 0.22510501316615514,
+      "p95_abs_px": 1.0368530273437495
     },
     "centre_x": {
-      "n": 4025,
-      "std_px": 0.33469519742443504,
-      "mae_px": 0.04913100153763102,
-      "p95_abs_px": 0.14150390624999903
+      "n": 4032,
+      "std_px": 0.33438352404010824,
+      "mae_px": 0.049936226436070034,
+      "p95_abs_px": 0.1407348632812495
     },
     "centre_y": {
-      "n": 4025,
-      "std_px": 0.0973210760163207,
-      "mae_px": 0.018608504585597825,
-      "p95_abs_px": 0.08452148437499998
+      "n": 4032,
+      "std_px": 0.09713000150521812,
+      "mae_px": 0.018815948849632627,
+      "p95_abs_px": 0.08974914550781249
     }
   }
 }

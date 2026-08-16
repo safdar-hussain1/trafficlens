@@ -1342,13 +1342,19 @@ def test_the_published_report_reduces_exactly_to_the_counting_report():
                 == baseline[name]["certain_only"]["f1"]
             ), (protocol, name)
 
+    # Moved once, in Task 20, with the interpolation change described in
+    # tests/test_bench_counting.py's headline block and in
+    # `detect.base.letterbox`. Recall is unchanged -- the same 16 of 17, still
+    # missing only frame 192 -- and the whole movement is one extra phantom at
+    # frame 417. Before: false_positives 1, n_predicted 17, signed_bias 0,
+    # f1 0.9412.
     engine = _entry(report, PROTOCOL_FRAME_RATE, 30.0)["methods"]["engine+gate"]
     assert engine["true_positives"] == 16
-    assert engine["false_positives"] == 1
+    assert engine["false_positives"] == 2
     assert engine["misses"] == 1
-    assert engine["n_predicted"] == 17
-    assert engine["signed_bias"] == 0
-    assert round(engine["f1"], 4) == 0.9412
+    assert engine["n_predicted"] == 18
+    assert engine["signed_bias"] == 1
+    assert round(engine["f1"], 4) == 0.9143
 
 
 def test_the_published_report_carries_the_window_it_scored_each_level_with():
@@ -1420,7 +1426,10 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
         for entry in rates
     }
     assert question["engine_tracked_approach_px_per_frame_by_rate"] == engine_tracked
-    assert engine_tracked["30.0"] == pytest.approx(1.1326310188320008)
+    # Also moved by Task 20's interpolation change: the anchors this median is
+    # taken over are detector box edges, which shifted sub-pixel. Before:
+    # 1.1326310188320008.
+    assert engine_tracked["30.0"] == pytest.approx(1.142117260926284)
     assert engine_tracked["2.0"] is None
     assert approach["2.0"] is not None
 

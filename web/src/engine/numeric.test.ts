@@ -6,7 +6,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Matrix, cholesky, hypot, luSolve, matmul, sumFloats } from "./numeric";
+import {
+  Matrix,
+  cholesky,
+  hypot,
+  luSolve,
+  matmul,
+  roundHalfEven,
+  sumFloats,
+} from "./numeric";
 
 // A symmetric positive-definite 4x4, the shape of the filter's innovation
 // covariance, and a two-column right-hand side, the shape of its gain solve.
@@ -276,5 +284,61 @@ describe("sumFloats", () => {
     expect(sumFloats([Infinity, -Infinity])).toBeNaN();
     expect(sumFloats([NaN, 1.0])).toBeNaN();
     expect(sumFloats([1.0, NaN])).toBeNaN();
+  });
+});
+
+// -- CPython's round -----------------------------------------------------------
+
+describe("roundHalfEven", () => {
+  // Every expectation below is CPython 3.12's actual `round(x)` output, taken
+  // from the interpreter rather than reasoned about.
+  it("rounds halfway cases to even, where Math.round rounds up", () => {
+    for (const [x, want] of [
+      [0.5, 0],
+      [1.5, 2],
+      [2.5, 2],
+      [34.5, 34],
+      [35.5, 36],
+      // The measured letterbox case: 1280x717 at size 640 gives 717 * 0.5.
+      [358.5, 358],
+      [359.5, 360],
+    ] as const) {
+      expect(roundHalfEven(x), `round(${x})`).toBe(want);
+    }
+    // The reason this helper exists at all: on exact halves the two disagree,
+    // and on 358.5 that disagreement is a one-pixel letterbox.
+    expect(Math.round(358.5)).toBe(359);
+    expect(Math.round(2.5)).toBe(3);
+  });
+
+  it("rounds halves toward even for negative values too", () => {
+    for (const [x, want] of [
+      [-0.5, 0],
+      [-1.5, -2],
+      [-2.5, -2],
+    ] as const) {
+      expect(roundHalfEven(x), `round(${x})`).toBe(want);
+    }
+  });
+
+  // The control: away from an exact half, half-to-even must agree with
+  // ordinary rounding. A helper that always rounded down would satisfy several
+  // of the cases above and fail every one of these.
+  it("agrees with ordinary rounding away from the halfway point", () => {
+    for (const [x, want] of [
+      [123.456, 123],
+      [-123.456, -123],
+      [2.675, 3],
+      [0.0, 0],
+      [-0.0, 0],
+      // The largest double below 0.5. `Math.floor(x + 0.5)` gets this wrong:
+      // x + 0.5 rounds up to exactly 1.0 in float64, so that shortcut returns
+      // 1 where CPython returns 0.
+      [0.49999999999999994, 0],
+      [-0.49999999999999994, 0],
+      [1000000000000000.5, 1000000000000000],
+    ] as const) {
+      expect(roundHalfEven(x), `round(${x})`).toBe(want);
+    }
   });
 });

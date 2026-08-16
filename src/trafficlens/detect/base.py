@@ -84,8 +84,35 @@ def letterbox(
        than calling ``Math.round``, or it will produce an off-by-one pixel
        letterbox on inputs like this one and fail the byte-identical
        parity assertion.
-    4. The frame is resized to ``(new_w, new_h)`` with bilinear
-       interpolation (``cv2.INTER_LINEAR``).
+    4. The frame is resized to ``(new_w, new_h)`` with BIT-EXACT bilinear
+       interpolation (``cv2.INTER_LINEAR_EXACT``), never plain
+       ``cv2.INTER_LINEAR``. The distinction is the whole reason a
+       TypeScript mirror is possible at all, and it is not a preference:
+
+       ``cv2.resize(..., INTER_LINEAR)`` is not one algorithm. OpenCV's
+       ``hal::resize`` opens with ``CALL_HAL(resize, cv_hal_resize, ...)``,
+       so a vendor HAL gets first refusal before any OpenCV code runs, and
+       the wheel this project is developed against reports ``Custom HAL:
+       YES (carotene, KleidiCV)``. Measured on that build: a faithful port
+       of OpenCV's own documented fixed-point ``INTER_LINEAR`` is
+       byte-identical to ``cv2`` on 36 of 40 random shapes and on 0/31518
+       pixels of each single-axis sweep, but diverges wholesale in a sharp
+       band -- both axes downscaling with ``scale_x < 3`` -- and that band
+       contains this product's own shape (1280x720 to 480x270 is
+       ``scale = 2.667`` on both axes; 34% of pixels differ on a noise
+       frame, by up to 2 grey levels). No port can match that, because
+       what it would have to match is a vendor's NEON kernel, not a
+       specification, and a different wheel is a different answer again.
+
+       ``INTER_LINEAR_EXACT`` is OpenCV's answer to exactly this problem:
+       pure integer Q8.8 arithmetic with coefficients computed in
+       ``softdouble`` (a software float64, deterministic by construction),
+       and the HAL does not claim it. A pure-integer reimplementation
+       reproduces it on 0 differing pixels out of 989706 across 240 random
+       shapes at 1 and 3 channels, including 0 of 388800 at this product's
+       own 1280x720 to 480x270 shape. So this is the interpolation that
+       makes "the visitor's browser runs the same detector" a statement
+       that survives being checked.
     5. Padding is centred using INTEGER FLOOR division:
        ``pad_x = (size - new_w) // 2`` and ``pad_y = (size - new_h) // 2``.
        When ``size - new_w`` (or ``_h``) is odd, the single extra pixel of
@@ -113,7 +140,9 @@ def letterbox(
     new_w = int(round(w * scale))
     new_h = int(round(h * scale))
 
-    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    resized = cv2.resize(
+        frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR_EXACT
+    )
 
     pad_x = (size - new_w) // 2
     pad_y = (size - new_h) // 2
