@@ -5,12 +5,13 @@
  * This is the one module here with no Python counterpart of its own:
  * `trafficlens.track.kalman` gets `matmul`, `np.linalg.solve` and
  * `np.linalg.cholesky` from numpy, which gets them from LAPACK, and
- * `trafficlens.analytics.speed` gets `hypot` from CPython's math module. The
- * browser has none of that, so the four routines are written out below -- and
- * written to those implementations' own recipes rather than to whatever a
- * textbook (or `Math.hypot`) does, because the two engines are compared
- * numerically later and every avoidable difference in evaluation order is one
- * more source of drift on that comparison. In particular:
+ * `trafficlens.analytics.speed` gets `hypot` from CPython's math module and its
+ * means from CPython's builtin `sum`. The browser has none of that, so the five
+ * routines are written out below -- and written to those implementations' own
+ * recipes rather than to whatever a textbook (or `Math.hypot`, or a `+=` loop)
+ * does, because the two engines are compared numerically later and every
+ * avoidable difference in evaluation order is one more source of drift on that
+ * comparison. In particular:
  *
  * - `luSolve` mirrors `dgesv`: unblocked right-looking LU with partial
  *   pivoting (`dgetf2`), then the two `dtrsm` substitutions of `dgetrs`.
@@ -25,6 +26,10 @@
  *   returns 7.000000000000001 where CPython returns exactly 7.0 for
  *   `hypot(4.949747468305833, 4.949747468305833)`, which flips the
  *   `> SPEED_MAX_STEP_M` outlier decision on a boundary case.
+ * - `sumFloats` mirrors CPython's builtin `sum` over floats, which since 3.12
+ *   is COMPENSATED (Neumaier), not a running total. A plain left-to-right loop
+ *   disagrees with it on 5917 of 13500 measured cases. See the function comment
+ *   for when NOT to use it.
  *
  * What this does NOT claim: numpy dispatches to a tuned BLAS whose kernels may
  * reassociate or fuse multiply-add, so agreement with numpy is close but not
@@ -351,4 +356,36 @@ export function hypot(a: number, b: number): number {
   const residual = csum - 1.0 + (frac1 + frac2);
   h += residual / (2.0 * h); // differential correction
   return h / scale;
+}
+
+// -- CPython's builtin sum ----------------------------------------------------
+
+/** Total of `values` the way CPython's builtin `sum` totals floats.
+ *
+ * Since 3.12 that is the improved Kahan-Babuska (Neumaier) compensated
+ * summation, not a running total: the compensation term captures the low-order
+ * bits each addition drops and is folded back in at the end. A plain
+ * left-to-right `+=` loop is a DIFFERENT float64 -- measured, the two disagree
+ * on 5917 of 13500 lists drawn from ordinary, catastrophically-cancelling,
+ * extreme-magnitude and random-bit-pattern corpora; this agrees with CPython on
+ * all 13500.
+ *
+ * Use this ONLY where the Python source calls `sum(...)`. Where it accumulates
+ * with an explicit `+=` loop -- `associate._ordered_total`, the numerator and
+ * denominator loops in `speed.speed_kmh` -- CPython does no compensation and a
+ * plain loop is the faithful mirror. Reaching for this there would be exactly
+ * the same class of bug in the other direction. */
+export function sumFloats(values: Iterable<number>): number {
+  let total = 0.0;
+  let compensation = 0.0;
+  for (const x of values) {
+    const t = total + x;
+    if (Math.abs(total) >= Math.abs(x)) {
+      compensation += total - t + x;
+    } else {
+      compensation += x - t + total;
+    }
+    total = t;
+  }
+  return total + compensation;
 }

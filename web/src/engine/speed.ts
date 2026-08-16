@@ -71,7 +71,7 @@ import {
 } from "../generated/constants";
 import type { Point } from "./geometry";
 import type { RoadPlane } from "./homography";
-import { hypot } from "./numeric";
+import { hypot, sumFloats } from "./numeric";
 
 // m/s -> km/h: 3600 seconds per hour / 1000 metres per kilometre.
 const MPS_TO_KMH = 3.6;
@@ -194,21 +194,15 @@ export class SpeedEstimator {
     // noise is zero-mean, so a stopped vehicle's jitter fits ~0 on both axes
     // instead of rectifying into a phantom positive speed the way cumulative
     // arc length would).
-    let tSum = 0.0;
-    let xSum = 0.0;
-    let ySum = 0.0;
-    for (const s of samples) {
-      tSum += s[0];
-    }
-    for (const s of samples) {
-      xSum += s[1];
-    }
-    for (const s of samples) {
-      ySum += s[2];
-    }
-    const tMean = tSum / n;
-    const xMean = xSum / n;
-    const yMean = ySum / n;
+    //
+    // The three means go through sumFloats because the Python source spells
+    // them with builtin `sum(...)`, which compensates. The numerator and
+    // denominator below do NOT, because the Python source accumulates those
+    // with an explicit `+=` loop, which does not. Mirroring the wrong one of
+    // those two in either direction is the same bug.
+    const tMean = sumFloats(samples.map((s) => s[0])) / n;
+    const xMean = sumFloats(samples.map((s) => s[1])) / n;
+    const yMean = sumFloats(samples.map((s) => s[2])) / n;
 
     let numX = 0.0;
     let numY = 0.0;

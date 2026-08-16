@@ -115,6 +115,38 @@ describe("reprojectionError", () => {
     );
   });
 
+  it("reproduces Python's float64 mean", () => {
+    // Eight surveyed points, each displaced from where the plane says it is by
+    // a different order of magnitude (1m down to 1e-7m), so the per-point
+    // errors span enough range that CPython's compensated `sum` and a plain
+    // running total land on different float64 values. Measured from Python:
+    // the running total gives 0.13888888749998696, `sum` gives the value
+    // pinned here. Without that distinction this test would pass either way.
+    const img: readonly Point[] = [
+      [927.0654028632011, 916.8047424064658],
+      [847.5387606892157, 880.3871691778354],
+      [903.4043334018467, 778.3563749084351],
+      [806.3159786897583, 788.3692233720836],
+      [961.0205814001961, 553.4490863855941],
+      [980.7054220923386, 904.4636447542986],
+      [913.5163414322337, 940.2349990449602],
+      [916.8914760672395, 936.4175928781556],
+    ];
+    const world: readonly Point[] = [
+      [-0.39456701790941673, 25.46358924454293],
+      [-2.992408034389285, 22.452441592454434],
+      [-1.1907587328036624, 15.20455370930025],
+      [-3.3211820048153955, 15.783803056715708],
+      [0.014573397958920148, 6.758548076443353],
+      [0.6022901489032576, 24.90850776878006],
+      [-1.5133664390015866, 29.143059546827455],
+      [-1.3858467432888557, 28.643630499488697],
+    ];
+    const err = plane().reprojectionError(img, world);
+    expect(err.meanM).toBe(0.1388888874999869);
+    expect(err.maxM).toBe(0.999999999999989);
+  });
+
   it("detects a corrupted correspondence", () => {
     // Move one surveyed world point 3m off where the plane says it is: the
     // measured error must rise well past the noise floor above.

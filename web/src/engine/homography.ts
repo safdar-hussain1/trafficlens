@@ -23,7 +23,7 @@
  * added deliberately, with its own parity measurement. */
 
 import type { Point } from "./geometry";
-import { hypot } from "./numeric";
+import { hypot, sumFloats } from "./numeric";
 
 /** An uncalibrated camera reports no speed, ever -- never a pixel-derived
  * guess. Pass this (or plain null -- they are the same value) wherever a
@@ -93,11 +93,10 @@ export class RoadPlane {
       perPointM.push(hypot(wx - worldPt[0], wy - worldPt[1]));
     }
 
-    let sum = 0.0;
-    for (const value of perPointM) {
-      sum += value;
-    }
-    const meanM = perPointM.length > 0 ? sum / perPointM.length : 0.0;
+    // sumFloats, not a running total: the Python source spells this mean with
+    // builtin `sum(...)`, which compensates. `maxM` needs no such care.
+    const meanM =
+      perPointM.length > 0 ? sumFloats(perPointM) / perPointM.length : 0.0;
     const maxM = perPointM.length > 0 ? Math.max(...perPointM) : 0.0;
     return { meanM, maxM, perPointM };
   }

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { Matrix, cholesky, hypot, luSolve, matmul } from "./numeric";
+import { Matrix, cholesky, hypot, luSolve, matmul, sumFloats } from "./numeric";
 
 // A symmetric positive-definite 4x4, the shape of the filter's innovation
 // covariance, and a two-column right-hand side, the shape of its gain solve.
@@ -202,5 +202,50 @@ describe("hypot", () => {
     expect(hypot(3e300, 4e300)).toBe(5e300);
     expect(hypot(5e-324, 0.0)).toBe(5e-324);
     expect(hypot(1e300, 1e-300)).toBe(1e300);
+  });
+});
+
+// -- sumFloats ----------------------------------------------------------------
+
+// [values, sum(values)] measured from CPython 3.12, chosen so that a plain
+// left-to-right running total gives a DIFFERENT float64 on every one -- which
+// is what makes them a guard rather than decoration.
+const CPYTHON_SUM: readonly (readonly [readonly number[], number])[] = [
+  [[0.004121026990720791, -0.1588043462271764, -1.119622652146996e-05, 0.05904334310133245, -16.04792576522008, -413.27586420497323, 1.6654336584406658e-06, -864.1364652107482, -0.05200067904598578], -1293.6079053669155],
+  [[-0.3864744613300907, -0.0005437280364773009, 0.0025927070610279063, -1.323668156438947e-06, 9.282140726431408e-06, 61309.646838885266, 2.8904878306444518e-05, -2429158.8689934965, 52028.060252731244, -14081.261447609653, 0.547440013798483], -2329902.2602980947],
+  [[3.436365562599506e-05, -3.496186366989619e-05, -1291550.4050773086, -8.434545216917616e-06, -0.07925799635988136, 2.7373307065871515, 2.0990120752445947e-06, -0.0008537694941604889, 752955.9443522951], -538591.8035130065],
+  [[43870.059210505875, 0.00018908717829615868, 539242.1635616167, -2.688402163295934e-05, 2.4860596828881583e-05, -68.55120935222325, -3.2775251810425856e-06, -527716.7490814854, 12437.772599861144], 67764.69526493226],
+  [[10.889019722990401, 7.147994255032973e-05, 185.2148509910187, 0.17583488789815457, -1.8159582984649097e-06, 0.00015045562139285738, -105734.07334272462, 11508.655444206122], -94029.13797279698],
+  [[0.0001225807764542557, 0.0007778978992195526, -50657.68740026214, -20721.888986133803, 1298.3661561079518, 1232465.3381556799, -1.463236707796551, -40.598099253647995], 1162342.067489909],
+];
+
+function runningTotal(values: readonly number[]): number {
+  let total = 0.0;
+  for (const v of values) {
+    total += v;
+  }
+  return total;
+}
+
+describe("sumFloats", () => {
+  it("reproduces CPython's builtin sum exactly", () => {
+    for (const [values, want] of CPYTHON_SUM) {
+      expect(sumFloats(values), JSON.stringify(values)).toBe(want);
+    }
+  });
+
+  it("is not a plain running total", () => {
+    // The discriminating half. Every fixture above is one where the naive loop
+    // lands on a different float64, so an implementation that quietly dropped
+    // the compensation term could not pass the assertion above by luck.
+    for (const [values, want] of CPYTHON_SUM) {
+      expect(runningTotal(values)).not.toBe(want);
+    }
+  });
+
+  it("handles the trivial cases", () => {
+    expect(sumFloats([])).toBe(0.0);
+    expect(sumFloats([1.5])).toBe(1.5);
+    expect(sumFloats([0.1, 0.2])).toBe(0.1 + 0.2 + ((0.1 - (0.1 + 0.2)) + 0.2));
   });
 });

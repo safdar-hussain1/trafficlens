@@ -5,8 +5,16 @@
 // drawn values are transcribed below so both suites fit the same data. Several
 // tests additionally pin the exact float64 km/h Python produces, measured from
 // a run of the Python estimator: those are the rehearsal for Task 21's
-// cross-engine speed agreement, and they are what would catch a change in the
-// order the least-squares sums are accumulated.
+// cross-engine speed agreement.
+//
+// Those pins are `toBe`, deliberately. They were `toBeCloseTo(..., 9)` first,
+// and that was a guard in name only: a summation-order change moves these
+// values by ~1e-14 and the tolerance was ~5e-10, so review reversed the
+// accumulation loop and all 21 tests stayed green -- while the shipped code
+// was at that moment carrying exactly such a defect (a plain running total
+// where CPython 3.12's builtin sum() compensates). Exact equality is the whole
+// point of a parity pin; anything looser cannot see the class of bug it exists
+// to catch.
 
 import { describe, expect, it } from "vitest";
 
@@ -115,7 +123,7 @@ describe("estimation accuracy", () => {
     expect(Math.abs((speed as number) - 90.0)).toBeLessThan(0.5);
     // Parity pin: the float64 km/h the Python estimator produces on this exact
     // sequence.
-    expect(speed as number).toBeCloseTo(89.99999999999986, 9);
+    expect(speed as number).toBe(89.99999999999986);
   });
 
   it("computes time of flight exactly", () => {
@@ -165,7 +173,20 @@ describe("outlier rejection", () => {
     // task demands.
     expect(Math.abs((dirtySpeed as number) - (cleanSpeed as number))).toBeLessThan(0.1);
     expect(Math.abs((dirtySpeed as number) - 90.0)).toBeLessThan(0.5);
-    expect(dirtySpeed as number).toBeCloseTo(89.99999999999986, 9);
+  });
+
+  it("matches Python's float64 on the single-outlier run", () => {
+    // Deliberately a separate test from the one above, which asserts that the
+    // estimate RECOVERS. The two claims come apart: a reject-against-last-RAW
+    // policy also recovers here (it loses one extra good frame and still lands
+    // within 0.1 km/h), so the recovery test is the honest must-survive control
+    // for that mutation -- but it lands on a different float64, which only an
+    // exact pin can see. Folding this assertion into the test above would cost
+    // that mutation its control.
+    const fps = 25.0;
+    const dirty = new SpeedEstimator(makePlane(), fps, 2.0, 5);
+    driveWithOutlier(dirty, fps);
+    expect(dirty.speedKmh(3)).toBe(89.99999999999986);
   });
 
   it("recovers after an outlier", () => {
@@ -179,7 +200,7 @@ describe("outlier rejection", () => {
     const speed = est.speedKmh(3);
     expect(speed).not.toBeNull();
     expect(Math.abs((speed as number) - 90.0)).toBeLessThan(0.5);
-    expect(speed as number).toBeCloseTo(89.99999999999974, 9);
+    expect(speed as number).toBe(89.99999999999974);
   });
 
   it("rejects both of two consecutive outliers", () => {
@@ -211,7 +232,7 @@ describe("outlier rejection", () => {
     expect(dirtySpeed).not.toBeNull();
     expect(Math.abs((dirtySpeed as number) - (cleanSpeed as number))).toBeLessThan(0.1);
     expect(Math.abs((dirtySpeed as number) - 90.0)).toBeLessThan(0.5);
-    expect(dirtySpeed as number).toBeCloseTo(89.9999999999999, 9);
+    expect(dirtySpeed as number).toBe(89.9999999999999);
   });
 
   it("measures the outlier threshold in metres", () => {
@@ -288,7 +309,7 @@ describe("min samples boundary", () => {
     const speed = est.speedKmh(5);
     expect(speed).not.toBeNull();
     expect(Math.abs((speed as number) - 90.0)).toBeLessThan(0.5);
-    expect(speed as number).toBeCloseTo(89.99999999999996, 9);
+    expect(speed as number).toBe(89.99999999999996);
   });
 
   it("returns null for an unknown track", () => {
@@ -383,7 +404,7 @@ describe("noise floor", () => {
     const speed = est.speedKmh(4);
     expect(speed).not.toBeNull();
     expect(speed as number).toBeLessThan(1.0);
-    expect(speed as number).toBeCloseTo(0.02062706934059718, 9);
+    expect(speed as number).toBe(0.02062706934059718);
   });
 });
 
@@ -409,7 +430,7 @@ describe("window expiry", () => {
     const speed = est.speedKmh(8);
     expect(speed).not.toBeNull();
     expect(Math.abs((speed as number) - 90.0)).toBeLessThan(0.5);
-    expect(speed as number).toBeCloseTo(89.99999999999989, 9);
+    expect(speed as number).toBe(89.99999999999989);
   });
 });
 
@@ -462,6 +483,6 @@ describe("lifecycle and determinism", () => {
       return speed as number;
     };
     expect(run()).toBe(run());
-    expect(run()).toBeCloseTo(90.00003255540452, 9);
+    expect(run()).toBe(90.00003255540452);
   });
 });
