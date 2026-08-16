@@ -10,9 +10,12 @@ dist/
 .idea/
 .vscode/
 
-# model weights — never committed (the small browser ONNX export is force-added)
+# training/inference weights — never committed. The rule is anchored to the
+# repo root: a bare "models/" matches at any depth and would also ignore
+# web/public/models/, where the small browser ONNX export and its model card
+# have to be tracked to reach the published site.
 *.pt
-models/
+/models/
 
 # sample footage — fetched by `trafficlens fetch-samples`
 data/samples/*

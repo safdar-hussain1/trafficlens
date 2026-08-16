@@ -23,11 +23,15 @@ executed. That is also why the source is held to a deliberately narrow contract
 docstring, and nothing else. Anything that needs computing belongs at its point
 of use. The parser refuses the whole file rather than skipping what it does not
 understand: a silently dropped constant would still regenerate byte-identically,
-which is exactly the failure the sync test exists to catch.
+which is exactly the failure the sync test exists to catch. That claim is held
+up by two independent mechanisms -- every rule below rejects rather than skips,
+and ``render`` asserts that the number of declarations it emitted equals the
+number of constants the parser accepted.
 
-Comments are carried across verbatim, and constants keep their source order, so
-the TypeScript reader gets the same reasoning -- and the same file shape -- the
-Python reader gets, and the output is a pure function of the input.
+Comments are carried across verbatim -- both the block above a constant and any
+comment on its own line -- and constants keep their source order, so the
+TypeScript reader gets the same reasoning, and the same file shape, the Python
+reader gets, and the output is a pure function of the input.
 """
 
 import argparse
@@ -36,6 +40,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,22 +68,54 @@ def _is_docstring(node: ast.stmt) -> bool:
     )
 
 
-def parse_constants(source: str, origin: str) -> list[tuple[str, object, int, int]]:
-    """Every constant in ``source`` as ``(name, value, first_line, last_line)``.
+class Constant(NamedTuple):
+    """One exported constant, and the source lines it occupies."""
+
+    name: str
+    value: object
+    first_line: int
+    last_line: int
+    #: A comment on the assignment's own line, kept verbatim including its "#".
+    trailing_comment: str
+
+
+def parse_constants(source: str, origin: str) -> list[Constant]:
+    """Every constant in ``source``.
 
     Raises ``SourceContractError`` listing every offending line at once, so a
     source that has drifted is fixed in one pass rather than one error per run.
+    Each message names the actual rule that was broken, because the next person
+    to hit one will be trying to add a constant, not debug this script.
     """
+    lines = source.splitlines()
     module = ast.parse(source)
-    constants: list[tuple[str, object, int, int]] = []
+    constants: list[Constant] = []
     problems: list[str] = []
 
     for index, node in enumerate(module.body):
         if index == 0 and _is_docstring(node):
             continue
-        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+        if isinstance(node, ast.AnnAssign):
+            # Reported separately from the multi-target case: an annotation is
+            # not a second target, and "only single-target assignments are
+            # allowed" would send the reader looking for a target that is not
+            # there.
+            annotated = getattr(node.target, "id", "the constant")
             problems.append(
-                f"{origin}:{node.lineno}: only single-target assignments are allowed"
+                f"{origin}:{node.lineno}: {annotated} has a type annotation, "
+                f"which is not supported; write NAME = <literal> instead"
+            )
+            continue
+        if not isinstance(node, ast.Assign):
+            problems.append(
+                f"{origin}:{node.lineno}: only assignments are allowed here, "
+                f"found {type(node).__name__}"
+            )
+            continue
+        if len(node.targets) != 1:
+            problems.append(
+                f"{origin}:{node.lineno}: chained assignment is not supported; "
+                f"give each constant its own statement"
             )
             continue
         (target,) = node.targets
@@ -89,10 +126,21 @@ def parse_constants(source: str, origin: str) -> list[tuple[str, object, int, in
         if name != name.upper() or not name[0].isalpha():
             problems.append(f"{origin}:{node.lineno}: {name} is not UPPER_CASE")
             continue
+        if _is_negated_literal(node.value):
+            # Deliberately unsupported rather than accidentally: a negated
+            # literal is an ast.UnaryOp, and widening the parser to unwrap one
+            # is the first step towards evaluating expressions. Named
+            # explicitly because to a human "-1.5" plainly IS a float literal.
+            problems.append(
+                f"{origin}:{node.lineno}: {name} is a negated literal, which is "
+                f"an expression rather than a literal and is not supported; "
+                f"move the sign to the point of use"
+            )
+            continue
         if not isinstance(node.value, ast.Constant):
-            # Covers computed expressions, tuples, f-strings, negated literals
-            # and name references alike. Widening this is the wrong fix: move
-            # the computation to its point of use instead.
+            # Covers computed expressions, tuples, f-strings and name
+            # references alike. Widening this is the wrong fix: move the
+            # computation to its point of use instead.
             problems.append(
                 f"{origin}:{node.lineno}: {name} is not a plain literal "
                 f"(int, float, str or bool)"
@@ -111,11 +159,40 @@ def parse_constants(source: str, origin: str) -> list[tuple[str, object, int, in
             # does not compile.
             problems.append(f"{origin}:{node.lineno}: {name} is not finite")
             continue
-        constants.append((name, value, node.lineno, node.end_lineno or node.lineno))
+
+        first_line = node.lineno
+        last_line = node.end_lineno or first_line
+        if node.col_offset != 0:
+            # A second statement on a line already claimed by another one. The
+            # renderer keys constants by their starting line, so this would
+            # silently drop whichever lost the collision -- the hand-picked
+            # subset the whole exporter exists to make impossible.
+            problems.append(
+                f"{origin}:{first_line}: {name} does not start its own line; "
+                f"put one constant on each line"
+            )
+            continue
+        trailing = lines[last_line - 1][node.end_col_offset :].strip()
+        if trailing and not trailing.startswith("#"):
+            problems.append(
+                f"{origin}:{last_line}: {name} shares its line with {trailing!r}; "
+                f"put one constant on each line"
+            )
+            continue
+
+        constants.append(Constant(name, value, first_line, last_line, trailing))
 
     if problems:
         raise SourceContractError("\n".join(problems))
     return constants
+
+
+def _is_negated_literal(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, (ast.USub, ast.UAdd))
+        and isinstance(node.operand, ast.Constant)
+    )
 
 
 def to_typescript_literal(value: object) -> str:
@@ -145,11 +222,11 @@ def render(source: str, origin: str) -> str:
     output is deterministic without needing a sort.
     """
     constants = parse_constants(source, origin)
-    starts = {lineno: (name, value) for name, value, lineno, _ in constants}
+    starts = {constant.first_line: constant for constant in constants}
     consumed = {
         line
-        for _, _, first, last in constants
-        for line in range(first + 1, last + 1)
+        for constant in constants
+        for line in range(constant.first_line + 1, constant.last_line + 1)
     }
 
     module = ast.parse(source)
@@ -158,12 +235,20 @@ def render(source: str, origin: str) -> str:
         consumed.update(range(docstring.lineno, (docstring.end_lineno or 0) + 1))
 
     out: list[str] = [HEADER.rstrip("\n")]
+    emitted = 0
     for number, line in enumerate(source.splitlines(), start=1):
         if number in consumed:
             continue
         if number in starts:
-            name, value = starts[number]
-            out.append(f"export const {name} = {to_typescript_literal(value)};")
+            constant = starts[number]
+            declaration = (
+                f"export const {constant.name} = "
+                f"{to_typescript_literal(constant.value)};"
+            )
+            if constant.trailing_comment:
+                declaration += "  " + constant.trailing_comment.replace("#", "//", 1)
+            out.append(declaration)
+            emitted += 1
         elif not line.strip():
             out.append("")
         elif line.lstrip().startswith("#"):
@@ -174,6 +259,18 @@ def render(source: str, origin: str) -> str:
             # parse_constants() accepted the source, so nothing else can be
             # here -- but never emit a line silently misread as something else.
             raise SourceContractError(f"{origin}:{number}: unexpected line {line!r}")
+
+    if emitted != len(constants):
+        # Structural backstop, independent of every rule above: if the parser
+        # accepted N constants, exactly N declarations must reach the output.
+        # Anything that collapses two constants onto one emission -- a keying
+        # collision, a rule added later that forgets this invariant -- fails
+        # here rather than shipping a silent subset that regenerates
+        # byte-identically and so passes the sync test.
+        raise SourceContractError(
+            f"{origin}: emitted {emitted} declarations for {len(constants)} "
+            f"parsed constants; the export would be a silent subset"
+        )
 
     while out and out[-1] == "":
         out.pop()
