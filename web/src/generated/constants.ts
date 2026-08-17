@@ -172,6 +172,33 @@ export const TRACK_LOW_CONF = 0.1;
 // Kalman prediction supplying the motion, a genuine continuation overlaps
 // its predicted box almost entirely, so demanding 80% overlap rejects
 // lane-neighbour confusions that a looser floor would let through.
+//
+// MEASUREMENT CORRECTS THAT RATIONALE, and does not confirm it either.
+// The association-floor ablation in reports/robustness.json varies this
+// floor from 0.8 to BASELINE_GREEDY_IOU_THRESH's 0.3 with everything else
+// identical -- same degraded detection stream, same counting rule, same
+// track lifecycle, same match window -- and measures, in crossing F1:
+//   - undegraded, at every one of the four protocols' identity levels:
+//     the two floors TIE exactly. The premise above is not contradicted
+//     where the boxes are clean.
+//   - frame rate 5 fps: the loose floor gains 0.6020, the largest gain
+//     anywhere in the sweep. 30% dropped frames: +0.2791. Box jitter at
+//     sigma = 4 px: +0.3652. So the moment the input degrades, "a genuine
+//     continuation overlaps its predicted box almost entirely" is false,
+//     and this floor is what turns that into lost crossings.
+//   - detection dropout: the largest gain is 0.0000, and at p >= 0.20 the
+//     loose floor scores 0.0252 WORSE. Whatever the engine loses under
+//     dropout is a separate fault and is not diagnosed by this ablation.
+// The honest summary is that nothing in this sweep measures 0.8 as better
+// than 0.3 anywhere except under detection dropout: it ties clean, loses on
+// three of the four degradation families, and wins on one, by 0.0252. The
+// tie undegraded is not an argument for keeping it; the dropout cost is the
+// only argument there is.
+//
+// The constant is NOT changed here, deliberately. Choosing a new floor is
+// separate work needing its own baseline, and this sweep -- one clip, 17
+// labelled crossings, two floors -- is not the evidence for a value. The
+// weakness ships documented rather than half-fixed.
 export const TRACK_MATCH_IOU = 0.8;
 
 // Number of consecutive frames a confirmed track may go without a matched
