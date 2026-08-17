@@ -1,0 +1,2574 @@
+{
+  "schema": 1,
+  "seed": 20260815,
+  "protocol": "data/groundtruth/PROTOCOL.md",
+  "ground_truth": "motorway_inbound_gt.json",
+  "baseline_reports": [
+    "counting_accuracy.json",
+    "robustness.json"
+  ],
+  "clip": "motorway-a40.webm",
+  "fps": 30.0,
+  "frames": 735,
+  "window": {
+    "start_frame": 0,
+    "end_frame": 734
+  },
+  "gate": {
+    "name": "inbound",
+    "start": [
+      76.8,
+      576.0
+    ],
+    "end": [
+      588.8000000000001,
+      576.0
+    ],
+    "label_positive": "away",
+    "label_negative": "toward"
+  },
+  "detector": {
+    "model": "yolo11s.pt",
+    "confidence": 0.25,
+    "imgsz": 640,
+    "classes": [
+      "car",
+      "truck",
+      "bus",
+      "motorcycle"
+    ]
+  },
+  "labels": {
+    "total": 17,
+    "certain": 7,
+    "probable": 10
+  },
+  "trackers_compared": [
+    "engine",
+    "centroid",
+    "greedy-iou"
+  ],
+  "counting_rule": "gate",
+  "counting_rule_note": "Held fixed at the gate rule for every figure, so a difference between two rows is attributable to the TRACKER. The rule comparison is a different measurement and lives in counting_accuracy.json.",
+  "base_match_window": {
+    "frames_before": 1,
+    "frames_after": 4,
+    "reason": "Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+  },
+  "gate_region": {
+    "half_width_px": 20.0,
+    "definition": "A predicted identity REACHES THE GATE when either of two things is true of the track the tracker actually returned: its anchor was observed inside the closed band of half-width 20 px around the gate SEGMENT (the same band geometry trafficlens.bench.baselines uses, so the foot of perpendicular must lie between the gate's endpoints -- a vehicle on another carriageway crossing the gate's infinite line past its end does not count), or its swept path crossed the bounded gate segment and the gate rule emitted a crossing for it. The second clause is not decoration: under decimation a vehicle can move further than the band's whole width between samples, and a containment test alone would report that it never reached the gate, collapsing the ratio for reasons that have nothing to do with identity.",
+    "source_of_the_half_width": "BASELINE_BAND_PX, the band half-width the counting benchmark's band rule already uses, so the region is a value with a stated provenance elsewhere in the project rather than one chosen here to make a ratio come out."
+  },
+  "metric_definitions": {
+    "fragmentation_ratio": {
+      "definition": "Distinct predicted track IDs that reach the gate, divided by the labelled vehicle count. 1.0 is one predicted identity per labelled vehicle; 2.0 is two, which is what a track split at the gate produces.",
+      "numerator": "distinct predicted track IDs reaching the gate",
+      "denominator": 17,
+      "denominator_definition": "ALL labelled crossings, certain and probable alike -- not only the matched ones. Conditioning the denominator on the match would make this ratio move whenever the COUNTING RULE's success moved, and the whole point of holding the gate rule fixed is that a difference here is attributable to the tracker.",
+      "edge_cases": [
+        "A track that reaches the gate twice counts ONCE: the numerator is a count of distinct identities, not of visits. On this clip GateCounter agrees -- it fires once per identity -- so the two readings do not diverge here.",
+        "An identity matched to no label still counts in the numerator. The numerator counts predicted identities at the gate and the denominator counts labelled vehicles; neither is conditioned on the pairing. A ratio above 1.0 therefore does not distinguish a fragmented track from an unlabelled vehicle in the region, and with no identity labels for this clip nothing here can.",
+        "A ratio BELOW 1.0 is an error too, not a good score: it means identities that never reached the gate at all, which is what total association collapse looks like. That is why identity_deviation, not the ratio, is what the comparison against crossing F1 is made on."
+      ],
+      "not_a_claim": "This is not an ID-switch count and not a proxy for one. It counts identities at the gate; it cannot say which vehicle an identity belonged to, because that would need the frame-by-frame identity labels this clip does not have."
+    },
+    "crossing_id_ratio": {
+      "definition": "Distinct predicted track IDs that EMITTED a gate crossing, divided by the labelled vehicle count. Published as the measurement that shows why it cannot carry the fragmentation claim on its own.",
+      "numerator": "distinct predicted track IDs emitting a crossing",
+      "denominator": 17,
+      "why_it_cannot_measure_fragmentation": "For a trajectory that crosses the gate ONCE, GateCounter fires once per identity on a side change, so only one half of a split track can change side: the first half emits the crossing while the second starts with no previous anchor to cross from, and a split moves this count DOWN or leaves it alone. Every labelled crossing on this clip is that single-traversal case, and a synthetic clip whose every track is deliberately split in half reads 2.0 on fragmentation_ratio and exactly its undegraded value here.",
+      "not_a_universal_impossibility": "The clause above is about single-traversal trajectories and is NOT a general claim about splitting. A vehicle that traverses the gate TWICE, split between the traversals, doubles this count from 1 to 2: GateCounter latches once per track ID, so the second identity is free to fire. tests/test_bench_tracking.py pins both cases -- the single-traversal split that cannot double and the two-traversal split that does -- so the narrow claim cannot be read as the general one.",
+      "not_an_independent_measurement": "In every record published here this numerator EQUALS n_predicted, because each identity emits at most one crossing and identities are never recycled. So crossing_id_ratio is exactly n_predicted / 17 -- the count ratio the counting benchmark already publishes as signed_bias -- and not a second, independent view of it. Its value here is the CONTRAST with fragmentation_ratio, not the number itself."
+    },
+    "identity_deviation": {
+      "definition": "max(fragmentation_ratio, 1 / fragmentation_ratio): the MULTIPLICATIVE distance from one predicted identity per labelled vehicle, floor 1.0, read as 'N times away from one'. null where the ratio is zero -- an infinite fold, because not one identity reached the gate -- and null ranks as the worst possible value.",
+      "why_a_fold_and_not_abs": "The quantity is a RATIO, so its natural distance from 1 is multiplicative: halving and doubling are the same size of error, and an honest distance must satisfy d(r) = d(1/r). abs(r - 1) does not. It is bounded by 1.0 below -- a ratio of 0 scores exactly 1.0 -- and unbounded above, so under it a tracker that puts NO identity at the gate can never rank worse than one that fragments to 2.0, and total association collapse is systematically flattered. This sweep reaches both regimes, so the asymmetry is not academic. The argument is a priori and independent of which answer the measure produces, which is what makes the change a correction rather than a retune; what it moved is published in questions.agreement_with_crossing_f1.",
+      "equivalent_to": "abs(log(fragmentation_ratio)), monotonically: max(r, 1/r) = exp(abs(log r)). The two rank identically; the fold form is published because '2.83x away from one' is legible and a log is not."
+    },
+    "class_consistency": {
+      "definition": "Among MATCHED crossings only: how many carry the class the labeller recorded, and which confusions the rest are. Matching is class-blind by ruling, so a detector class error surfaces here once, as a confusion, instead of twice as a miss plus a false alarm -- which is why this is a separate axis from precision, recall and F1 and must never be folded into them.",
+      "denominator": "matched pairs at this level, per tracker",
+      "matched_by": "trafficlens.bench.scoring.match_crossings: one-to-one, greedy nearest-frame-first, class-blind, direction-aware, over the asymmetric window published beside every level. The same matcher and the same pairing counting_accuracy.json publishes, so the clean figures here are directly comparable with it."
+    },
+    "gate_region": {
+      "definition": "The region this ratio's numerator counts identities in. Stated in full, once, in the report's own top-level gate_region block -- see stated_in.",
+      "stated_in": "gate_region.definition",
+      "half_width_px": 20.0,
+      "swept_in": "gate_region_sweep"
+    }
+  },
+  "clean": {
+    "level_label": "undegraded",
+    "match_window": {
+      "frames_before": 1,
+      "frames_after": 4,
+      "reason": "Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+    },
+    "trackers": {
+      "engine": {
+        "gate_region_track_ids": 19,
+        "crossing_track_ids": 18,
+        "n_predicted": 18,
+        "true_positives": 16,
+        "n_ground_truth": 17,
+        "fragmentation_ratio": 1.1176470588235294,
+        "identity_deviation": 1.1176470588235294,
+        "crossing_id_ratio": 1.0588235294117647,
+        "class_consistency": {
+          "matched": 16,
+          "same_class": 14,
+          "rate": 0.875,
+          "confusions": {
+            "truck -> bus": 1,
+            "truck -> car": 1
+          }
+        }
+      },
+      "centroid": {
+        "gate_region_track_ids": 18,
+        "crossing_track_ids": 17,
+        "n_predicted": 17,
+        "true_positives": 16,
+        "n_ground_truth": 17,
+        "fragmentation_ratio": 1.0588235294117647,
+        "identity_deviation": 1.0588235294117647,
+        "crossing_id_ratio": 1.0,
+        "class_consistency": {
+          "matched": 16,
+          "same_class": 15,
+          "rate": 0.9375,
+          "confusions": {
+            "truck -> car": 1
+          }
+        }
+      },
+      "greedy-iou": {
+        "gate_region_track_ids": 18,
+        "crossing_track_ids": 17,
+        "n_predicted": 17,
+        "true_positives": 16,
+        "n_ground_truth": 17,
+        "fragmentation_ratio": 1.0588235294117647,
+        "identity_deviation": 1.0588235294117647,
+        "crossing_id_ratio": 1.0,
+        "class_consistency": {
+          "matched": 16,
+          "same_class": 15,
+          "rate": 0.9375,
+          "confusions": {
+            "truck -> car": 1
+          }
+        }
+      }
+    }
+  },
+  "reduction": {
+    "claim": "Every protocol's identity level -- 30 fps, 0 % dropped, p = 0, sigma = 0 -- reproduces the clean block EXACTLY, field by field, for all three trackers, scored with the undegraded window. The identity runs the general code path: there is no short-circuit branch, so the reduction proves the transform rather than proving a branch. The clean block itself reduces one step further -- its crossing counts and class consistency are the figures counting_accuracy.json publishes for the same tracker with the same rule -- which is what says this report read the same cached detection stream as the ones beside it.",
+    "identity_levels": {
+      "frame_rate": 30.0,
+      "dropped_frames": 0.0,
+      "detection_dropout": 0.0,
+      "box_jitter": 0.0
+    }
+  },
+  "protocols": {
+    "frame_rate": {
+      "knob": "target_fps",
+      "levels": [
+        30.0,
+        25.0,
+        15.0,
+        10.0,
+        5.0,
+        2.0
+      ],
+      "seeded": false,
+      "entries": [
+        {
+          "protocol": "frame_rate",
+          "level": 30.0,
+          "level_label": "30 fps",
+          "seed": null,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 30.0,
+            "nominal_stride": 1.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "frame_rate",
+          "level": 25.0,
+          "level_label": "25 fps",
+          "seed": null,
+          "frames_kept": 613,
+          "frames_total": 735,
+          "detections_kept": 7423,
+          "detections_total": 8901,
+          "max_gap_frames": 2,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 25.0,
+            "nominal_stride": 1.2
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 5,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 2 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 1,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 23,
+              "crossing_track_ids": 16,
+              "n_predicted": 16,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.3529411764705883,
+              "identity_deviation": 1.3529411764705883,
+              "crossing_id_ratio": 0.9411764705882353,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "frame_rate",
+          "level": 15.0,
+          "level_label": "15 fps",
+          "seed": null,
+          "frames_kept": 368,
+          "frames_total": 735,
+          "detections_kept": 4459,
+          "detections_total": 8901,
+          "max_gap_frames": 2,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 15.0,
+            "nominal_stride": 2.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 5,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 2 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 1,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 16,
+              "crossing_track_ids": 13,
+              "n_predicted": 13,
+              "true_positives": 12,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.9411764705882353,
+              "identity_deviation": 1.0625,
+              "crossing_id_ratio": 0.7647058823529411,
+              "class_consistency": {
+                "matched": 12,
+                "same_class": 11,
+                "rate": 0.9166666666666666,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "frame_rate",
+          "level": 10.0,
+          "level_label": "10 fps",
+          "seed": null,
+          "frames_kept": 245,
+          "frames_total": 735,
+          "detections_kept": 2968,
+          "detections_total": 8901,
+          "max_gap_frames": 3,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 10.0,
+            "nominal_stride": 3.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 6,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 3 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 2,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 9,
+              "crossing_track_ids": 9,
+              "n_predicted": 9,
+              "true_positives": 9,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.5294117647058824,
+              "identity_deviation": 1.8888888888888888,
+              "crossing_id_ratio": 0.5294117647058824,
+              "class_consistency": {
+                "matched": 9,
+                "same_class": 8,
+                "rate": 0.8888888888888888,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "frame_rate",
+          "level": 5.0,
+          "level_label": "5 fps",
+          "seed": null,
+          "frames_kept": 123,
+          "frames_total": 735,
+          "detections_kept": 1501,
+          "detections_total": 8901,
+          "max_gap_frames": 6,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 5.0,
+            "nominal_stride": 6.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 9,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 6 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 5,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 2,
+              "crossing_track_ids": 2,
+              "n_predicted": 2,
+              "true_positives": 2,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.11764705882352941,
+              "identity_deviation": 8.5,
+              "crossing_id_ratio": 0.11764705882352941,
+              "class_consistency": {
+                "matched": 2,
+                "same_class": 2,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 16,
+              "n_predicted": 16,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 0.9411764705882353,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 17,
+              "crossing_track_ids": 14,
+              "n_predicted": 14,
+              "true_positives": 14,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0,
+              "identity_deviation": 1.0,
+              "crossing_id_ratio": 0.8235294117647058,
+              "class_consistency": {
+                "matched": 14,
+                "same_class": 13,
+                "rate": 0.9285714285714286,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "frame_rate",
+          "level": 2.0,
+          "level_label": "2 fps",
+          "seed": null,
+          "frames_kept": 49,
+          "frames_total": 735,
+          "detections_kept": 588,
+          "detections_total": 8901,
+          "max_gap_frames": 15,
+          "detail": {
+            "source_fps": 30.0,
+            "target_fps": 2.0,
+            "nominal_stride": 15.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 18,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 15 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 14,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 0,
+              "crossing_track_ids": 0,
+              "n_predicted": 0,
+              "true_positives": 0,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.0,
+              "identity_deviation": null,
+              "crossing_id_ratio": 0.0,
+              "class_consistency": {
+                "matched": 0,
+                "same_class": 0,
+                "rate": 0.0,
+                "confusions": {}
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 8,
+              "crossing_track_ids": 5,
+              "n_predicted": 5,
+              "true_positives": 5,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.47058823529411764,
+              "identity_deviation": 2.125,
+              "crossing_id_ratio": 0.29411764705882354,
+              "class_consistency": {
+                "matched": 5,
+                "same_class": 5,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 3,
+              "crossing_track_ids": 3,
+              "n_predicted": 3,
+              "true_positives": 3,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.17647058823529413,
+              "identity_deviation": 5.666666666666666,
+              "crossing_id_ratio": 0.17647058823529413,
+              "class_consistency": {
+                "matched": 3,
+                "same_class": 3,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dropped_frames": {
+      "knob": "fraction_dropped",
+      "levels": [
+        0.0,
+        0.05,
+        0.1,
+        0.2,
+        0.3
+      ],
+      "seeded": true,
+      "entries": [
+        {
+          "protocol": "dropped_frames",
+          "level": 0.0,
+          "level_label": "0% dropped",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "fraction_requested": 0.0,
+            "frames_dropped": 0,
+            "fraction_realised": 0.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "dropped_frames",
+          "level": 0.05,
+          "level_label": "5% dropped",
+          "seed": 20260815,
+          "frames_kept": 698,
+          "frames_total": 735,
+          "detections_kept": 8452,
+          "detections_total": 8901,
+          "max_gap_frames": 3,
+          "detail": {
+            "fraction_requested": 0.05,
+            "frames_dropped": 37,
+            "fraction_realised": 0.050340136054421766
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 6,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 3 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 2,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 16,
+              "n_predicted": 16,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 0.9411764705882353,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "dropped_frames",
+          "level": 0.1,
+          "level_label": "10% dropped",
+          "seed": 20260815,
+          "frames_kept": 661,
+          "frames_total": 735,
+          "detections_kept": 7996,
+          "detections_total": 8901,
+          "max_gap_frames": 3,
+          "detail": {
+            "fraction_requested": 0.1,
+            "frames_dropped": 74,
+            "fraction_realised": 0.10068027210884353
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 6,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 3 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 2,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 24,
+              "crossing_track_ids": 16,
+              "n_predicted": 16,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.411764705882353,
+              "identity_deviation": 1.411764705882353,
+              "crossing_id_ratio": 0.9411764705882353,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "dropped_frames",
+          "level": 0.2,
+          "level_label": "20% dropped",
+          "seed": 20260815,
+          "frames_kept": 588,
+          "frames_total": 735,
+          "detections_kept": 7114,
+          "detections_total": 8901,
+          "max_gap_frames": 5,
+          "detail": {
+            "fraction_requested": 0.2,
+            "frames_dropped": 147,
+            "fraction_realised": 0.2
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 8,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 5 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 4,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 27,
+              "crossing_track_ids": 15,
+              "n_predicted": 15,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.588235294117647,
+              "identity_deviation": 1.588235294117647,
+              "crossing_id_ratio": 0.8823529411764706,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 16,
+                "rate": 0.9411764705882353,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "dropped_frames",
+          "level": 0.3,
+          "level_label": "30% dropped",
+          "seed": 20260815,
+          "frames_kept": 515,
+          "frames_total": 735,
+          "detections_kept": 6245,
+          "detections_total": 8901,
+          "max_gap_frames": 6,
+          "detail": {
+            "fraction_requested": 0.3,
+            "frames_dropped": 220,
+            "fraction_realised": 0.29931972789115646
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 9,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 6 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 5,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 39,
+              "crossing_track_ids": 9,
+              "n_predicted": 9,
+              "true_positives": 9,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 2.2941176470588234,
+              "identity_deviation": 2.2941176470588234,
+              "crossing_id_ratio": 0.5294117647058824,
+              "class_consistency": {
+                "matched": 9,
+                "same_class": 8,
+                "rate": 0.8888888888888888,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 14,
+                "rate": 0.8235294117647058,
+                "confusions": {
+                  "car -> truck": 1,
+                  "truck -> car": 2
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 17,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 17,
+                "same_class": 14,
+                "rate": 0.8235294117647058,
+                "confusions": {
+                  "car -> truck": 1,
+                  "truck -> car": 2
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "detection_dropout": {
+      "knob": "dropout_probability",
+      "levels": [
+        0.0,
+        0.05,
+        0.1,
+        0.2,
+        0.3
+      ],
+      "seeded": true,
+      "entries": [
+        {
+          "protocol": "detection_dropout",
+          "level": 0.0,
+          "level_label": "p=0.00",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "probability_requested": 0.0,
+            "detections_dropped": 0,
+            "fraction_realised": 0.0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "detection_dropout",
+          "level": 0.05,
+          "level_label": "p=0.05",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8452,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "probability_requested": 0.05,
+            "detections_dropped": 449,
+            "fraction_realised": 0.05044377036288058
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "detection_dropout",
+          "level": 0.1,
+          "level_label": "p=0.10",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8012,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "probability_requested": 0.1,
+            "detections_dropped": 889,
+            "fraction_realised": 0.09987641837995731
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "detection_dropout",
+          "level": 0.2,
+          "level_label": "p=0.20",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 7124,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "probability_requested": 0.2,
+            "detections_dropped": 1777,
+            "fraction_realised": 0.19964048983260307
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "detection_dropout",
+          "level": 0.3,
+          "level_label": "p=0.30",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 6243,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "probability_requested": 0.3,
+            "detections_dropped": 2658,
+            "fraction_realised": 0.29861813279406807
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "box_jitter": {
+      "knob": "corner_sigma_px",
+      "levels": [
+        0.0,
+        1.0,
+        2.0,
+        4.0,
+        8.0
+      ],
+      "seeded": true,
+      "entries": [
+        {
+          "protocol": "box_jitter",
+          "level": 0.0,
+          "level_label": "sigma=0 px",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "sigma_px": 0.0,
+            "noise": "independent Gaussian per corner coordinate",
+            "boxes_reordered": 0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 19,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1176470588235294,
+              "identity_deviation": 1.1176470588235294,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 14,
+                "rate": 0.875,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 16,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 16,
+                "same_class": 15,
+                "rate": 0.9375,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "box_jitter",
+          "level": 1.0,
+          "level_label": "sigma=1 px",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "sigma_px": 1.0,
+            "noise": "independent Gaussian per corner coordinate",
+            "boxes_reordered": 0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 20,
+              "crossing_track_ids": 18,
+              "n_predicted": 18,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1764705882352942,
+              "identity_deviation": 1.1764705882352942,
+              "crossing_id_ratio": 1.0588235294117647,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 13,
+                "rate": 0.8666666666666667,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "box_jitter",
+          "level": 2.0,
+          "level_label": "sigma=2 px",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "sigma_px": 2.0,
+            "noise": "independent Gaussian per corner coordinate",
+            "boxes_reordered": 0
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 49,
+              "crossing_track_ids": 11,
+              "n_predicted": 11,
+              "true_positives": 9,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 2.8823529411764706,
+              "identity_deviation": 2.8823529411764706,
+              "crossing_id_ratio": 0.6470588235294118,
+              "class_consistency": {
+                "matched": 9,
+                "same_class": 7,
+                "rate": 0.7777777777777778,
+                "confusions": {
+                  "truck -> bus": 1,
+                  "truck -> car": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 15,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 15,
+                "same_class": 14,
+                "rate": 0.9333333333333333,
+                "confusions": {
+                  "truck -> car": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "protocol": "box_jitter",
+          "level": 4.0,
+          "level_label": "sigma=4 px",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "sigma_px": 4.0,
+            "noise": "independent Gaussian per corner coordinate",
+            "boxes_reordered": 1
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 20,
+              "crossing_track_ids": 3,
+              "n_predicted": 3,
+              "true_positives": 2,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.1764705882352942,
+              "identity_deviation": 1.1764705882352942,
+              "crossing_id_ratio": 0.17647058823529413,
+              "class_consistency": {
+                "matched": 2,
+                "same_class": 1,
+                "rate": 0.5,
+                "confusions": {
+                  "car -> truck": 1
+                }
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 11,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 11,
+                "same_class": 11,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 11,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 11,
+                "same_class": 11,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            }
+          }
+        },
+        {
+          "protocol": "box_jitter",
+          "level": 8.0,
+          "level_label": "sigma=8 px",
+          "seed": 20260815,
+          "frames_kept": 735,
+          "frames_total": 735,
+          "detections_kept": 8901,
+          "detections_total": 8901,
+          "max_gap_frames": 1,
+          "detail": {
+            "sigma_px": 8.0,
+            "noise": "independent Gaussian per corner coordinate",
+            "boxes_reordered": 161
+          },
+          "match_window": {
+            "frames_before": 1,
+            "frames_after": 4,
+            "reason": "Widened on the late side only, by a realised maximum inter-sample gap of 1 original frames. A method that sees this sampling grid cannot report a crossing before the next retained frame, so the late side absorbs the quantisation; the gap is computed from the retained pattern before any scoring, never fitted to an engine's output, and the early side is untouched. Underneath it the undegraded window is unchanged: Labels are systematically early: the frame is the first slit-scan row of the vehicle's blob, and a vehicle's shadow reaches the gate band 1-4 frames before its tyres do, so LABELLING_RECORD.md states the label frame is accurate to +0/-4 frames. The engine fires on the box's bottom-centre anchor -- the tyres -- and so lands 0-4 frames late against the label. The asymmetry encodes that known label bias; it is not a widening chosen to absorb an engine offset."
+          },
+          "window_widened_by_frames": 0,
+          "trackers": {
+            "engine": {
+              "gate_region_track_ids": 6,
+              "crossing_track_ids": 2,
+              "n_predicted": 2,
+              "true_positives": 1,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 0.35294117647058826,
+              "identity_deviation": 2.833333333333333,
+              "crossing_id_ratio": 0.11764705882352941,
+              "class_consistency": {
+                "matched": 1,
+                "same_class": 1,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            },
+            "centroid": {
+              "gate_region_track_ids": 18,
+              "crossing_track_ids": 17,
+              "n_predicted": 17,
+              "true_positives": 4,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.0588235294117647,
+              "identity_deviation": 1.0588235294117647,
+              "crossing_id_ratio": 1.0,
+              "class_consistency": {
+                "matched": 4,
+                "same_class": 3,
+                "rate": 0.75,
+                "confusions": {
+                  "car -> truck": 1
+                }
+              }
+            },
+            "greedy-iou": {
+              "gate_region_track_ids": 30,
+              "crossing_track_ids": 19,
+              "n_predicted": 19,
+              "true_positives": 5,
+              "n_ground_truth": 17,
+              "fragmentation_ratio": 1.7647058823529411,
+              "identity_deviation": 1.7647058823529411,
+              "crossing_id_ratio": 1.1176470588235294,
+              "class_consistency": {
+                "matched": 5,
+                "same_class": 5,
+                "rate": 1.0,
+                "confusions": {}
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "gate_region_sweep": {
+    "why": "The gate region's half-width is the fragmentation metric's one free parameter, and the agreement question's ANSWER changes branch across this range. The sweep is published so that dependence is visible rather than hidden under a single number. The published width is BASELINE_BAND_PX and is NOT selected from this table: choosing the width that produces the friendlier verdict would be tuning the instrument to the answer.",
+    "cost": "Free. Each tracker is run once per level and its closest approach to the gate recorded per identity, so every width scores the identical association -- the sweep varies the knob and nothing else. Band containment at half-width h is exactly closest_approach_px <= h.",
+    "published_half_width_px": 20.0,
+    "half_widths_px": [
+      5.0,
+      10.0,
+      15.0,
+      20.0,
+      30.0,
+      40.0,
+      60.0
+    ],
+    "by_half_width": [
+      {
+        "half_width_px": 5.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.0588235294117647,
+            "centroid": 1.0,
+            "greedy-iou": 1.0
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 1.0588235294117647,
+        "widest_spread_level": "box_jitter@sigma=8 px",
+        "levels_where_trackers_differ": 19,
+        "levels_where_the_engine_is_furthest_and_they_differ": 17,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 1.1176470588235294,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 17,
+          "levels_where_the_two_disagree": [
+            "dropped_frames@20% dropped",
+            "frame_rate@25 fps"
+          ],
+          "agrees_everywhere": false
+        }
+      },
+      {
+        "half_width_px": 10.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.0588235294117647,
+            "centroid": 1.0,
+            "greedy-iou": 1.0
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 1.2352941176470589,
+        "widest_spread_level": "box_jitter@sigma=8 px",
+        "levels_where_trackers_differ": 19,
+        "levels_where_the_engine_is_furthest_and_they_differ": 19,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 1.8235294117647058,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 19,
+          "levels_where_the_two_disagree": [],
+          "agrees_everywhere": true
+        }
+      },
+      {
+        "half_width_px": 15.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.1176470588235294,
+            "centroid": 1.0588235294117647,
+            "greedy-iou": 1.0588235294117647
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 1.2941176470588234,
+        "widest_spread_level": "box_jitter@sigma=8 px",
+        "levels_where_trackers_differ": 18,
+        "levels_where_the_engine_is_furthest_and_they_differ": 16,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 2.2941176470588234,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 17,
+          "levels_where_the_two_disagree": [
+            "box_jitter@sigma=4 px",
+            "frame_rate@15 fps"
+          ],
+          "agrees_everywhere": false
+        }
+      },
+      {
+        "half_width_px": 20.0,
+        "published": true,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.1176470588235294,
+            "centroid": 1.0588235294117647,
+            "greedy-iou": 1.0588235294117647
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 1.8235294117647058,
+        "widest_spread_level": "box_jitter@sigma=2 px",
+        "levels_where_trackers_differ": 19,
+        "levels_where_the_engine_is_furthest_and_they_differ": 18,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 2.8823529411764706,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 18,
+          "levels_where_the_two_disagree": [
+            "frame_rate@15 fps"
+          ],
+          "agrees_everywhere": false
+        }
+      },
+      {
+        "half_width_px": 30.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.1176470588235294,
+            "centroid": 1.0588235294117647,
+            "greedy-iou": 1.0588235294117647
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 2.8235294117647056,
+        "widest_spread_level": "box_jitter@sigma=2 px",
+        "levels_where_trackers_differ": 19,
+        "levels_where_the_engine_is_furthest_and_they_differ": 17,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 3.8823529411764706,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 17,
+          "levels_where_the_two_disagree": [
+            "box_jitter@sigma=8 px",
+            "frame_rate@15 fps"
+          ],
+          "agrees_everywhere": false
+        }
+      },
+      {
+        "half_width_px": 40.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.1176470588235294,
+            "centroid": 1.0588235294117647,
+            "greedy-iou": 1.0588235294117647
+          },
+          "spread": 0.05882352941176472
+        },
+        "max_spread": 4.0588235294117645,
+        "widest_spread_level": "box_jitter@sigma=2 px",
+        "levels_where_trackers_differ": 20,
+        "levels_where_the_engine_is_furthest_and_they_differ": 18,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 5.117647058823529,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 17,
+          "levels_where_the_two_disagree": [
+            "box_jitter@sigma=8 px",
+            "frame_rate@15 fps"
+          ],
+          "agrees_everywhere": false
+        }
+      },
+      {
+        "half_width_px": 60.0,
+        "published": false,
+        "clean": {
+          "fragmentation_ratio_by_tracker": {
+            "engine": 1.1764705882352942,
+            "centroid": 1.1764705882352942,
+            "greedy-iou": 1.1764705882352942
+          },
+          "spread": 0.0
+        },
+        "max_spread": 4.823529411764706,
+        "widest_spread_level": "box_jitter@sigma=2 px",
+        "levels_where_trackers_differ": 15,
+        "levels_where_the_engine_is_furthest_and_they_differ": 14,
+        "engine_fragmentation_ratio_min": 0.0,
+        "engine_fragmentation_ratio_max": 6.0,
+        "agreement": {
+          "levels_where_crossing_f1_separates": 19,
+          "levels_where_the_two_agree": 18,
+          "levels_where_the_two_disagree": [
+            "box_jitter@sigma=8 px"
+          ],
+          "agrees_everywhere": false
+        }
+      }
+    ],
+    "invariants_sentence": "What does NOT depend on the half-width, across the whole swept range: the engine is furthest from one identity per labelled vehicle at 14-19 of the 15-20 levels where the trackers differ, at every width; the trackers separate under degradation at every width; and the clean-clip spread takes 2 distinct value(s) over the sweep (0.0000, 0.0588). Those are the claims this report rests on. The agreement branch is not one of them, and is labelled conditional."
+  },
+  "questions": {
+    "clean_clip_degeneracy": {
+      "question": "Does either metric discriminate between the engine's tracker and the two baselines on the clean clip?",
+      "fragmentation_ratio_by_tracker": {
+        "engine": 1.1176470588235294,
+        "centroid": 1.0588235294117647,
+        "greedy-iou": 1.0588235294117647
+      },
+      "class_consistency_rate_by_tracker": {
+        "engine": 0.875,
+        "centroid": 0.9375,
+        "greedy-iou": 0.9375
+      },
+      "spread": 0.05882352941176472,
+      "class_consistency_spread": 0.0625,
+      "discriminates": true,
+      "verdict": "On the undegraded clip the fragmentation ratio DOES separate the three trackers, by 0.0588: centroid 1.0588, engine 1.1176, greedy-iou 1.0588. That is a change from Task 14's finding that all three scored identically with the gate rule, so it is the ratio -- not the crossing count -- that sees the difference."
+    },
+    "tracker_separation": {
+      "question": "The clean clip separates the trackers by only 0.0588. Does degradation -- the condition a motion model exists for -- separate them further on the fragmentation ratio?",
+      "metric": "fragmentation_ratio",
+      "fragmentation_ratio_by_level": {
+        "frame_rate@30 fps": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "frame_rate@25 fps": {
+          "engine": 1.3529411764705883,
+          "centroid": 1.1176470588235294,
+          "greedy-iou": 1.0588235294117647
+        },
+        "frame_rate@15 fps": {
+          "engine": 0.9411764705882353,
+          "centroid": 1.1176470588235294,
+          "greedy-iou": 1.0588235294117647
+        },
+        "frame_rate@10 fps": {
+          "engine": 0.5294117647058824,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "frame_rate@5 fps": {
+          "engine": 0.11764705882352941,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0
+        },
+        "frame_rate@2 fps": {
+          "engine": 0.0,
+          "centroid": 0.47058823529411764,
+          "greedy-iou": 0.17647058823529413
+        },
+        "dropped_frames@0% dropped": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "dropped_frames@5% dropped": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "dropped_frames@10% dropped": {
+          "engine": 1.411764705882353,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "dropped_frames@20% dropped": {
+          "engine": 1.588235294117647,
+          "centroid": 1.1176470588235294,
+          "greedy-iou": 1.0588235294117647
+        },
+        "dropped_frames@30% dropped": {
+          "engine": 2.2941176470588234,
+          "centroid": 1.1176470588235294,
+          "greedy-iou": 1.0588235294117647
+        },
+        "detection_dropout@p=0.00": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "detection_dropout@p=0.05": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "detection_dropout@p=0.10": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "detection_dropout@p=0.20": {
+          "engine": 1.0588235294117647,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "detection_dropout@p=0.30": {
+          "engine": 1.0588235294117647,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "box_jitter@sigma=0 px": {
+          "engine": 1.1176470588235294,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "box_jitter@sigma=1 px": {
+          "engine": 1.1764705882352942,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "box_jitter@sigma=2 px": {
+          "engine": 2.8823529411764706,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "box_jitter@sigma=4 px": {
+          "engine": 1.1764705882352942,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.0588235294117647
+        },
+        "box_jitter@sigma=8 px": {
+          "engine": 0.35294117647058826,
+          "centroid": 1.0588235294117647,
+          "greedy-iou": 1.7647058823529411
+        }
+      },
+      "spread_by_level": {
+        "frame_rate@30 fps": 0.05882352941176472,
+        "frame_rate@25 fps": 0.2941176470588236,
+        "frame_rate@15 fps": 0.17647058823529416,
+        "frame_rate@10 fps": 0.5294117647058824,
+        "frame_rate@5 fps": 0.9411764705882353,
+        "frame_rate@2 fps": 0.47058823529411764,
+        "dropped_frames@0% dropped": 0.05882352941176472,
+        "dropped_frames@5% dropped": 0.05882352941176472,
+        "dropped_frames@10% dropped": 0.3529411764705883,
+        "dropped_frames@20% dropped": 0.5294117647058822,
+        "dropped_frames@30% dropped": 1.2352941176470587,
+        "detection_dropout@p=0.00": 0.05882352941176472,
+        "detection_dropout@p=0.05": 0.05882352941176472,
+        "detection_dropout@p=0.10": 0.05882352941176472,
+        "detection_dropout@p=0.20": 0.0,
+        "detection_dropout@p=0.30": 0.0,
+        "box_jitter@sigma=0 px": 0.05882352941176472,
+        "box_jitter@sigma=1 px": 0.11764705882352944,
+        "box_jitter@sigma=2 px": 1.8235294117647058,
+        "box_jitter@sigma=4 px": 0.11764705882352944,
+        "box_jitter@sigma=8 px": 1.4117647058823528
+      },
+      "max_spread": 1.8235294117647058,
+      "levels_measured": 21,
+      "trackers_separate": true,
+      "levels_where_trackers_differ": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@15 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "levels_where_the_engine_is_furthest_from_one": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "detection_dropout@p=0.20",
+        "detection_dropout@p=0.30",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "levels_where_the_engine_is_furthest_and_they_differ": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "furthest_from_one_measured_by": "identity_deviation -- the multiplicative fold max(r, 1/r), so a tracker whose identities never reached the gate is not flattered against one that fragmented. See metric_definitions.identity_deviation.",
+      "furthest_from_one_tie_rule": "A TIE counts as furthest. A level where two or three trackers deviate by exactly the same fold lists every one of them, so this list means 'the engine is not beaten', not 'the engine is strictly worst'. On the published width two of its entries are three-way ties at spread 0.0, which is why the intersection with levels_where_trackers_differ is published beside it and is the figure the verdict quotes.",
+      "verdict": "Degradation DOES separate the three trackers on this metric: the widest fragmentation spread is 1.8235, at box_jitter@sigma=2 px, and they differ at 19 of the 21 levels measured. The engine's tracker sits furthest from one identity per vehicle at 18 of those 19 levels."
+    },
+    "agreement_with_crossing_f1": {
+      "superseded_measure": {
+        "was": "abs(fragmentation_ratio - 1.0)",
+        "now": "max(fragmentation_ratio, 1 / fragmentation_ratio)",
+        "agreements_under_the_superseded_measure": 17,
+        "disagreements_under_the_superseded_measure": 2,
+        "levels_it_called_disagreements": [
+          "box_jitter@sigma=8 px",
+          "frame_rate@15 fps"
+        ],
+        "agreements_now": 18,
+        "disagreements_now": 1,
+        "why": "abs(r - 1) is bounded by 1.0 below and unbounded above, so it cannot rank a tracker whose identities never reached the gate as worse than one that fragmented -- and that asymmetry, not a mechanism, produced one of the disagreements it reported. The replacement is scale-symmetric because the quantity is a ratio; the argument is a priori and does not depend on which answer it gives. Both counts above are recomputed from the same data by this report, not recalled."
+      },
+      "question": "robustness.json finds the three trackers separating against the engine on crossing F1 at every degradation level where they differ, while the engine's Kalman plus second association stage costs about 21x a baseline tracker's CPU. Does this benchmark's identity metric rank them the same way?",
+      "source": "robustness.json",
+      "criterion": "At a level where crossing F1 separates the trackers, the two AGREE when the tracker with the lowest crossing F1 is also one of those with the largest identity_deviation -- the largest distance from one predicted identity per labelled vehicle. Deviation, not the signed ratio, because a tracker that loses every track scores a ratio below 1.0 and a signed comparison would rank that as the best identity behaviour on the sweep; and a FOLD deviation rather than abs(r - 1), because the quantity is a ratio -- see metric_definitions.identity_deviation and superseded_measure. A null deviation (no identity reached the gate at all) ranks worst. Ties on either side are compared as SETS, so a level where two trackers tie for worst counts as agreement when either of them is the identity metric's worst.",
+      "half_width_px": 20.0,
+      "swept_in": "gate_region_sweep",
+      "levels_compared": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "detection_dropout@p=0.20",
+        "detection_dropout@p=0.30",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@15 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "levels_where_crossing_f1_separates": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@15 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "levels_where_the_two_agree": [
+        "box_jitter@sigma=0 px",
+        "box_jitter@sigma=1 px",
+        "box_jitter@sigma=2 px",
+        "box_jitter@sigma=4 px",
+        "box_jitter@sigma=8 px",
+        "detection_dropout@p=0.00",
+        "detection_dropout@p=0.05",
+        "detection_dropout@p=0.10",
+        "dropped_frames@0% dropped",
+        "dropped_frames@10% dropped",
+        "dropped_frames@20% dropped",
+        "dropped_frames@30% dropped",
+        "dropped_frames@5% dropped",
+        "frame_rate@10 fps",
+        "frame_rate@2 fps",
+        "frame_rate@25 fps",
+        "frame_rate@30 fps",
+        "frame_rate@5 fps"
+      ],
+      "levels_where_the_two_disagree": [
+        "frame_rate@15 fps"
+      ],
+      "agrees_everywhere": false,
+      "detail": {
+        "box_jitter@sigma=0 px": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "box_jitter@sigma=1 px": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "box_jitter@sigma=2 px": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "box_jitter@sigma=4 px": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "box_jitter@sigma=8 px": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "detection_dropout@p=0.00": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "detection_dropout@p=0.05": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "detection_dropout@p=0.10": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "dropped_frames@0% dropped": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "dropped_frames@10% dropped": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "dropped_frames@20% dropped": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "dropped_frames@30% dropped": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "dropped_frames@5% dropped": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "frame_rate@10 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "frame_rate@15 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "centroid"
+          ],
+          "agrees": false
+        },
+        "frame_rate@2 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "frame_rate@25 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "frame_rate@30 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        },
+        "frame_rate@5 fps": {
+          "lowest_crossing_f1": [
+            "engine"
+          ],
+          "largest_identity_deviation": [
+            "engine"
+          ],
+          "agrees": true
+        }
+      },
+      "verdict": "The two metrics agree at 18 of the 19 levels where crossing F1 separates the trackers and DISAGREE at 1. A disagreement is reported, not reconciled: at those levels the tracker with the lowest crossing F1 is not the one furthest from one identity per labelled vehicle, which means the two are measuring different failures. Neither is thereby wrong -- crossing F1 charges a mistimed or missing crossing, while this metric charges identities spent at the gate, and a tracker can lose crossings without splitting a single track. The disagreeing levels are named above so the claim can be checked rather than taken. This answer is CONDITIONAL on the gate region's half-width, and gate_region_sweep is published because of it, not in order to choose from it. Over the swept 5-60 px the agreement is COMPLETE at 10 px and incomplete at 5, 15, 20, 30, 40, 60 px, and the disagreeing level is not the same one at every width -- the union across the sweep is box_jitter@sigma=4 px, box_jitter@sigma=8 px, dropped_frames@20% dropped, frame_rate@15 fps, frame_rate@25 fps. The published width stays 20 px because it is BASELINE_BAND_PX, a constant with independent provenance in the counting benchmark; moving it to the width that produces the friendlier answer would be tuning the instrument to the answer. What does NOT depend on the half-width, across the whole swept range: the engine is furthest from one identity per labelled vehicle at 14-19 of the 15-20 levels where the trackers differ, at every width; the trackers separate under degradation at every width; and the clean-clip spread takes 2 distinct value(s) over the sweep (0.0000, 0.0588). Those are the claims this report rests on. The agreement branch is not one of them, and is labelled conditional."
+    }
+  },
+  "claims_not_made": [
+    {
+      "claim": "No ID-switch count, IDF1, MOTA, MOTP or any other identity-preservation figure is published, here or on any other surface of this project.",
+      "reason": "All of them need a frame-by-frame identity label set -- which vehicle each box belongs to, over the whole labelled window -- and this clip has none. Producing one is a human adjudication of the same kind Task 12's 17 crossings required, at a far larger scale, and it was not done. No proxy is offered in its place: a proxy derived from the tracker's own output would be the tracker grading its own identities, which is not evidence."
+    },
+    {
+      "claim": "The fragmentation ratio is not a count of identity errors and must not be quoted as one.",
+      "reason": "It counts predicted identities at the gate against labelled vehicles. A ratio above 1.0 is consistent with a split track AND with an unlabelled vehicle in the region, and without identity labels nothing here can separate the two. It measures what identity behaviour COSTS at the gate, not how many switches happened."
+    },
+    {
+      "claim": "Class consistency is not a measurement of the classifier.",
+      "reason": "It is scored over matched crossings only, so it sees one class decision per matched vehicle at one moment, on the 17 labelled crossings of one gate of one clip. A confusion here is a detector class error the counting rule happened to carry into an event; the population is far too small, and far too selected, to be a class accuracy."
+    },
+    {
+      "claim": "Nothing here is evidence about tracking on the far carriageway, in the distance, or in a queue.",
+      "reason": "The labelling gate was chosen in the near field for label RELIABILITY. Its traffic is the largest, best separated and least foreshortened in the frame, which is the easiest case for association as well as for labelling, so every figure here is an UPPER bound."
+    }
+  ],
+  "caveats": [
+    "Every figure here is scored against the 17 hand-labelled crossings of ONE gate of ONE clip. The gate was chosen in the near field for label RELIABILITY, not for the engine's convenience, so these are UPPER bounds on the same trackers anywhere harder.",
+    "The fragmentation ratio's numerator counts predicted identities, not identity ERRORS. Above 1.0 is consistent with a split track and with an unlabelled vehicle in the gate region alike, and no figure here separates the two.",
+    "The two resampling protocols are scored with a match window widened on the LATE side by the realised sampling gap, derived from the retained pattern a priori and published beside every level it scored. The gate region's second clause exists for the same reason: a vehicle can step clean over the band between two samples, and charging that to identity would be charging the sampling grid.",
+    "No wall-clock timing is published. Per-method cost is in counting_accuracy.json, and a timing column would make two runs of this report differ -- byte reproducibility is the property it most needs to be able to prove.",
+    "Timing aside, this whole report is a function of the cached detections and the seed. Two runs are byte-identical, and every level draws from a stream derived from the protocol name and the level value, so adding a sweep point cannot move another point's numbers.",
+    "The gate region's half-width is a free parameter, and not every answer here survives it: gate_region_sweep publishes what each one does across 5-60 px, and the agreement question's verdict is explicitly conditional on the width. The published width is BASELINE_BAND_PX, fixed by the counting benchmark, and is not selected from that table.",
+    "certain_only figures are deliberately absent. This report's denominators are the full label set throughout; the ignore-region treatment of probable labels, and its two standing limitations, are stated in full in counting_accuracy.json and apply to any subset a reader derives from these rows."
+  ]
+}
