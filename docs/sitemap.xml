@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One page, and the two diagnostic modes are deliberately absent: ?selftest=1 and
+  ?measure=1 render a machine-readable verdict rather than content, and listing
+  them would offer a crawler three URLs that are the same document.
+
+  No <lastmod>: it would have to be hand-edited to stay true, and a date nobody
+  maintains is worse than no date. The site is a build output of a repository
+  whose history is public.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://safdar-hussain1.github.io/trafficlens/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

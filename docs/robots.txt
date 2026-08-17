@@ -1,0 +1,17 @@
+# Everything here is meant to be read. The two diagnostic modes are disallowed
+# because they are the same document with its body replaced by a verdict line:
+# indexing them would offer three URLs for one page and the two extra ones say
+# nothing a reader wants.
+#
+# Stated plainly, because a file that quietly does nothing is worse than no file:
+# this site is served from a project subpath, and a crawler reads robots.txt from
+# the HOST root, not from a subdirectory. So these rules are advisory here. What
+# actually carries is the canonical link in the page head and this sitemap
+# submitted directly; the rules below are correct and ready for the day the site
+# moves to a root of its own.
+User-agent: *
+Allow: /
+Disallow: /*?selftest=
+Disallow: /*?measure=
+
+Sitemap: https://safdar-hussain1.github.io/trafficlens/sitemap.xml

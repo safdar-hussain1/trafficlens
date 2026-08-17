@@ -23,6 +23,29 @@ async function boot(): Promise<void> {
     await runMeasurePage(params);
     return;
   }
+  // The results sections first, and before anything is awaited on the hardware:
+  // they are static, they need no GPU and no download, and they are the half of
+  // the page that still means something on a machine that cannot run the
+  // detector at all. The control room's own probe takes as long as it takes.
+  //
+  // Guarded, because `mountResults` throws by design -- on a missing slot, and on
+  // a measurement it cannot address in the bake -- and the two halves of this page
+  // share no data path at all. A slot that has been renamed in the static half is
+  // no reason a visitor cannot count vehicles, and before this guard it was: the
+  // rejected promise stopped `boot` before the control room mounted. The failure
+  // is reported rather than swallowed, and `results.test.ts` asserts the slots and
+  // the sections still agree -- the guard keeps the demo alive, the test is what
+  // notices. Neither substitutes for the other.
+  try {
+    const { mountResults } = await import("./ui/results");
+    mountResults();
+  } catch (error) {
+    console.error(
+      "the measured-results sections did not mount; the control room is unaffected",
+      error,
+    );
+  }
+
   const { mountControlRoom } = await import("./ui/app");
   const room = await mountControlRoom();
   // Reachable for the headless checks, which drive the same page a visitor

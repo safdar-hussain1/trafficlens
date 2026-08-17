@@ -710,3 +710,628 @@ footer {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* -- results sections ------------------------------------------------------- */
+
+/* Two colours do all the work in the figures below, and which two is not a
+ * stylistic choice: this palette has exactly one structural accent (sign blue)
+ * and its second colour, works amber, is reserved for alerts. A degradation
+ * curve is not an alert. So the figures use EMPHASIS rather than identity --
+ * the engine's own tracker is the only chromatic mark and the two baselines
+ * share a de-emphasis grey, told apart by stroke pattern and by a label at the
+ * line's end.
+ *
+ * The grey is a step lighter than --trace on purpose. Against the accent it has
+ * to clear an OKLab separation of 15 for a full-colour reader as well as 8 under
+ * simulated protanopia and deuteranopia; --trace itself measures 12.9 light and
+ * 13.4 dark, which is below that floor. These steps measure 18.0 and 16.9, with
+ * both still over 3:1 against the panel they sit on. Checked with the dataviz
+ * palette validator, per mode, against each mode's own surface. */
+:root {
+  --deemphasis: #767e85;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --deemphasis: #aab3ba;
+  }
+}
+
+:root[data-theme="dark"] {
+  --deemphasis: #aab3ba;
+}
+
+.section {
+  scroll-margin-top: 1rem;
+}
+
+.section > h2 {
+  font-size: clamp(1.35rem, 3.4vw, 2rem);
+  max-width: 30ch;
+}
+
+.section .lede {
+  max-width: 72ch;
+  margin-bottom: var(--gap);
+}
+
+.prose-p {
+  max-width: 72ch;
+  color: var(--text-dim);
+  margin: var(--gap) 0 0;
+}
+
+.prose-p strong,
+.negative p strong {
+  color: var(--text);
+}
+
+h3.tier {
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  margin-top: calc(var(--gap) * 1.5);
+}
+
+.leitlinie--tight {
+  margin: calc(var(--gap) * 1.5) 0;
+}
+
+/* The jump strip. Not numbered: the sections are questions this project asked,
+   and it did not ask them in this order. */
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.jump__label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+
+/* -- the protocol strip ----------------------------------------------------- */
+
+/* The one device this half of the page adds, and the reason a reader can trust a
+   rate on it: the conditions of measurement sit in the same eyeful as the
+   numbers they govern, not in a footnote. */
+.protocol {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+  margin: 0 0 var(--gap);
+  padding: 0.45rem 0.7rem;
+  border-left: 3px solid var(--structure);
+  background: var(--sunk);
+}
+
+.protocol__sep {
+  color: var(--line);
+  margin: 0 0.15rem;
+}
+
+/* -- tables ----------------------------------------------------------------- */
+
+.table-wrap {
+  /* Wide tables scroll inside their own box. The page itself never scrolls
+     sideways -- a horizontal scrollbar on the document is how a reader loses
+     the left edge of every row at once. */
+  overflow-x: auto;
+  margin: var(--gap) 0;
+  border: var(--rule) solid var(--line);
+  background: var(--panel);
+  /* Sized by content, not stretched to the page. A four-column table at 1500 px
+     puts a hand's width of nothing between "worst level" and "F1 recovered" and
+     a reader stops being able to follow a row across. The caption's own measure
+     sets the sensible minimum. Folded in here rather than corrected 490 lines
+     further down: two definitions of one selector that far apart is how the
+     media-query bug below arose in the first place. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+table.data {
+  border-collapse: collapse;
+  width: auto;
+  min-width: 100%;
+  font-size: 0.88rem;
+}
+
+table.data caption {
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  border-bottom: var(--rule) solid var(--line);
+  max-width: 78ch;
+}
+
+table.data th,
+table.data td {
+  padding: 0.35rem 0.7rem;
+  border-bottom: var(--rule) solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+table.data thead th {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+table.data tbody th {
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* Every figure in a column of figures is mono with tabular numerals, so the
+   digits line up and a row can be scanned down rather than read across. */
+table.data .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+table.data thead th.num {
+  font-family: var(--body);
+}
+
+table.data tr.group th {
+  background: var(--sunk);
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The engine's own rows, marked so a reader can find the subject of the
+   comparison without hunting. Weight, not colour: colour is spent on the
+   figures. */
+table.data .row-emphasis {
+  font-weight: 600;
+  color: var(--text);
+}
+
+table.data tbody tr:last-child th,
+table.data tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* -- figure runs ------------------------------------------------------------ */
+
+/* A measured number cannot appear on this page without saying what it is, so the
+   smallest unit of evidence here is a term and its figure. */
+.figure-run {
+  display: grid;
+  /* A floor and a ceiling on both columns. With `1fr auto` a value that is a
+     short sentence took every pixel it wanted and left the term column narrower
+     than one character, which `overflow-wrap` then broke down a letter per
+     line -- and on a phone it pushed the whole document wider than the
+     viewport. */
+  grid-template-columns: minmax(12ch, 1fr) minmax(0, max-content);
+  gap: 0.1rem 1rem;
+  margin: var(--gap) 0;
+  padding: 0.6rem 0.7rem;
+  border: var(--rule) solid var(--line);
+  background: var(--panel);
+  font-size: 0.88rem;
+  max-width: 74ch;
+}
+
+.figure-run dt {
+  color: var(--text-dim);
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.figure-run dd {
+  margin: 0;
+  max-width: 44ch;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.verdict {
+  max-width: 74ch;
+  margin: var(--gap) 0;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--structure);
+  color: var(--text);
+}
+
+.aside {
+  max-width: 74ch;
+  margin: var(--gap) 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.reproduce {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  margin: var(--gap) 0 0;
+}
+
+.plain-list {
+  max-width: 74ch;
+  color: var(--text-dim);
+  padding-left: 1.1rem;
+}
+
+.plain-list li {
+  margin-bottom: 0.3rem;
+}
+
+.claims {
+  margin: var(--gap) 0 0;
+  max-width: 78ch;
+}
+
+.claims dt {
+  font-weight: 600;
+  margin-top: 0.9rem;
+}
+
+.claims dd {
+  margin: 0.2rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.block {
+  margin: calc(var(--gap) * 1.6) 0 0;
+}
+
+.block h3 {
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+}
+
+/* A limitation is not an alert, so it does not get amber. It gets the sunk
+   ground and a rule, which says "read this before quoting the number above"
+   without borrowing a colour that means something else on this page. */
+.block--limit {
+  /* Capped, not full width. Its ground is a called-out box and its text is set to
+     a measure, so spanning the page leaves a wide empty band that reads as a
+     layout mistake rather than as emphasis. */
+  max-width: 84ch;
+  padding: 0.8rem 0.9rem;
+  background: var(--sunk);
+  border-left: 3px solid var(--line);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--gap);
+  margin-top: calc(var(--gap) * 1.6);
+}
+
+.columns h3 {
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.negative {
+  margin-top: calc(var(--gap) * 1.8);
+  max-width: 78ch;
+}
+
+.negative h3 {
+  font-size: clamp(1rem, 2.2vw, 1.15rem);
+  max-width: 46ch;
+}
+
+.reveal {
+  margin: var(--gap) 0;
+  border-top: var(--rule) solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.reveal > summary {
+  cursor: pointer;
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--structure);
+  padding: 0.2rem 0;
+}
+
+.reveal > summary:focus-visible {
+  outline: 3px solid var(--structure);
+  outline-offset: 2px;
+}
+
+/* -- static figures --------------------------------------------------------- */
+
+.plate {
+  margin: var(--gap) 0;
+}
+
+.plate__art {
+  border: var(--rule) solid var(--line);
+  background: var(--panel);
+  padding: 0.5rem;
+}
+
+.plate__art > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.plate > figcaption {
+  padding: 0.55rem 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  max-width: 78ch;
+}
+
+.small-multiples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gap);
+}
+
+.fig-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  margin: 0 0 0.3rem;
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+}
+
+.key i {
+  width: 20px;
+  height: 0;
+  border-top: 2px solid currentcolor;
+  display: inline-block;
+}
+
+.key i.key__dash {
+  border-top-style: dashed;
+}
+
+.key--emphasis i {
+  color: var(--structure);
+}
+
+.key--quiet i {
+  color: var(--deemphasis);
+}
+
+/* SVG marks are coloured by class rather than by attribute, which is the reason
+   these are SVG and not canvas: the theme toggle recolours every figure on the
+   page with no redraw and no second copy of the palette in JavaScript. */
+.fig__band {
+  fill: var(--structure-quiet);
+}
+
+.fig__gate {
+  stroke: var(--structure);
+  stroke-width: 2;
+}
+
+.fig__gate--beyond {
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.fig__gate-end {
+  fill: var(--structure);
+}
+
+.fig__axis,
+.fig__grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+/* The reference hairline: the undegraded score in a robustness panel, the
+   positive control in the survey chart. Same job in both -- the distance from it
+   is the result, which is the same way the live diagram reads distance from the
+   gate. */
+.fig__reference {
+  stroke: var(--structure);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.75;
+}
+
+.fig__trace {
+  fill: none;
+  stroke: var(--deemphasis);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.fig__trace--counted {
+  stroke: var(--structure);
+}
+
+.fig__sample {
+  fill: var(--panel);
+  stroke: var(--trace);
+  stroke-width: 1.5;
+}
+
+.fig__crossing {
+  fill: var(--structure);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.fig__series {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.fig__series--emphasis {
+  stroke: var(--structure);
+}
+
+.fig__series--quiet {
+  stroke: var(--deemphasis);
+}
+
+.fig__series--dashed {
+  stroke-dasharray: 5 4;
+}
+
+/* The 2px ring is in the surface colour, so a marker stays legible where it
+   crosses another line. A stroke in the mark's own colour would add ink that is
+   not data. */
+.fig__dot {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.fig__dot--emphasis {
+  fill: var(--structure);
+}
+
+.fig__dot--quiet {
+  fill: var(--deemphasis);
+}
+
+.fig__bar--emphasis {
+  fill: var(--structure);
+}
+
+.fig__bar--quiet {
+  fill: var(--deemphasis);
+}
+
+/* Text in a figure wears text tokens, never a series colour: a mark carries
+   identity, and a label the mark's hue is simply harder to read. */
+.fig__label,
+.fig__note,
+.fig__tick,
+.fig__row,
+.fig__end,
+.fig__panel-title {
+  fill: var(--text-dim);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+
+.fig__note--right {
+  fill: var(--text-dim);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px;
+  text-anchor: end;
+}
+
+.fig__panel-title {
+  fill: var(--text);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fig__tick {
+  text-anchor: end;
+  font-size: 8px;
+}
+
+.fig__tick--x {
+  text-anchor: middle;
+}
+
+.fig__row {
+  text-anchor: end;
+  fill: var(--text);
+}
+
+.fig__row--emphasis {
+  font-weight: 600;
+}
+
+.fig__end {
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.fig__end--emphasis {
+  fill: var(--text);
+}
+
+.fig__end--quiet {
+  fill: var(--text-dim);
+}
+
+@media (max-width: 700px) {
+  .figure-run {
+    grid-template-columns: 1fr;
+  }
+
+  .figure-run dd {
+    text-align: left;
+    margin-bottom: 0.35rem;
+  }
+}
+
+/* -- results: layout corrections found by looking at the rendered page ------ */
+
+/* Every paragraph in the results half gets a measure. Without this, a paragraph
+   rendered straight from a report's own prose ran the full 1500 px of the page
+   while the paragraph above it sat at 74ch, which reads as two different
+   documents. The protocol strip is the exception: it is a single line of
+   conditions and it is meant to span its section. */
+#results p:not(.protocol) {
+  max-width: 78ch;
+}
+
+/* The table sizing that used to live here is folded into the `.table-wrap` and
+   `table.data` base rules above, where the rest of those two selectors is. */
+
+
+/* -- the narrow-viewport floor ---------------------------------------------- *
+ *
+ * Last in the file on purpose. Everything above may be overridden here and
+ * nothing here may be overridden by a later block -- which is exactly the
+ * mistake this comment exists to stop being made again: a rule appended after
+ * the media query wins inside it too, and the phone layout silently reverted
+ * to the desktop one. */
+
+@media (max-width: 700px) {
+  /* A data table on a phone is wider than the phone. It scrolls inside its own
+     box; what must never happen is the DOCUMENT scrolling sideways, because then
+     every paragraph on the page loses its right-hand edge at once. */
+  .table-wrap {
+    width: 100%;
+  }
+
+  table.data caption {
+    max-width: none;
+  }
+}
