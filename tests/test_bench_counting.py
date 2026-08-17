@@ -955,6 +955,106 @@ def test_the_protocol_states_the_same_match_window_the_scorer_uses():
     assert "411" in text and "416" in text
 
 
+def test_the_protocol_states_the_ignore_region_rule_the_scorer_implements():
+    """PROTOCOL.md's scoring-RULE prose, pinned to the scorer's behaviour.
+
+    Only the match window was pinned before this. The rest of the document's
+    scoring section -- how the `certain`-only figure is computed, and that
+    matching is greedy rather than maximum-cardinality -- was held up by
+    nothing, which is exactly the drift a written-down-first protocol exists to
+    prevent: the mutation battery replaced "neither credited nor charged" with
+    "charged as a false positive", inverting the published rule, and the whole
+    suite stayed green.
+
+    Two halves, and both are needed. The first pins the sentences. The second
+    demonstrates that the sentences describe THIS scorer, so the pin cannot be
+    satisfied by prose that has quietly stopped being true -- and the expected
+    numbers below are worked out from the protocol's own three steps, not read
+    off the scorer:
+
+        labels: certain @100, probable @200; predictions @100, @200
+        step 1  match once against ALL rows      -> 100<->100, 200<->200
+        step 2  remove, from BOTH sides, every pair matched to a probable row
+                                                -> label 200 and prediction 200
+                                                   both leave
+        step 3  score the certain rows against what remains
+                                                -> 1 label, 1 prediction, 1 hit
+                                                -> precision 1.0, recall 1.0
+
+    Under the inverted rule the surviving prediction would be charged, giving
+    precision 0.5 -- which is what the document calls the artefact that motivates
+    ignore semantics, and what the report publishes separately as
+    ``certain_only_naive``. Asserting both is what makes this a discriminating
+    pair rather than a single number that could be reached either way.
+    """
+    # Whitespace-collapsed, because the document is hand-wrapped and which
+    # word a sentence breaks after is the document's business, not a claim.
+    text = " ".join(PROTOCOL.read_text().split())
+
+    # -- the sentences that state the rule ------------------------------------
+    for sentence in [
+        # The treatment itself, and the phrase the whole rule turns on.
+        "treated as **ignore regions**",
+        "neither credited nor charged",
+        # The three steps, in order.
+        "Match once against **all** rows",
+        "Remove, from both sides, every pair matched to a `probable` row",
+        "Score the `certain` rows against the predictions that remain",
+        # Why it is a restriction and not a second scoring run.
+        "Scoring by restriction of the single joint match",
+        "never by re-matching against the surviving subset",
+        # The limitation the rule carries, which the report must publish.
+        "count of predictions moved to the ignore set must be published",
+        # The matching rule, and the obligation it puts on any scorer.
+        "Matching is greedy nearest-first, not maximum-cardinality.",
+        "**publish the maximum-cardinality count alongside its own**",
+        "signed** frame offsets of its matched pairs",
+    ]:
+        assert sentence in text, (
+            f"PROTOCOL.md no longer states {sentence!r}. The scoring rules are "
+            f"fixed in this document, and a rule that lives only in the scorer "
+            f"is a rule nobody can audit -- restore the sentence or change the "
+            f"scorer to match, but never quietly drop it"
+        )
+
+    # -- and the scorer does what those sentences say --------------------------
+    labels = [
+        _label(1, 100, confidence="certain"),
+        _label(2, 200, confidence="probable"),
+    ]
+    report = _benchmark(
+        {"engine": lambda detections: [_prediction(100), _prediction(200)]},
+        labels=labels,
+    )
+    scores = report["methods"]["engine"]
+
+    ignored = scores["certain_only"]
+    assert ignored["n_ground_truth"] == 1, "step 2 did not remove the probable row"
+    assert ignored["n_predicted"] == 1, (
+        "the prediction the probable row claimed was not removed from the "
+        "denominator: PROTOCOL.md says it is neither credited NOR charged"
+    )
+    assert ignored["true_positives"] == 1
+    assert ignored["precision"] == 1.0
+    assert ignored["recall"] == 1.0
+    # The absorbed mass the document requires to be visible.
+    assert ignored["predictions_moved_to_ignore"] == 1
+
+    # The artefact the document names, published beside it rather than instead.
+    assert scores["certain_only_naive"]["precision"] == 0.5
+
+    # A restriction of the joint match, not a rematch: the surviving pair keeps
+    # the delta the joint match gave it.
+    assert scores["full"]["matched_frame_delta"]["histogram"] == {"0": 2}
+    assert ignored["matched_frame_delta"]["histogram"] == {"0": 1}
+
+    # Greedy nearest-first, with the maximum-cardinality count published beside
+    # it so the size of the gap is measured rather than assumed.
+    assert scores["full"]["max_cardinality_true_positives"] >= (
+        scores["full"]["true_positives"]
+    )
+
+
 def _ratio(numerator: int, denominator: int) -> float:
     """The scorer's own no-denominator convention, restated independently
     here so the check is not the implementation checking itself."""

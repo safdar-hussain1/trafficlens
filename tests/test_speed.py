@@ -206,6 +206,56 @@ def test_outlier_threshold_is_in_metres():
     assert est2.speed_kmh(9) is None  # second sample rejected -> 1 sample
 
 
+def test_the_outlier_threshold_stays_inside_its_physical_justification():
+    """SPEED_MAX_STEP_M is a PHYSICAL bound, and it is bounded on both sides.
+
+    Written because the constant was pinned in one direction only: every test
+    above phrases its step in terms of ``SPEED_MAX_STEP_M`` itself, so they all
+    move with the constant and loosening it -- 7.0 to 70.0, which would let a
+    detector jumping the width of a motorway straight into the fit -- reddened
+    nothing. The mutation battery found that.
+
+    The two step sizes here are derived from the physics written down in
+    ``core/constants.py`` beside the constant, NOT from the constant's value:
+
+    - 250 km/h is faster than any road vehicle this product will ever see. That
+      is 69.44 m/s, and at 15 fps -- the lowest frame rate the constant's own
+      comment calls worth running the pipeline at -- one frame of that genuine
+      travel is 4.63 m. A step that size is real motion and must be ACCEPTED,
+      which is what stops the threshold being tightened until it starts
+      throwing away fast traffic.
+    - Twice that, 9.26 m in one frame at 15 fps, is 500 km/h. No road vehicle
+      does it, so a step that size can only be a detection error and must be
+      REJECTED, which is what stops the threshold being loosened until a wild
+      box is admitted as motion.
+
+    An identity homography makes the world step exactly the image step, so the
+    metres asserted here are the metres the estimator compares.
+    """
+    identity_plane = RoadPlane(np.eye(3), [], [])
+    metres_per_frame_at_250_kmh_15fps = (250.0 / 3.6) / 15.0  # 4.6296... m
+
+    def accepted_samples(step_m: float) -> int:
+        est = SpeedEstimator(
+            plane=identity_plane, fps=15.0, window_s=10.0, min_samples=2
+        )
+        est.observe(1, (0.0, 0.0), 0.0)
+        est.observe(1, (0.0, step_m), 1.0)
+        return len(est._tracks[1])
+
+    assert accepted_samples(metres_per_frame_at_250_kmh_15fps) == 2, (
+        f"a step of {metres_per_frame_at_250_kmh_15fps:.4f}m is one frame of "
+        f"genuine 250 km/h travel at 15 fps and must never be rejected; "
+        f"SPEED_MAX_STEP_M has been tightened past its own justification"
+    )
+    assert accepted_samples(2.0 * metres_per_frame_at_250_kmh_15fps) == 1, (
+        f"a step of {2.0 * metres_per_frame_at_250_kmh_15fps:.4f}m is 500 km/h "
+        f"at 15 fps -- a detection error, not a vehicle -- and must be "
+        f"rejected; SPEED_MAX_STEP_M has been loosened past its own "
+        f"justification"
+    )
+
+
 def test_step_exactly_at_threshold_is_accepted():
     # Rejection is strictly greater-than: a step of exactly
     # SPEED_MAX_STEP_M metres is accepted. An identity-homography plane

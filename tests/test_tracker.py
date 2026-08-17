@@ -136,6 +136,77 @@ def test_assign_breaks_exact_ties_toward_lowest_indices():
     assert matches == [(0, 1), (1, 0)]
 
 
+def test_assign_does_not_inherit_which_optimum_the_solver_returns(monkeypatch):
+    """The canonical tie rule must be independent of the SOLVER, not merely of
+    the input order.
+
+    ``test_assign_breaks_exact_ties_toward_lowest_indices`` above pins the
+    canonical answer, but on these matrices scipy happens to return that same
+    optimum on its own -- so deleting the reconstruction entirely and returning
+    ``linear_sum_assignment``'s raw output left it green. The mutation battery
+    found that, and it matters because the whole point of the reconstruction is
+    that the TypeScript mirror runs a DIFFERENT solver: a hand-written
+    Jonker-Volgenant, which may legitimately return another optimum of the same
+    total.
+
+    So the solver is replaced by one that is equally optimal and deliberately
+    prefers the OPPOSITE tie -- the highest columns instead of the lowest -- and
+    ``assign`` must still produce the lexicographically-(row, col)-least optimum
+    that ``associate``'s docstring specifies. The expected answers below are that
+    specification, not this run's output.
+    """
+    import trafficlens.track.associate as associate_module
+
+    real_solver = associate_module.linear_sum_assignment
+
+    def anti_lexicographic(matrix):
+        """An optimal solver that resolves ties toward the HIGHEST columns.
+
+        Solving the column-reversed matrix and mapping the columns back gives an
+        assignment of exactly the same total -- reversing columns is a
+        permutation, which the assignment optimum is invariant under -- while
+        among tied optima it lands on the mirror-image pairing.
+        """
+        matrix = np.asarray(matrix)
+        rows, cols = real_solver(matrix[:, ::-1])
+        return rows, matrix.shape[1] - 1 - cols
+
+    # The substitution has to be real, or nothing below proves anything: the
+    # stand-in must be optimal AND must return the other optimum.
+    tied = np.full((2, 2), 0.5)
+    rows, cols = anti_lexicographic(tied)
+    assert list(zip(rows.tolist(), cols.tolist())) == [(0, 1), (1, 0)], (
+        "the stand-in solver returns the same optimum scipy does, so it cannot "
+        "show whether assign() inherits the solver's choice"
+    )
+    baseline_rows, baseline_cols = real_solver(tied)
+    assert sum(tied[r, c] for r, c in zip(rows, cols)) == pytest.approx(
+        sum(tied[r, c] for r, c in zip(baseline_rows, baseline_cols))
+    ), "the stand-in solver is not optimal, so it is not a legitimate substitute"
+
+    monkeypatch.setattr(
+        associate_module, "linear_sum_assignment", anti_lexicographic
+    )
+
+    matches, u_rows, u_cols = assign(np.full((2, 2), 0.5), max_cost=0.6)
+    assert matches == [(0, 0), (1, 1)], matches
+    assert u_rows == [] and u_cols == []
+    assert assign(np.full((3, 3), 0.5), max_cost=0.6)[0] == [(0, 0), (1, 1), (2, 2)]
+
+    # Rectangular ties: which column goes unmatched is part of the optimum, and
+    # is where a solver's own preference would show up most plainly.
+    matches, _, u_cols = assign(np.full((1, 2), 0.5), max_cost=0.6)
+    assert matches == [(0, 0)] and u_cols == [1]
+    matches, u_rows, _ = assign(np.full((2, 1), 0.5), max_cost=0.6)
+    assert matches == [(0, 0)] and u_rows == [1]
+
+    # And a genuine cost difference still wins over the tie rule, so the
+    # reconstruction is not simply forcing the identity pairing on everything.
+    assert assign(np.array([[0.5, 0.4], [0.4, 0.5]]), max_cost=0.6)[0] == [
+        (0, 1), (1, 0)
+    ]
+
+
 # -- Tracker: construction contract ------------------------------------------
 
 

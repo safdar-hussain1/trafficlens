@@ -890,6 +890,118 @@ def test_the_published_report_sweeps_the_gate_regions_half_width():
     assert "BASELINE_BAND_PX" in verdict
 
 
+def test_the_swept_summary_fields_are_recomputed_from_the_reports_own_series():
+    """The four swept fields the test above leaves free, recomputed.
+
+    ``test_the_published_report_sweeps_the_gate_regions_half_width`` pins the
+    published row's ratios, spreads, counts and agreement branch against the
+    report's own headline, and every ratio is recomputed from its own integers
+    elsewhere in this module. Four fields were in neither, and the mutation
+    battery found all four hand-falsifiable with the whole suite green:
+    ``widest_spread_level``, ``engine_fragmentation_ratio_min``,
+    ``engine_fragmentation_ratio_max`` and ``invariants_sentence``.
+
+    None of them is decoration. ``widest_spread_level`` names WHERE degradation
+    separates the trackers most; the two extremes bracket how far the engine gets
+    from one identity per labelled vehicle; and ``invariants_sentence`` is the
+    report's own statement of which of its claims do NOT depend on the metric's
+    one free parameter, which is the part a reader is entitled to rely on.
+
+    Each is recomputed from its own definition over series the report publishes:
+    the per-level fragmentation ratios for the published half-width, and the
+    swept rows themselves for the sentence. The sentence's WORDING is restated
+    here so a change has to be made deliberately on both sides; every NUMBER in
+    it is computed from the rows rather than copied.
+    """
+    report = _report()
+    sweep = report["gate_region_sweep"]
+    rows = sweep["by_half_width"]
+    ratios = report["questions"]["tracker_separation"][
+        "fragmentation_ratio_by_level"
+    ]
+    assert ratios, "the per-level series is empty, so nothing below is checked"
+    assert len(rows) >= 3, rows
+
+    # -- the published row, cell by cell against its own per-level series ------
+    spreads = {
+        level: max(by_tracker.values()) - min(by_tracker.values())
+        for level, by_tracker in ratios.items()
+    }
+    engine = [by_tracker["engine"] for by_tracker in ratios.values()]
+
+    published = [row for row in rows if row["published"]]
+    assert len(published) == 1, [row["half_width_px"] for row in published]
+    row = published[0]
+
+    named = row["widest_spread_level"]
+    assert named in spreads, (
+        f"widest_spread_level names {named!r}, which is not a level this report "
+        f"measured"
+    )
+    # Stated as "no level spreads wider" rather than "argmax equals", so a tie
+    # between two levels is not a failure -- but a level that is not widest is.
+    assert spreads[named] == pytest.approx(max(spreads.values())), (
+        f"widest_spread_level names {named!r} at spread {spreads[named]:.4f}, "
+        f"but {max(spreads, key=lambda k: spreads[k])!r} spreads "
+        f"{max(spreads.values()):.4f}"
+    )
+    assert row["engine_fragmentation_ratio_min"] == pytest.approx(min(engine))
+    assert row["engine_fragmentation_ratio_max"] == pytest.approx(max(engine))
+
+    # -- every row: what holds without a per-level series to compare against ---
+    for earlier, later in zip(rows, rows[1:]):
+        for field in (
+            "engine_fragmentation_ratio_min", "engine_fragmentation_ratio_max"
+        ):
+            # A wider region can only ADD identities, so neither extreme may
+            # fall as the half-width grows.
+            assert later[field] >= earlier[field] - 1e-12, (
+                field, earlier["half_width_px"], later["half_width_px"]
+            )
+    for each in rows:
+        assert each["engine_fragmentation_ratio_min"] <= (
+            each["engine_fragmentation_ratio_max"]
+        ), each["half_width_px"]
+        assert each["widest_spread_level"] in spreads, each["half_width_px"]
+
+    # -- the invariants sentence, number for number ----------------------------
+    shares = [
+        (
+            each["levels_where_the_engine_is_furthest_and_they_differ"],
+            each["levels_where_trackers_differ"],
+        )
+        for each in rows
+    ]
+    # The two claims the sentence makes in words rather than figures, checked
+    # against the rows rather than taken on trust.
+    for share, total in shares:
+        assert total > 0, "the sentence claims the trackers separate at EVERY width"
+        assert share > 0, (
+            "the sentence claims the engine is furthest from one identity per "
+            "labelled vehicle at every width"
+        )
+    clean_spreads = {each["clean"]["spread"] for each in rows}
+    expected_sentence = (
+        f"What does NOT depend on the half-width, across the whole swept "
+        f"range: the engine is furthest from one identity per labelled "
+        f"vehicle at {min(share for share, _total in shares)}-"
+        f"{max(share for share, _total in shares)} of the "
+        f"{min(total for _share, total in shares)}-"
+        f"{max(total for _share, total in shares)} levels where the trackers "
+        f"differ, at every width; the trackers separate under degradation at "
+        f"every width; and the clean-clip spread takes "
+        f"{len(clean_spreads)} distinct value(s) over the sweep "
+        f"({', '.join(f'{value:.4f}' for value in sorted(clean_spreads))}). "
+        f"Those are the claims this report rests on. The agreement branch is "
+        f"not one of them, and is labelled conditional."
+    )
+    assert sweep["invariants_sentence"] == expected_sentence, (
+        "the published invariants sentence is not what the swept rows say:\n"
+        f"published: {sweep['invariants_sentence']}\n"
+        f"rows say : {expected_sentence}"
+    )
+
+
 def test_the_published_report_recomputes_every_ratio_from_its_own_counts():
     """The layer under the headline: no published ratio may be impossible.
 

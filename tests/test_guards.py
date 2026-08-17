@@ -292,11 +292,21 @@ def test_published_web_assets_are_not_git_ignored():
     A bare "models/" rule matches at any depth, which would ignore all three and
     silently never ship them to Pages -- or force `git add -f`, a habit worth
     not forming. Weights stay covered by *.pt.
+
+    `--no-index` is load-bearing, and this test could not fail without it. Plain
+    `git check-ignore` consults the index first and reports any TRACKED path as
+    not ignored, whatever the rules say -- and all three of these paths are
+    tracked, so the question was answered by their being committed rather than by
+    .gitignore. Replacing `/models/` with a bare `models/` left this green while
+    the ignore rule really did swallow all three; the mutation battery found it.
+    `--no-index` asks the question the test means: would the rules ignore this
+    path if it were not already tracked -- which is exactly the situation of the
+    next person to add a file here.
     """
     for path in ["web/public/models/yolo11n-480.onnx",
                  "web/public/models/MODEL_CARD.md",
                  "docs/models/MODEL_CARD.md"]:
-        r = subprocess.run(["git", "check-ignore", "-q", path], cwd=ROOT)
+        r = subprocess.run(["git", "check-ignore", "-q", "--no-index", path], cwd=ROOT)
         assert r.returncode == 1, f"{path} IS git-ignored and would never ship"
 
 

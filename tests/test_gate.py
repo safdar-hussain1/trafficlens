@@ -18,6 +18,44 @@ def test_lingering_track_counts_once():
     assert g.total() == 1
 
 
+def test_a_track_that_crosses_back_and_forth_still_counts_exactly_once():
+    """The once-per-track memory, exercised on a track that keeps crossing.
+
+    ``test_lingering_track_counts_once`` above does not reach that memory: its
+    follow-up frames all sit on one side of the gate, so ``signed`` is already 0
+    and the ``track_id in self._counted`` test is never consulted. Deleting the
+    memory entirely left it green -- the mutation battery found that.
+
+    This drives the case the module docstring actually claims: "a lingering or
+    jittering track counts exactly once, ever -- not once per direction change."
+    Every update below is a genuine crossing of the bounded segment by every
+    other rule in the module, so only the memory can stop it being counted.
+
+    The second half is what stops a global latch passing as per-track memory: a
+    different track id must still be able to count.
+    """
+    g = GateCounter(Gate("g", (0.0, 0.0), (10.0, 0.0)))
+    above, below = (5.0, -2.0), (5.0, 2.0)
+
+    first = g.update(1, "car", above, below, 1, 0.04)
+    assert first is not None and first.signed_direction == -1
+
+    for frame, (prev, curr) in enumerate(
+        [(below, above), (above, below), (below, above)], start=2
+    ):
+        assert g.update(1, "car", prev, curr, frame, frame * 0.04) is None, (
+            f"track 1 crossed again on frame {frame} and was counted a second "
+            f"time; a crossing is once per track, ever"
+        )
+    assert g.total() == 1
+    assert g.totals == {"car": {"out": 1}}
+
+    # Per track, not a global latch.
+    second = g.update(2, "car", above, below, 6, 0.24)
+    assert second is not None and second.track_id == 2
+    assert g.total() == 2
+
+
 def test_touch_and_retreat_never_fires():
     # Anchor touches the gate line exactly, then retreats back to the
     # side it came from: never a genuine crossing.
@@ -247,6 +285,49 @@ def test_on_line_deferral_still_respects_gate_bounds():
     assert gc.update(1, "car", (50.0, -2.0), (50.0, 0.0), 1, 0.04) is None  # deferred
     assert gc.update(1, "car", (50.0, 0.0), (50.0, 2.0), 2, 0.08) is None   # still out of bounds
     assert gc.total() == 0
+
+
+def test_the_deferred_resolution_bounds_checks_from_the_last_off_line_point():
+    """The deferred crossing is bounds-checked over ``last off-line point ->
+    curr``, and NOT over ``prev -> curr``.
+
+    ``test_on_line_deferral_still_respects_gate_bounds`` above does not separate
+    the two: in its geometry both segments miss the gate, so replacing the stored
+    off-line point with ``prev`` left it green. The mutation battery found that,
+    and the difference is real -- it is the hole the TypeScript mirror's
+    counterfactual fixture (``gate_deferred_off_line_origin``) was built for, and
+    this is its Python counterpart.
+
+    The case is constructed from the rule the module states, not from either
+    implementation's output. Gate: the segment from (0, 0) to (10, 0).
+
+    - Frame 1: the anchor moves from (-5, -5) to (15, 0). (15, 0) sits exactly on
+      the gate's infinite line but five units off the end of the drawn segment,
+      so the crossing is deferred and (-5, -5) is remembered as the last
+      off-line position.
+    - Frame 2: ``prev`` is that on-line point and ``curr`` is (15, 5), on the far
+      side. The swept path the object actually took -- (-5, -5) to (15, 5) --
+      passes through (5, 0), which is inside the segment, so this IS a crossing.
+      The path from ``prev`` (15, 0) to (15, 5) never comes within five units of
+      the segment, so an origin taken from ``prev`` reports no crossing at all.
+    """
+    gate = Gate("g", (0.0, 0.0), (10.0, 0.0))
+    g = GateCounter(gate)
+
+    assert g.update(1, "car", (-5.0, -5.0), (15.0, 0.0), 1, 0.04) is None
+
+    ev = g.update(1, "car", (15.0, 0.0), (15.0, 5.0), 2, 0.08)
+    assert ev is not None, (
+        "the deferred crossing was dropped: the bounds check ran over "
+        "prev -> curr, which never meets the gate segment, instead of over the "
+        "swept path from the last off-line position"
+    )
+    assert ev.signed_direction == -1
+    # Where that swept path meets the segment, computed from the geometry above:
+    # y goes -5 -> 5 linearly, so it reaches 0 halfway, at x = -5 + 0.5 * 20 = 5.
+    assert ev.crossing_x == pytest.approx(5.0)
+    assert ev.crossing_y == pytest.approx(0.0)
+    _assert_point_on_gate(ev, gate)
 
 
 def _assert_point_on_gate(ev, gate, eps=1e-6):
