@@ -1766,11 +1766,77 @@ def test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor(
     assert PROTOCOL_DETECTION_DROPOUT in (
         ablation["protocols_the_floor_does_not_explain"]
     )
-    # The undegraded row is what says the floor was tuned for clean footage
-    # rather than being simply wrong: loosening it must not help there.
+    # The undegraded row is the control on the whole ablation: if loosening
+    # the floor helped there too, the finding would be "0.3 is a better
+    # default", not "0.8 is narrow". It must not help there.
     identity = ablation["by_protocol"][PROTOCOL_FRAME_RATE][0]
     assert identity["level"] == 30.0
     assert identity["f1"][loosened] <= identity["f1"][shipped]
+
+    # -- and the PROSE has to be the same measurement ----------------------
+    #
+    # Every summary field above was already recomputed; the verdict sentence
+    # that a visitor actually reads was not, and that is how this report came
+    # to publish "at 30 fps the loose floor scores slightly WORSE" over four
+    # identity rows holding an exact tie, and "the frame-rate and jitter
+    # collapses are the association floor" over a derived list that names
+    # dropped_frames as well. Both clauses were typed inside an otherwise
+    # derived f-string. So each clause of the verdict that names a protocol,
+    # counts a level or quotes an identity result is re-derived here from
+    # by_protocol -- which the loop above has already tied to the main sweep
+    # and recomputed from its own counts -- and required verbatim.
+    verdict = ablation["verdict"]
+    identity_rows = {
+        protocol: rows[0] for protocol, rows in ablation["by_protocol"].items()
+    }
+    identity_gains = {
+        protocol: row["f1"][loosened] - row["f1"][shipped]
+        for protocol, row in identity_rows.items()
+    }
+    identity_labels = ", ".join(
+        f"{protocol} {identity_rows[protocol]['level_label']}"
+        for protocol in sorted(identity_rows)
+    )
+    losses = sorted(
+        (row for row in gains if row["gain"] < 0.0),
+        key=lambda row: (row["gain"], row["protocol"], row["level"]),
+    )
+    loss_labels = ", ".join(
+        f"{row['protocol']} {_level_label(ablation, row)}" for row in losses
+    )
+    required = [
+        # A2: the "not one fault" split must name the derived lists, both
+        # halves of it.
+        f"the collapses under "
+        f"{', '.join(ablation['protocols_the_floor_explains'])} are the "
+        f"association floor",
+        f"whatever the engine loses under "
+        f"{', '.join(ablation['protocols_the_floor_does_not_explain'])} is "
+        f"something else",
+        # A1: the clean-footage clause, read off the identity rows.
+        f"Across the {len(identity_gains)} identity levels "
+        f"({identity_labels})",
+        f"changes crossing F1 by no less than "
+        f"{min(identity_gains.values()):+.4f} and no more than "
+        f"{max(identity_gains.values()):+.4f}",
+        f"Nothing in this sweep measures {shipped} as better than "
+        f"{loosened} except at {loss_labels} ({len(losses)} of "
+        f"{len(gains)} levels)",
+        f"the loose floor costs up to {-losses[0]['gain']:.4f} F1",
+    ]
+    for clause in required:
+        assert clause in verdict, (
+            f"the published verdict does not carry the clause its own data "
+            f"implies:\n  wanted: {clause!r}\n  verdict: {verdict!r}"
+        )
+
+
+def _level_label(ablation: dict, row: dict) -> str:
+    """The published label for one (protocol, level) of the ablation."""
+    for candidate in ablation["by_protocol"][row["protocol"]]:
+        if candidate["level"] == row["level"]:
+            return candidate["level_label"]
+    raise AssertionError(f"no such level: {row}")
 
 
 def test_the_published_report_states_no_speed_in_kilometres_per_hour():

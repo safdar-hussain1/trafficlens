@@ -85,6 +85,23 @@ export function protocolNamed(name: string) {
   return found;
 }
 
+/** One counting method, addressed by its published name.
+ *
+ * The same rule as `protocolNamed`, one report across: `methods.find(...)` with
+ * a `?? Number.NaN` fallback prints an em dash where a figure should be, and
+ * both call sites sit directly under a sentence that asserts the figure. A
+ * rename must be loud. */
+export function methodNamed(name: string) {
+  const found = REPORTS.counting.methods.find((item) => item.method === name);
+  if (found === undefined) {
+    throw new Error(
+      `no counting method named "${name}"; the bake carries ` +
+        REPORTS.counting.methods.map((item) => item.method).join(", "),
+    );
+  }
+  return found;
+}
+
 export function levelOf(protocolName: string, levelLabel: string) {
   const found = protocolNamed(protocolName);
   const entry = found.entries.find((item) => item.levelLabel === levelLabel);
@@ -307,8 +324,7 @@ function countingSection(): readonly Child[] {
 }
 
 function engineClassConsistency(): number {
-  const engine = REPORTS.counting.methods.find((method) => method.method === "engine+gate");
-  return engine?.classConsistency ?? Number.NaN;
+  return methodNamed("engine+gate").classConsistency;
 }
 
 // -- section: robustness ------------------------------------------------------
@@ -499,9 +515,10 @@ function associationFloorBlock(): HTMLElement {
     ]),
     disclosure("The ablation level by level, including the undegraded rows", [
       p(
-        "The undegraded rows are the reason this is not simply an argument for the looser " +
-          "floor: where the input has not left the footage the floor was tuned on, loosening it " +
-          "recovers nothing at all.",
+        "The undegraded rows are the control on this ablation: where the input has not been " +
+          "degraded at all, loosening the floor recovers nothing — the two tie exactly. What " +
+          "stops this being a straight argument for the looser floor is the detection-dropout " +
+          "rows above, where loosening it costs F1.",
         "aside",
       ),
       ...floor.byProtocol.map((item) =>
@@ -702,11 +719,11 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
   }
   const bandRows = counting.methods.filter((method) => method.method.endsWith("+band"));
   const perFrame = counting.methods.filter((method) => method.method.endsWith("+per-frame"));
-  const engineGate = counting.methods.find((method) => method.method === "engine+gate");
+  const engineGate = methodNamed("engine+gate");
 
   return {
     "negative-tracker": [
-      ["engine, undegraded F1", rate(engineGate?.f1 ?? Number.NaN)],
+      ["engine, undegraded F1", rate(engineGate.f1)],
       [
         "the two baselines, undegraded",
         counting.methods
@@ -848,7 +865,10 @@ function claimsNotMadeList(): HTMLElement {
  *
  * The undegraded row is the control on the ablation: if loosening the floor
  * helped there too, the finding would be "0.3 is a better default" rather than
- * "0.8 is tuned on clean footage and does not survive leaving it". */
+ * "0.8 is narrow". As measured it does neither -- the two floors tie exactly at
+ * every identity level -- so the tie is not what argues for keeping 0.8. The
+ * only measurement that does is the detection-dropout row, where loosening
+ * costs F1. */
 function identityRowGains(): readonly number[] {
   return REPORTS.robustness.associationFloor.byProtocol.map((item) => {
     const identity = item.entries[0];

@@ -360,6 +360,41 @@ def _association_floor_ablation(
     )
     unexplained = sorted(set(per_protocol_best) - set(explained))
 
+    # The undegraded control, DERIVED. Every protocol's first row is its
+    # identity level -- the clean stream the whole family reduces to -- and
+    # what the two floors do there is the only thing in this sweep that can
+    # say whether the shipped floor was tuned for clean footage, is simply
+    # narrow, or is worse everywhere. Stating that in a hardcoded clause is
+    # how the retired "at 30 fps the loose floor scores slightly WORSE"
+    # sentence came to contradict its own four identity rows, which hold an
+    # exact tie. Nothing below is typed; it is all read off ``by_protocol``.
+    identity_rows = {
+        protocol: rows[0] for protocol, rows in by_protocol.items() if rows
+    }
+    identity_gains = {
+        protocol: row["f1"][loosened] - row["f1"][shipped]
+        for protocol, row in identity_rows.items()
+    }
+    identity_labels = ", ".join(
+        f"{protocol} {identity_rows[protocol]['level_label']}"
+        for protocol in sorted(identity_rows)
+    ) or "no identity level measured here"
+    identity_span = (
+        min(identity_gains.values(), default=0.0),
+        max(identity_gains.values(), default=0.0),
+    )
+    # Where the SHIPPED floor measures better, i.e. where loosening costs
+    # F1. Enumerated rather than asserted, because "the floor exists for a
+    # reason" is only true if some measured row says so.
+    losses = sorted(
+        (row for row in gains if row["gain"] < 0.0),
+        key=lambda row: (row["gain"], row["protocol"], row["level"]),
+    )
+    loss_labels = ", ".join(
+        f"{row['protocol']} {row['level_label']}" for row in losses
+    ) or "no level measured here"
+    worst_loss = -losses[0]["gain"] if losses else 0.0
+
     return {
         "question": (
             "The three trackers separate against the engine under "
@@ -397,13 +432,22 @@ def _association_floor_ablation(
             f"{', '.join(unexplained) or 'nothing measured here'}, where "
             f"loosening it recovers less than the "
             f"{0.05:g} F1 threshold above and can even cost a little. So this "
-            f"is not one fault: the frame-rate and jitter collapses are the "
-            f"association floor, while whatever the engine loses under "
-            f"detection dropout is something else and is not diagnosed here. "
-            f"The undegraded rows say why the floor exists at all: at 30 fps "
-            f"the loose floor scores slightly WORSE, so {floors[0]:g} is a "
-            f"value tuned on clean footage that does not survive the input "
-            f"leaving it. This is a measurement of a shipped constant, not a "
+            f"is not one fault: the collapses under "
+            f"{', '.join(explained) or 'no protocol'} are the association "
+            f"floor, while whatever the engine loses under "
+            f"{', '.join(unexplained) or 'nothing measured here'} is "
+            f"something else and is not diagnosed here. "
+            f"The undegraded rows are the control on this ablation: they are "
+            f"the only rows here that can say whether the floor was tuned for "
+            f"clean footage. Across the {len(identity_gains)} identity levels "
+            f"({identity_labels}) loosening it changes crossing F1 by no less "
+            f"than {identity_span[0]:+.4f} and no more than "
+            f"{identity_span[1]:+.4f}. Nothing in "
+            f"this sweep measures {floors[0]:g} as better than {floors[-1]:g} "
+            f"except at {loss_labels} ({len(losses)} of {len(gains)} levels), "
+            f"where the loose floor costs up to {worst_loss:.4f} F1 -- that "
+            f"cost is the only argument these measurements make for the "
+            f"shipped value. This is a measurement of a shipped constant, not a "
             f"proposal to change it -- changing it is separate work with its "
             f"own baseline, and this sweep is not the evidence for a new "
             f"value."

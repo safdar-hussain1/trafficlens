@@ -774,36 +774,76 @@ def _published_rows(document_key: str, header: str, key_columns: int) -> dict:
     return rows
 
 
-def _expected_counting_rows(subset: str) -> dict:
+class _PointerLog:
+    """Records every report pointer a cell-pin builder actually reads.
+
+    ``_cell_pinned_pointers`` says which pointers the cell-by-cell table tests
+    compare exactly, and the coincidence guard hands out an exemption on the
+    strength of it. Re-listing the pointer SHAPES beside the builders -- which
+    is what this module used to do -- makes that exemption a claim about code
+    somewhere else, and the claim was false: a reviewer shrank a builder's
+    field tuple and the hand-written list went on granting exemptions for
+    coverage that had stopped existing.
+
+    So the builders read every cell through this object and the exemption set
+    is whatever they were measured reading. Drop a field from a builder and the
+    exemption for it disappears in the same edit.
+    """
+
+    def __init__(self) -> None:
+        self.pointers: set[str] = set()
+
+    def cell(self, report: str, pointer: str, kind: str) -> str:
+        self.pointers.add(pointer)
+        return _render(_resolve(_read(report), pointer), kind)
+
+
+#: (field, rendering) for every column of the counting tables, in published order.
+_COUNTING_COLUMNS = (
+    ("precision", "3dp"),
+    ("recall", "3dp"),
+    ("f1", "3dp"),
+    ("n_predicted", "int"),
+    ("true_positives", "int"),
+    ("false_positives", "len"),
+    ("misses", "len"),
+)
+
+
+def _expected_counting_rows(subset: str, log: "_PointerLog | None" = None) -> dict:
+    log = _PointerLog() if log is None else log
     methods = _read("counting_accuracy.json")["methods"]
     return {
-        (f"`{name}`",): (
-            _render(method[subset]["precision"], "3dp"),
-            _render(method[subset]["recall"], "3dp"),
-            _render(method[subset]["f1"], "3dp"),
-            _render(method[subset]["n_predicted"], "int"),
-            _render(method[subset]["true_positives"], "int"),
-            _render(method[subset]["false_positives"], "len"),
-            _render(method[subset]["misses"], "len"),
+        (f"`{name}`",): tuple(
+            log.cell(
+                "counting_accuracy.json",
+                f"methods/{name}/{subset}/{field}",
+                kind,
+            )
+            for field, kind in _COUNTING_COLUMNS
         )
-        for name, method in methods.items()
+        for name in methods
     }
 
 
-def _expected_robustness_rows() -> dict:
+def _expected_robustness_rows(log: "_PointerLog | None" = None) -> dict:
+    log = _PointerLog() if log is None else log
     robustness = _read("robustness.json")
-    separation = robustness["questions"]["tracker_separation"]
     expected = {}
     for name, protocol in robustness["protocols"].items():
-        for entry in protocol["entries"]:
+        for index, entry in enumerate(protocol["entries"]):
             level = entry["level_label"]
-            by_tracker = separation["f1_by_level"][f"{name}@{level}"]
+            by_level = f"questions/tracker_separation/f1_by_level/{name}@{level}"
+            spread = f"questions/tracker_separation/f1_spread_by_level/{name}@{level}"
+            predicted = (
+                f"protocols/{name}/entries/{index}/methods/engine+gate/n_predicted"
+            )
             expected[(level,)] = (
-                _render(by_tracker["engine+gate"], "3dp"),
-                _render(by_tracker["centroid+gate"], "3dp"),
-                _render(by_tracker["greedy-iou+gate"], "3dp"),
-                _render(separation["f1_spread_by_level"][f"{name}@{level}"], "4dp"),
-                _render(entry["methods"]["engine+gate"]["n_predicted"], "int"),
+                log.cell("robustness.json", f"{by_level}/engine+gate", "3dp"),
+                log.cell("robustness.json", f"{by_level}/centroid+gate", "3dp"),
+                log.cell("robustness.json", f"{by_level}/greedy-iou+gate", "3dp"),
+                log.cell("robustness.json", spread, "4dp"),
+                log.cell("robustness.json", predicted, "int"),
             )
     return expected
 
@@ -885,6 +925,11 @@ CONTEXT_PINS = [
     ("README", "adjudicated certain and {} probable", "counting_accuracy.json",
      "labels/probable", "int"),
     ("README", "over frames 0 to {} of", "counting_accuracy.json", "window/end_frame", "int"),
+    # The other end of the same window. It was typed into the phrase above, so
+    # a report saying the window starts at frame 1 left the module green while
+    # README.md went on publishing "frames 0 to 734" -- measured, not feared.
+    ("README", "over frames {} to", "counting_accuracy.json",
+     "window/start_frame", "int"),
     ("README", "{} predictions move to the ignore set", "counting_accuracy.json",
      "methods/engine+gate/certain_only/predictions_moved_to_ignore", "int"),
     ("README", "The three trackers differ at {} of the 21 levels", "robustness.json",
@@ -907,6 +952,9 @@ CONTEXT_PINS = [
      "frames", "int"),
     ("README", "{} of 48 tracks contributing", "detection_noise.json",
      "tracks_contributing", "int"),
+    # The denominator of the same phrase, for the same reason: 48 was typed.
+    ("README", "of {} tracks contributing", "detection_noise.json",
+     "tracks_seen", "int"),
     ("CALIBRATION", "{} candidate anchors were measured", "speed_real.json",
      "anchor_candidates", "len"),
     ("DESIGN_CARD", "record carries {} refusals", "tracking.json", "claims_not_made", "len"),
@@ -1083,33 +1131,30 @@ def _one_step(value, kind: str) -> list[str] | None:
 
 
 def _cell_pinned_pointers(document_key: str) -> set[str]:
-    """Pointers the cell-by-cell table tests compare, built the way those tests build
-    their expected rows -- from the reports, not from a list kept in step by hand.
+    """Pointers the cell-by-cell table tests compare, taken FROM those tests'
+    own builders rather than re-listed here.
 
-    Every pointer returned is resolved here, so a pointer that has stopped existing
-    cannot go on granting an exemption.
+    The builders are run against a ``_PointerLog``, so what comes back is the
+    set of pointers they were observed reading on this run of this report. A
+    field dropped from a builder drops out of here in the same edit, and the
+    exemption it granted goes with it -- which is the property the docstring at
+    the top of this module claims and, until the reviewer drove it apart, did
+    not have.
+
+    Every pointer is resolved by ``_PointerLog.cell`` as it is recorded, so a
+    pointer that has stopped existing raises rather than granting an exemption.
     """
     if document_key != "README":
         return set()
-    pointers = set()
-    counting = _read("counting_accuracy.json")
-    for name in counting["methods"]:
-        for subset in ("full", "certain_only"):
-            for field in ("precision", "recall", "f1", "n_predicted",
-                          "true_positives", "false_positives", "misses"):
-                pointers.add(f"methods/{name}/{subset}/{field}")
-    robustness = _read("robustness.json")
-    for name, protocol in robustness["protocols"].items():
-        for index, entry in enumerate(protocol["entries"]):
-            level = entry["level_label"]
-            pointers.add(f"protocols/{name}/entries/{index}/methods/engine+gate/n_predicted")
-            pointers.add(f"questions/tracker_separation/f1_by_level/{name}@{level}")
-            pointers.add(f"questions/tracker_separation/f1_spread_by_level/{name}@{level}")
-    for pointer in pointers:
-        report = ("counting_accuracy.json" if pointer.startswith("methods/")
-                  else "robustness.json")
-        _resolve(_read(report), pointer)  # raises if the pointer has gone
-    return pointers
+    log = _PointerLog()
+    for subset in ("full", "certain_only"):
+        _expected_counting_rows(subset, log)
+    _expected_robustness_rows(log)
+    assert log.pointers, (
+        "the cell-pin builders read no report pointer at all, so this "
+        "exemption set is vacuous"
+    )
+    return log.pointers
 
 
 def _exactly_pinned(document_key: str) -> set[str]:
@@ -1163,6 +1208,23 @@ def test_no_numeric_pin_can_be_satisfied_by_a_coincidence():
         f"only {prone} pins were found coincidence-prone. That is suspiciously few for "
         f"documents this long -- check _one_step and _mentions_number still work "
         f"rather than assuming the documents improved"
+    )
+    # The non-vacuity floor on the EXEMPTION half. The two floors above are
+    # computed before the exemption test, so an ``_exactly_pinned`` that
+    # returned every pointer -- a widened cell-pin builder, a pointer shape
+    # that accidentally matches everything -- would empty ``unbackstopped``
+    # and leave this test green while asserting nothing at all. Measured on
+    # the committed reports: 84 examined, 35 exempt, 49 not.
+    exempt = sum(
+        1
+        for document_key, _report, pointer, kind in PINNED
+        if kind != "text" and pointer in _exactly_pinned(document_key)
+    )
+    assert examined - exempt >= 30, (
+        f"{exempt} of {examined} examined pins are claimed exactly covered, "
+        f"leaving only {examined - exempt} for this test to be about. An "
+        f"exemption set that broad makes the assertion above vacuous -- check "
+        f"_exactly_pinned rather than widening this floor"
     )
 
 

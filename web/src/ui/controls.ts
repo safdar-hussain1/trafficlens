@@ -139,33 +139,87 @@ export interface BadgeState {
   readonly cadence: Cadence | null;
 }
 
-/** The badge names what is running and what it measured, on this machine, in
- * this session. A software renderer invalidates any hardware claim, so it is
- * called out rather than printed as if it were a GPU. */
-export function renderBadge(badge: HTMLElement, state: BadgeState): void {
+/** What the GL renderer string describes on the WASM path: nothing.
+ *
+ * `BackendProbe.renderer` is read from `WEBGL_debug_renderer_info` and names
+ * the device the WebGL/WebGPU path would use. WASM inference never touches it.
+ * Printing it beside `WASM` and a ms/frame figure implies a hardware
+ * attribution that was never performed -- measured, and corrected in the
+ * numbers file as C12: a run forced onto a software renderer moved the WASM
+ * figure by about 2 % while the renderer string changed completely. So on the
+ * WASM path the badge says so, rather than naming a GPU that is not running
+ * anything. */
+const RENDERER_NOT_APPLICABLE = "n/a (wasm path)";
+
+/** What the badge says, decided before any of it is turned into elements.
+ *
+ * Separated from `renderBadge` because the decision is what can be wrong: the
+ * renderer attribution above is a claim about a measurement, and a claim needs
+ * a test. The suite runs without a DOM, so the DOM half stays a thin mapping
+ * over this. */
+export interface BadgeContent {
+  readonly ep: "WebGPU" | "WASM";
+  /** Empty while the probe is still running. */
+  readonly renderer: string;
+  /** ms/frame, fps and cadence, in the order they are shown. */
+  readonly figures: readonly string[];
+  /** Whether the software-renderer caveat applies to the number beside it. */
+  readonly softwareWarning: boolean;
+  readonly probed: boolean;
+}
+
+export function badgeContent(state: BadgeState): BadgeContent {
   const { probe } = state;
   if (probe === null) {
-    badge.replaceChildren(text("span", "badge__renderer", "Checking what this machine can run…"));
-    return;
+    return {
+      ep: "WASM",
+      renderer: "Checking what this machine can run…",
+      figures: [],
+      softwareWarning: false,
+      probed: false,
+    };
   }
-  const ep = (state.ep ?? probe.ep) === "webgpu" ? "WebGPU" : "WASM";
-  const parts: HTMLElement[] = [
-    text("b", "", ep),
-    text("span", "badge__renderer", probe.renderer),
-  ];
+  const onGpu = (state.ep ?? probe.ep) === "webgpu";
+  const figures: string[] = [];
   if (state.msPerFrame !== null) {
-    parts.push(text("span", "", `${formatMs(state.msPerFrame)} ms/frame`));
+    figures.push(`${formatMs(state.msPerFrame)} ms/frame`);
   }
   if (state.fps !== null) {
-    parts.push(text("span", "", `${formatFps(state.fps)} fps`));
+    figures.push(`${formatFps(state.fps)} fps`);
   }
   if (state.cadence !== null) {
-    parts.push(text("span", "", `detecting ${state.cadence.label}`));
+    figures.push(`detecting ${state.cadence.label}`);
   }
-  if (!probe.isHardwareRenderer) {
+  return {
+    ep: onGpu ? "WebGPU" : "WASM",
+    renderer: onGpu ? probe.renderer : RENDERER_NOT_APPLICABLE,
+    figures,
+    // Only on the path the renderer can affect. Beside a WASM figure the
+    // caveat would be describing a device that ran none of it.
+    softwareWarning: onGpu && !probe.isHardwareRenderer,
+    probed: true,
+  };
+}
+
+/** The badge names what is running and what it measured, on this machine, in
+ * this session. A software renderer invalidates any hardware claim, so it is
+ * called out rather than printed as if it were a GPU -- but only on the path
+ * whose timing it can affect; see RENDERER_NOT_APPLICABLE. */
+export function renderBadge(badge: HTMLElement, state: BadgeState): void {
+  const content = badgeContent(state);
+  if (!content.probed) {
+    badge.replaceChildren(text("span", "badge__renderer", content.renderer));
+    return;
+  }
+  const parts: HTMLElement[] = [
+    text("b", "", content.ep),
+    text("span", "badge__renderer", content.renderer),
+    ...content.figures.map((figure) => text("span", "", figure)),
+  ];
+  if (content.softwareWarning) {
     parts.push(text("span", "badge__warn", "software renderer — not a hardware timing"));
   }
-  badge.dataset["software"] = String(!probe.isHardwareRenderer);
+  badge.dataset["software"] = String(content.softwareWarning);
   badge.replaceChildren(...parts);
 }
 

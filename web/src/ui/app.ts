@@ -324,13 +324,24 @@ export class ControlRoom {
     this.frameMs.reset();
     this.detectionTimes = [];
     this.lastTimestamp = 0;
-    // Both callers construct a new pipeline, so the frame clock starts again with
-    // it. Resetting it anywhere else would desynchronise the two.
+    // THE FRAME CLOCK AND THE PIPELINE RESTART TOGETHER, HERE, and nowhere
+    // else. The pipeline's tracker retires tracks by comparing `lastSeen`
+    // against the current frame index, so a pipeline carried across a clock
+    // reset holds tracks stamped hundreds of frames in the future: nothing
+    // reaps them, and the next crossing they are matched to is counted against
+    // a stale identity.
+    //
+    // This used to be a comment asserting that "both callers construct a new
+    // pipeline". They did not. `selectSource` calls this and then RETURNS on
+    // the error path -- a denied camera, an unloadable clip -- before it
+    // reaches `buildPipeline`, so pressing Start afterwards ran the old
+    // pipeline against a clock that had just gone back to zero. Making the two
+    // one statement is why that cannot come back.
     this.frameIndex = 0;
+    this.pipeline = this.buildPipeline();
   }
 
   private resetCounts(): void {
-    this.pipeline = this.buildPipeline();
     this.clearSession();
     this.renderPanels();
     this.renderFrame();

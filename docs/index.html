@@ -87,7 +87,7 @@
         // then follows the operating system, which is the right default anyway.
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-eCyya6Vm.js"></script>
+    <script type="module" crossorigin src="./assets/index-CnN4RbTk.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Bs9WFBfS.css">
   </head>
   <body>
@@ -387,10 +387,10 @@
             <h3>The engine's own tracker does not pay for itself on this clip</h3>
             <p class="prose-p">
               On clean footage its Kalman filter and Hungarian assignment score
-              <strong>below</strong> both simpler baselines, and under degradation it scores
-              lowest of the three at every level where they differ. It is also the most expensive
-              of the three by a wide margin. Sophistication that does not earn its cost is a
-              result, not something to bury.
+              <strong>below</strong> both simpler baselines — by one event, so read that one as
+              a tie — and under degradation it scores lowest of the three at every level where
+              they differ. It is also the most expensive of the three by a wide margin.
+              Sophistication that does not earn its cost is a result, not something to bury.
             </p>
             <div data-results="negative-tracker"></div>
           </div>
@@ -420,12 +420,13 @@
           </div>
 
           <div class="negative">
-            <h3>The shipped association floor is tuned on clean footage and does not survive leaving it</h3>
+            <h3>Nothing measures the shipped association floor as better than SORT's, except under detection dropout</h3>
             <p class="prose-p">
               Loosening the IoU floor recovers a large amount of accuracy the moment the input
-              degrades. It recovers nothing on undegraded footage, which is the row that stops
-              this being an argument for simply shipping the looser value — the tighter floor is
-              not worse, it is narrow.
+              degrades, and recovers nothing at all on undegraded footage, where the two floors
+              tie exactly. Nothing measured here makes the shipped floor better than the looser
+              one except under detection dropout, where loosening it costs a little — that single
+              result is the only argument these measurements make for keeping it.
             </p>
             <div data-results="negative-floor"></div>
           </div>

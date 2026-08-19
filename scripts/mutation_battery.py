@@ -92,6 +92,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from xml.etree import ElementTree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -637,23 +638,45 @@ CLAIMS: list[Entry] = [
         claim="the docs-numbers exemption guard is derived, not hand-listed",
         path="tests/test_docs_numbers.py",
         find=(
-            "    by_level = {(key[1],): value for key, value in published.items()}\n"
-            "    assert by_level == _expected_robustness_rows(), ("
+                "log.cell(\"robustness.json\", spread, \"4dp\"),\n"
+                "                log.cell(\"robustness.json\", predicted, \"int\"),"
         ),
         replace=(
-            "    by_level = {(key[1],): value for key, value in published.items()}\n"
-            "    assert sorted(by_level) == sorted(_expected_robustness_rows()), ("
+                "log.cell(\"robustness.json\", spread, \"4dp\"),"
         ),
         runner="pytest",
         test="tests/test_docs_numbers.py::test_no_numeric_pin_can_be_satisfied_by_a_coincidence",
-        expect=KNOWN_OPEN,
+        expect=MUST_FAIL,
         note=(
-            "weakens the degradation cell test to compare LEVELS only. The "
-            "exemption guard at tests/test_docs_numbers.py:1085-1113 claims its "
-            "exemptions are derived from the cell-pin builders; they are not -- "
-            "it re-lists the field shapes by hand, so the exemption survives the "
-            "coverage it names disappearing. Known open finding, routed to the "
-            "final review's fix wave (controller notes section 5); do not fix here"
+            "drops the engine-predicted column from the degradation cell-pin "
+            "builder. The exemption for "
+            "protocols/frame_rate/entries/5/methods/engine+gate/n_predicted has "
+            "to disappear with it -- README.md prints 0 there and already "
+            "prints a 1 elsewhere, so the plain pin survives a 0 -> 1 report "
+            "move on its own"
+        ),
+    ),
+    Entry(
+        claim="the docs-numbers exemption guard, control on derivation order",
+        path="tests/test_docs_numbers.py",
+        find=(
+            "    for subset in (\"full\", \"certain_only\"):\n"
+            "        _expected_counting_rows(subset, log)\n"
+            "    _expected_robustness_rows(log)"
+        ),
+        replace=(
+            "    _expected_robustness_rows(log)\n"
+            "    for subset in (\"certain_only\", \"full\"):\n"
+            "        _expected_counting_rows(subset, log)"
+        ),
+        runner="pytest",
+        test="tests/test_docs_numbers.py::test_no_numeric_pin_can_be_satisfied_by_a_coincidence",
+        expect=MUST_SURVIVE,
+        note=(
+            "axis: the ORDER in which the exemption set is derived, against the "
+            "must-fail above which changes its BREADTH. The set is a union, so "
+            "order cannot matter; a test that reddened here would be pinning "
+            "the shape of the builder rather than what it covers"
         ),
     ),
     Entry(
@@ -719,19 +742,35 @@ CLAIMS: list[Entry] = [
     Entry(
         claim="the robustness ablation's verdict prose",
         path="reports/robustness.json",
-        find="at 30 fps the loose floor scores slightly WORSE",
-        replace="at 30 fps the loose floor scores slightly BETTER",
+        find="loosening it changes crossing F1 by no less than +0.0000",
+        replace="loosening it changes crossing F1 by no less than -0.0100",
         runner="pytest",
         test=(
             "tests/test_bench_robustness.py::"
             "test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor"
         ),
-        expect=KNOWN_OPEN,
+        expect=MUST_FAIL,
         note=(
-            "the verdict string is pinned by nothing, and already publishes a "
-            "claim its own identity rows contradict (an exact tie at all four "
-            "protocols). Known open finding, controller notes section 5; do not "
-            "fix here"
+            "re-asserts the retired claim that the loose floor scores WORSE on "
+            "clean footage, over four identity rows that hold an exact tie"
+        ),
+    ),
+    Entry(
+        claim="the robustness ablation's verdict prose, control on wording",
+        path="reports/robustness.json",
+        find="This is a measurement of a shipped constant, not a proposal",
+        replace="This is a measurement of a shipped constant and not a proposal",
+        runner="pytest",
+        test=(
+            "tests/test_bench_robustness.py::"
+            "test_the_published_ablation_attributes_the_engine_collapse_to_its_iou_floor"
+        ),
+        expect=MUST_SURVIVE,
+        note=(
+            "axis: WORDING of a clause that states no measurement, against the "
+            "must-fail above which moves a derived FIGURE. The verdict is "
+            "pinned clause by clause against by_protocol; a test that reddened "
+            "here would be pinning the prose style instead"
         ),
     ),
     Entry(
@@ -964,16 +1003,56 @@ CLAIMS: list[Entry] = [
     Entry(
         claim="a string-keyed report lookup on the page must fail loudly, not print a dash",
         path="web/src/ui/results.ts",
-        find="  const engine = REPORTS.counting.methods.find((method) => method.method === \"engine+gate\");\n  return engine?.classConsistency ?? Number.NaN;",
-        replace="  const engine = REPORTS.counting.methods.find((method) => method.method === \"engine+gates\");\n  return engine?.classConsistency ?? Number.NaN;",
+        find=(
+            "  const found = REPORTS.counting.methods.find((item) => item.method === name);\n"
+            "  if (found === undefined) {"
+        ),
+        replace=(
+            "  const found = REPORTS.counting.methods.find((item) => item.method === name)\n"
+            "    ?? REPORTS.counting.methods[0];\n"
+            "  if (found === undefined) {"
+        ),
         runner="vitest",
         test="src/ui/results.test.ts::addressing the bake by name must fail loudly, not print a dash",
-        expect=KNOWN_OPEN,
+        expect=MUST_FAIL,
         note=(
-            "web/src/ui/results.ts:309-312 falls back to ?? Number.NaN, so a "
-            "missed key prints an em dash under a published claim instead of "
-            "throwing. Known open finding, controller notes section 5; do not "
-            "fix here"
+            "restores the silent fallback: a missed method key resolves to "
+            "some other method instead of throwing, and the figure printed "
+            "under the bolded 'below both simpler baselines' claim becomes a "
+            "different method's"
+        ),
+    ),
+    Entry(
+        claim="a string-keyed report lookup, control on the search's shape",
+        path="web/src/ui/results.ts",
+        find="  const found = REPORTS.counting.methods.find((item) => item.method === name);",
+        replace="  const found = [...REPORTS.counting.methods].find((item) => name === item.method);",
+        runner="vitest",
+        test="src/ui/results.test.ts::addressing the bake by name must fail loudly, not print a dash",
+        expect=MUST_SURVIVE,
+        note=(
+            "axis: how the method is SEARCHED FOR -- a copied array and a "
+            "flipped equality -- against the must-fail above, which changes "
+            "what happens when it is NOT FOUND. The test is about the failure "
+            "behaviour; if it reddened here it would be pinning an expression"
+        ),
+    ),
+    # -- the tracking report's other swept extreme -----------------------------
+    Entry(
+        claim="the tracking report's swept engine-fragmentation maximum",
+        path="reports/tracking.json",
+        find="\"engine_fragmentation_ratio_max\": 2.8823529411764706,",
+        replace="\"engine_fragmentation_ratio_max\": 3.8823529411764706,",
+        runner="pytest",
+        test=(
+            "tests/test_bench_tracking.py::"
+            "test_the_swept_summary_fields_are_recomputed_from_the_reports_own_series"
+        ),
+        expect=MUST_FAIL,
+        note=(
+            "the _max field on its own. The row above anchors across both "
+            "lines but only ever moved _min, so nothing mutated this field by "
+            "itself even though the test asserts it"
         ),
     ),
 ]
@@ -1025,33 +1104,69 @@ def _pytest_env(root: Path, pycache: str) -> dict[str, str]:
     return env
 
 
-def run_pytest(root: Path, node_id: str) -> tuple[str, str]:
-    """Return ("pass" | "fail", detail) for one pytest node id.
+def _pytest_run(root: Path, node_id: str) -> tuple[str, str, int]:
+    """Return ("pass" | "fail", detail, tests that actually PASSED).
 
     Any other outcome -- a node id that collects nothing, an internal error, a
     usage error -- is a HardError. "the test failed" and "the test never ran"
     must never be confused: the second would score a mutation as caught for the
     wrong reason.
     """
-    with tempfile.TemporaryDirectory() as pycache:
+    with tempfile.TemporaryDirectory() as pycache, tempfile.TemporaryDirectory() as tmp:
+        report = Path(tmp) / "junit.xml"
         proc = subprocess.run(
             [
                 sys.executable, "-m", "pytest", node_id,
                 "-q", "--no-header", "-p", "no:cacheprovider", "-x",
+                "--junit-xml", str(report),
             ],
             cwd=root, env=_pytest_env(root, pycache),
             capture_output=True, text=True,
         )
+        passed = _passed_from_junit(report)
     tail = (proc.stdout + proc.stderr).strip().splitlines()
     detail = tail[-1] if tail else ""
     if proc.returncode == 0:
-        return "pass", detail
+        return "pass", detail, passed
     if proc.returncode == 1:
-        return "fail", detail
+        return "fail", detail, passed
     raise HardError(
         f"pytest could not run {node_id!r} (exit {proc.returncode}). A named "
         f"test that does not exist would make every mutation look caught:\n"
         f"{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
+    )
+
+
+def run_pytest(root: Path, node_id: str) -> tuple[str, str]:
+    outcome, detail, _passed = _pytest_run(root, node_id)
+    return outcome, detail
+
+
+def _passed_from_junit(path: Path) -> int:
+    """How many tests actually PASSED, counted from a JUnit report.
+
+    Read from a machine-readable report rather than from pytest's summary
+    line, for the same reason `_vitest_counts` reads JSON: the text is not a
+    contract. This project's own `pyproject.toml` sets `addopts = "-q"`, so the
+    battery's explicit `-q` makes it `-qq` and pytest prints NO summary line at
+    all -- a count parsed out of the last line of output silently became zero
+    for every row, and the battery refused to run. The report has no such
+    dependence on how the caller was configured.
+
+    A `testcase` with no `failure`, `error` or `skipped` child is a pass; a
+    skipped one, including the `[NOTSET]` placeholder pytest synthesises for an
+    empty parameter set, is not.
+    """
+    if not path.is_file():
+        return 0
+    root = ElementTree.parse(path).getroot()
+    suites = [root] if root.tag == "testsuite" else list(root)
+    return sum(
+        1
+        for suite in suites
+        for case in suite
+        if case.tag == "testcase"
+        and not {child.tag for child in case} & {"failure", "error", "skipped"}
     )
 
 
@@ -1139,9 +1254,11 @@ def assert_named_test_is_real(root: Path, entry: Entry) -> str:
         )
     # `--collect-only -q` prints one "<file>: <count>" line per file on modern
     # pytest and one node id per test on older ones. Accept either, and demand a
-    # positive total: a node id that collects nothing exits 5, but a
-    # parametrised id that matches no parameter set can exit 0 having collected
-    # nothing at all.
+    # positive total. This count is a guard against the OUTPUT FORMAT drifting,
+    # not against an empty node id: every id that resolves to nothing exits 4 or
+    # 5 and is caught by the returncode check above. The id that gets through
+    # here is one pytest collects and never runs -- see the passed-count check
+    # below.
     collected = 0
     for line in proc.stdout.splitlines():
         counted = re.match(r"^\S+: (\d+)$", line.strip())
@@ -1155,23 +1272,58 @@ def assert_named_test_is_real(root: Path, entry: Entry) -> str:
             f"named test that never runs would score every mutation as caught "
             f"for the wrong reason:\n{proc.stdout[-1500:]}"
         )
-    outcome, detail = run_pytest(root, entry.test)
+    outcome, detail, passed = _pytest_run(root, entry.test)
     if outcome != "pass":
         raise HardError(
             f"{entry.claim}: {entry.test} is already failing on the clean tree "
             f"({detail}). Every result from this row would be meaningless"
         )
-    return f"{collected} collected"
+    # COLLECTED IS NOT RUN. A node id parametrised over an empty set collects a
+    # single `[NOTSET]` placeholder -- pytest prints "1 test collected" -- and
+    # then skips it, exiting 0. So does a node id under an unconditional
+    # `skipif`. Either way the row's named test can never go red, every
+    # mutation under it is scored "survived", and the battery reports a hole
+    # that is really an instrument fault. The count of tests that actually
+    # PASSED is the only thing that separates the two.
+    if passed == 0:
+        raise HardError(
+            f"{entry.claim}: {entry.test} exits 0 on the clean tree without a "
+            f"single test PASSING ({detail}). It is collected and never run -- "
+            f"skipped, or parametrised over an empty parameter set -- so it "
+            f"cannot go red, and every mutation scored against it would be "
+            f"meaningless"
+        )
+    return f"{collected} collected, {passed} passed"
 
 
 # --- the run ------------------------------------------------------------------
 
 
 def git_status(root: Path) -> str:
+    """The porcelain status of ``root``.
+
+    NOT a complete picture of the working tree: ``--porcelain`` without
+    ``--ignored`` says nothing about git-IGNORED paths. That limit is stated
+    wherever this function's result is used to refuse or to accuse, because a
+    reader who is not told it will read more into a clean status than it means.
+    ``--ignored`` is not the fix: this repository keeps its detection cache,
+    its sample clips, its models and its process notes under ignored paths, and
+    a battery that refused to start while they existed could never run at all.
+    """
     proc = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=root, capture_output=True, text=True, check=True,
+        cwd=root, capture_output=True, text=True,
     )
+    if proc.returncode != 0:
+        raise HardError(
+            f"--root {root} is not a usable git repository: `git status "
+            f"--porcelain` exited {proc.returncode} ({proc.stderr.strip() or 'no output'}). "
+            f"This battery edits tracked files in place and restores them from "
+            f"a byte copy; without git there is no way to show afterwards that "
+            f"the tree came back. Raised as a hard error rather than left to "
+            f"escape as a CalledProcessError, whose exit 1 would be "
+            f"indistinguishable from 'survivors found'"
+        )
     return proc.stdout.strip()
 
 
@@ -1317,7 +1469,14 @@ def main(argv: list[str] | None = None) -> int:
                 "REFUSING TO RUN: the tree is not clean.\n"
                 "This battery edits tracked files in place, and a crash "
                 "mid-run with uncommitted work present risks losing it. "
-                "Commit or stash first.\n\n" + dirty,
+                "Commit or stash first.\n"
+                "What this refusal does NOT cover: `git status --porcelain` "
+                "does not see git-IGNORED files, so uncommitted work under an "
+                "ignored path is invisible to it -- in this repository that is "
+                "private/, data/samples/, exports/, runs/, models/ and "
+                ".superpowers/. The post-run left-dirty check is blind to the "
+                "same set. No row in CLAIMS targets an ignored path; a --table "
+                "of your own could.\n\n" + dirty,
                 file=sys.stderr,
             )
             return 2
@@ -1345,7 +1504,8 @@ def main(argv: list[str] | None = None) -> int:
         left_dirty = git_status(root)
         if left_dirty:
             raise HardError(
-                "the battery left the tree dirty after restoring every file:\n"
+                "the battery left the tree dirty after restoring every file "
+                "(git-IGNORED paths excluded -- see git_status):\n"
                 + left_dirty
             )
     except HardError as exc:

@@ -9,8 +9,12 @@ def _tracked() -> list[str]:
     out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True)
     return [p for p in out.stdout.splitlines() if p]
 
+# .xml is here for docs/sitemap.xml, which is served from the published site
+# root and was outside BOTH content guards while every other file in docs/ was
+# inside them. Its content is clean today; that it was never scanned is the
+# defect.
 _TEXT_SUFFIXES = {".py", ".md", ".ts", ".js", ".html", ".css", ".yaml", ".yml",
-                  ".json", ".toml", ".txt", ".cfg", ".sh"}
+                  ".json", ".toml", ".txt", ".cfg", ".sh", ".xml"}
 
 def _looks_like_text(path: Path, sniff_bytes: int = 65536) -> bool:
     # Extension-less files (LICENSE, .gitignore, ...) have no suffix to check,
@@ -85,6 +89,10 @@ BANNED = [a + b for a, b in [
     ("re", "build"), ("re", "built"), ("re", "visit"), ("col", "lege"),
     ("course", "work"), ("origin", "ally"), ("clau", "de"), ("anthro", "pic"),
     ("co-auth", "ored"),
+    # Listed by the branch constraint and missing from this guard, so the
+    # constraint was unenforced rather than met. Zero occurrences across all
+    # tracked files when it was added: an unenforced rule, not a defect found.
+    ("up", "grade"),
 ]]
 
 # Inflections of the banned stems, because the constraint is about the WORD,
@@ -102,7 +110,14 @@ _INFLECTIONS = r"(?:s|es|ed|ing|d)?"
 
 
 def _banned_pattern(word: str) -> str:
-    return r"\b" + re.escape(word) + _INFLECTIONS + r"\b"
+    # An e-final stem drops its e before the -ing inflection. Adding a stem
+    # whose commonest inflection walks straight past the guard
+    # would be adding a rule that cannot fire, so the final e is optional. This
+    # only ever widens -- every spelling that matched before still matches --
+    # and the word-boundary anchor still keeps longer words out: the -able
+    # forms of both e-final stems are checked below.
+    stem = re.escape(word[:-1]) + "e?" if word.endswith("e") else re.escape(word)
+    return r"\b" + stem + _INFLECTIONS + r"\b"
 
 
 def test_no_banned_words_in_tracked_files():
@@ -156,6 +171,69 @@ def test_the_word_guard_catches_inflections_and_not_unrelated_words():
                 f"{token!r} is a false positive: it merely starts with a "
                 f"banned stem"
             )
+
+def test_the_word_guard_covers_every_stem_the_branch_constraint_lists():
+    """A discriminating pair on the stem this guard was missing.
+
+    The must-catch half: the constraint names the word, so every inflection of
+    it has to fire, including the -ing form that drops the stem's final e --
+    which the bare ``stem + _INFLECTIONS`` rule does not produce, and which is
+    the form a sentence would actually use.
+
+    The must-spare half varies a different axis: not whether a token is an
+    inflection but whether it is a DIFFERENT WORD that happens to start with
+    the stem. Both real spellings of the adjective are legitimate English and
+    neither may fire, or the widening above has turned into a substring match.
+    """
+    stem = [w for w in BANNED if w.startswith("up")]
+    assert len(stem) == 1, f"the stem this test is about is not in BANNED: {BANNED}"
+    word = stem[0]
+
+    for token in (word, word + "s", word + "d", word[:-1] + "ing"):
+        assert re.search(_banned_pattern(word), token), (
+            f"{token!r} is an inflection of a banned stem and slipped past"
+        )
+    for token in (word + "able", word[:-1] + "able"):
+        assert not re.search(_banned_pattern(word), token), (
+            f"{token!r} is a different word that merely starts with the stem"
+        )
+
+    # And the e-elision must not have loosened the stems that were already
+    # here: the four spared forms the pair above checks still do not fire.
+    for other in BANNED:
+        for suffix in ("able", "ation", "ial", "er"):
+            assert not re.search(_banned_pattern(other), other + suffix), (
+                f"{other + suffix!r} became a false positive"
+            )
+
+
+def test_the_published_sitemap_is_inside_the_content_guards():
+    """A discriminating pair on SCOPE, not on content.
+
+    docs/sitemap.xml is served from the published site root, and .xml was
+    absent from _TEXT_SUFFIXES, so it sat outside both the banned-word guard
+    and the absolute-path guard while every other file in docs/ sat inside
+    them. Its content is clean; being unscanned is the defect.
+
+    The must-still-exist half is the file itself: if the sitemap were simply
+    gone, an assertion that .xml is in the suffix set would be covering
+    nothing.
+    """
+    sitemap = ROOT / "docs" / "sitemap.xml"
+    assert sitemap.is_file(), (
+        "docs/sitemap.xml is gone, so this scope assertion covers nothing"
+    )
+    assert sitemap in _text_files(), (
+        "docs/sitemap.xml is tracked and published but is not collected for "
+        "scanning; check _TEXT_SUFFIXES and _is_skipped"
+    )
+    assert not _is_skipped("docs/sitemap.xml")
+    # The control, varying the FILE rather than the rule: a collector that had
+    # started returning everything would satisfy the assertion above.
+    assert not any(
+        path.suffix in _VENDORED_SUFFIXES for path in _text_files()
+    ), "the collector is no longer excluding the vendored binaries"
+
 
 def test_no_absolute_user_paths_in_tracked_files():
     needle = "/Us" + "ers/"

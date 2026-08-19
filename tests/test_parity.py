@@ -51,6 +51,32 @@ from trafficlens.core.homography import RoadPlane
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "web" / "src" / "fixtures" / "parity.json"
 REPORT = ROOT / "reports" / "parity.json"
+#: The clip the real-clip case is built from. Git-IGNORED, so a fresh clone does
+#: not have it -- see ``needs_sample``.
+SAMPLE = ROOT / "data" / "samples" / "motorway-a40.webm"
+
+#: The regeneration tests decode the real clip. Everything else in this module
+#: reads the COMMITTED fixture and is unaffected, which is why only two tests
+#: carry this mark.
+#:
+#: It is loud on purpose. The publish gate requires a footage-dependent test to
+#: skip cleanly rather than fail, and a skip that says only "no sample" would
+#: let a reader take the remaining green as covering the byte-for-byte claim. It
+#: does not: on a run that skips these two, NOTHING has checked that
+#: web/src/fixtures/parity.json and reports/parity.json are what the Python
+#: engine produces today, and the Vitest parity suite may be comparing the
+#: TypeScript engine against a stale answer.
+needs_sample = pytest.mark.skipif(
+    not SAMPLE.is_file(),
+    reason=(
+        "sample clip data/samples/motorway-a40.webm was not fetched (it is "
+        "git-ignored, so a fresh clone has no copy). The byte-for-byte "
+        "regeneration of web/src/fixtures/parity.json and reports/parity.json "
+        "is therefore UNVERIFIED in this run: nothing here has checked that "
+        "the committed parity artefacts are what the Python engine produces "
+        "today. Fetch the clip and re-run before trusting the parity claim."
+    ),
+)
 
 #: Every boundary kind the fixture is required to carry. The first three
 #: are the brief's mandate; the last two were added because this session
@@ -124,6 +150,7 @@ def _iou(a: list[float], b: list[float]) -> float:
 # -- regenerability -----------------------------------------------------------
 
 
+@needs_sample
 def test_the_committed_fixture_regenerates_byte_for_byte(tmp_path):
     """The fixture must be exactly what the Python engine produces today.
 
@@ -141,6 +168,7 @@ def test_the_committed_fixture_regenerates_byte_for_byte(tmp_path):
     )
 
 
+@needs_sample
 def test_the_committed_report_regenerates_byte_for_byte(tmp_path):
     generator = _load_generator()
     generator.write_fixtures(tmp_path)

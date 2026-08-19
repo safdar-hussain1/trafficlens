@@ -31,6 +31,7 @@ import {
   distinct,
   floorExplains,
   levelOf,
+  methodNamed,
   negativeFigures,
   protocolNamed,
   slotNames,
@@ -298,6 +299,24 @@ describe("addressing the bake by name must fail loudly, not print a dash", () =>
     expect(protocolNamed("detection_dropout").entries.length).toBeGreaterThan(1);
   });
 
+  test("a counting method the bake does not have throws instead of returning undefined", () => {
+    // The two lookups this covers sit under published claims: the class
+    // consistency figure, and the "engine, undegraded F1" row printed directly
+    // beneath the bolded sentence that the engine scores below both baselines.
+    // Both used `.find(...)?.field ?? Number.NaN`, so a renamed method would
+    // have printed an em dash under the claim rather than failing.
+    expect(() => methodNamed("engine+gates")).toThrow(/no counting method named/);
+    expect(() => methodNamed("")).toThrow(/no counting method named/);
+  });
+
+  test("and the counting methods the negatives name do resolve", () => {
+    // The control, varying the NAME rather than the mechanism: a resolver that
+    // threw on everything would satisfy the assertions above.
+    expect(methodNamed("engine+gate").f1).toBeGreaterThan(0);
+    expect(methodNamed("engine+gate").classConsistency).toBeGreaterThan(0);
+    expect(methodNamed("centroid+gate").f1).toBeGreaterThan(0);
+  });
+
   test("a protocol the ablation classifies neither way throws", () => {
     // `doesNotExplain.includes(name)` on a renamed protocol is false, and false
     // there prints "the floor explains it: yes" -- the opposite of the finding.
@@ -387,6 +406,34 @@ describe("addressing the bake by name must fail loudly, not print a dash", () =>
 describe("the slots and the sections are two halves of one document", () => {
   const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
   const inMarkup = [...html.matchAll(/data-results="([^"]+)"/g)].map((match) => match[1] ?? "");
+
+  test("the tracker negative carries the resolution it is inside", () => {
+    // A6. The gap is 0.9412 - 0.9143 = 0.0269 crossing F1: EXACTLY one false
+    // positive, and exactly the +/-0.027 (one event) resolution this page,
+    // README.md and DESIGN_CARD.md all publish. The design card therefore reads
+    // "-- by one event, so read that one as a tie". The page's own
+    // `resolutionNote()` prints the rule directly above, and the table under
+    // this very paragraph carries a `resolution` row; only the prose ignored
+    // both and asserted "below" in bold with nothing beside it.
+    const claim = html.slice(html.indexOf("<strong>below</strong>"));
+    // Collapsed: the sentence is wrapped across source lines, and a line break
+    // is not a change of claim.
+    const paragraph = claim.slice(0, claim.indexOf("</p>")).replace(/\s+/g, " ");
+    expect(paragraph).toContain("both simpler baselines");
+    expect(paragraph).toMatch(/by one event, so read that one as a tie/);
+
+    // And the figures really are one event apart, read off the bake rather
+    // than trusted: if the gap ever grows past the resolution, this sentence
+    // becomes the wrong one and has to be rewritten.
+    const engine = methodNamed("engine+gate").f1;
+    const baselines = REPORTS.counting.methods
+      .filter((method) => method.method.endsWith("+gate") && method.method !== "engine+gate")
+      .map((method) => method.f1);
+    expect(baselines.length).toBeGreaterThan(1);
+    const widest = Math.max(...baselines.map((f1) => f1 - engine));
+    expect(widest).toBeGreaterThan(0);
+    expect(widest).toBeLessThanOrEqual(REPORTS.counting.resolution.oneEventF1);
+  });
 
   test("every slot in the markup is filled, and every section has a slot", () => {
     // Nothing compared these two sets before. `mountResults` throws on a missing
