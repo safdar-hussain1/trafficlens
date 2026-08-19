@@ -1,11 +1,11 @@
 {
   "note": "Written by scripts/build_manifest.mjs during `npm run build`. Do not edit.",
   "inputs": {
-    "web/index.html": "35d1475b6ac4a4c96ef08e922592a2548f5ac4328e97fef761f95a3ee2c8a1a0",
+    "web/index.html": "6367347f062ab3eeb95cd1e619efb7991fb8c5d942ee2001873825acb7cdde60",
     "web/package.json": "75f64db3429755712f49166531d191a73b5323fb627d2db3dea79209fada3eb2",
     "web/public/.nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "web/public/ARCHITECTURE.md": "056f753d74a88f196325879bd5ef5b2dbb5b32541059ba7165ce79a753c5751c",
-    "web/public/CALIBRATION.md": "e32c361912694153a49435c204125e50002e454b5cca0959f6b13e3ccf3cadb4",
+    "web/public/CALIBRATION.md": "28c2f0b48f27518f13e0629cbcca9c2707fb02b4fd858d4aa4a2ad25d1a73ac3",
     "web/public/DESIGN_CARD.md": "90aab63bab5225f08c087d1189b07e368840462bcbb9258b2425b4da7af3c655",
     "web/public/clips/NOTICE.md": "567319011ac623d68d704c3cfdf1e7837a3deff3480f7ac3c1c63f5705b4dc39",
     "web/public/clips/motorway-a40.mp4": "187a32530cc72f2f1c186e69521b1e7ed3ee039bce20f46a52915ee6a0e820de",
@@ -74,7 +74,7 @@
   "outputs": {
     "docs/.nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "docs/ARCHITECTURE.md": "056f753d74a88f196325879bd5ef5b2dbb5b32541059ba7165ce79a753c5751c",
-    "docs/CALIBRATION.md": "e32c361912694153a49435c204125e50002e454b5cca0959f6b13e3ccf3cadb4",
+    "docs/CALIBRATION.md": "28c2f0b48f27518f13e0629cbcca9c2707fb02b4fd858d4aa4a2ad25d1a73ac3",
     "docs/DESIGN_CARD.md": "90aab63bab5225f08c087d1189b07e368840462bcbb9258b2425b4da7af3c655",
     "docs/assets/app-BeZKtQMx.js": "4ce1781a4c77b82cb20fb5c759fc0464b078397b6bbb98870b784d1330ae0e23",
     "docs/assets/archivo-latin-BEIDiHaE.woff2": "7150c0ec5ad356453013d11affec1fbab95de0dd2dcecb043b4f1cb7f87c4ba4",
@@ -95,7 +95,7 @@
     "docs/clips/motorway-a40.mp4": "187a32530cc72f2f1c186e69521b1e7ed3ee039bce20f46a52915ee6a0e820de",
     "docs/clips/street-aisle.mp4": "a84a4fdca55fc1c74724982252733dfd53b4163fcfb5bdfa8cdcf1297ba5537e",
     "docs/fonts/NOTICE.md": "2d6e045291aea8c5ed68440600fca4a151350991f02f882ca31bafcd8dfd00fe",
-    "docs/index.html": "689dbea2e23ef61456c9e3e3c2f360e16db4ca72d70405c5e64ec9e57e07be29",
+    "docs/index.html": "318927dc613edb51d00de800306173fe4826a1c95f7309e083c205aebd1ae827",
     "docs/models/MODEL_CARD.md": "c590a72f768c2d6970ca1ef3ec7c4d1e447fbfc112258c2963f8e34aa89b5707",
     "docs/models/yolo11n-480.onnx": "d7b9cad1308554bbd644931a73a2a4762f0a6c3e67038fb1c17b339e882f698a",
     "docs/ort-wasm-simd-threaded.asyncify.mjs": "7236653b8565da4046e459cd0e274123419a1d9f1f8f18fd36c28058346ca655",

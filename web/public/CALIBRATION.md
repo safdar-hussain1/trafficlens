@@ -2,8 +2,10 @@
 
 `configs/motorway.yaml` ships with **no calibration block**. The engine therefore
 returns nothing for every speed on `motorway-a40.webm`, and no absolute km/h figure
-from that clip appears anywhere in this project — not in the README, not on the site,
-not in a report.
+from that clip is published anywhere in this project — not in the README, not on the
+site, not in this document. `reports/parity.json` does carry one, from a matrix
+reconstructed there to hand two engines the same plane: an instrument, not a
+calibration.
 
 That is not an omission. It is the result of a survey that went looking for a scale
 anchor in this footage and did not find one, and this document publishes the survey

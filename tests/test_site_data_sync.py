@@ -551,6 +551,84 @@ def test_no_authored_or_published_surface_carries_that_speed(path):
     assert f"{forbidden:.2f}"[:6] not in text
 
 
+#: Every published surface that states the redaction in prose. ``docs/`` is the
+#: bake of ``web/`` and both are served, so both are pinned.
+REDACTION_PROSE = (
+    "web/index.html",
+    "docs/index.html",
+    "web/public/CALIBRATION.md",
+    "docs/CALIBRATION.md",
+    "README.md",
+)
+
+#: An absence claim whose scope reaches ``reports/``. The two guards above
+#: REQUIRE the figure to be in reports/parity.json -- the parity harness
+#: reconstructs the withdrawn survey as an instrument for comparing two engines
+#: against each other, not as a calibration, and the figure is the record of
+#: that comparison. So a published sentence denying it there is contradicted by
+#: this project's own data AND by its own guards, which is the one failure mode
+#: this project cannot ship. The prohibition is on the page, the four documents
+#: and the bake; it was never on the measurement record.
+_ABSENCE_REACHING_THE_REPORTS = re.compile(
+    r"\bno\b[^.]{0,80}?\bkm/h\b[^.]{0,200}?"
+    r"(?:\b(?:or|nor|and) in (?:a|the|any) reports?\b|\bnot in (?:a|the|any) reports?\b)",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize("path", REDACTION_PROSE)
+def test_no_published_surface_denies_the_figure_the_reports_actually_hold(path):
+    """The redaction must be stated as narrowly as it is enforced.
+
+    A discriminating pair again, and deliberately the mirror of the one above:
+    there the figure MUST be in reports/parity.json, so here no published
+    sentence may say it is not. The prose and the guard have to be able to be
+    true at the same time.
+    """
+    target = ROOT / path
+    assert target.exists(), f"{path} is missing; the guard must not pass by absence"
+    text = target.read_text(encoding="utf-8")
+
+    # The half that proves this guard is live: the fact the prose must not deny.
+    parity = _source("parity.json")
+    assert FORBIDDEN_SPEED_KEY in parity["realClip"], (
+        "the figure is no longer in reports/parity.json, so this guard is "
+        "passing over nothing; re-derive the redaction"
+    )
+
+    overreach = _ABSENCE_REACHING_THE_REPORTS.search(text)
+    assert overreach is None, (
+        f"{path} claims no km/h figure from the flagship clip is in the "
+        f"reports, but reports/parity.json carries realClip.{FORBIDDEN_SPEED_KEY} "
+        f"and the guards require it to: {overreach.group(0)!r}"
+    )
+
+
+def test_the_overreach_detector_fires_on_the_sentence_that_motivated_it():
+    """Otherwise the guard above is a regex that matches nothing, for ever."""
+    withdrawn = (
+        "the engine returns nothing for speed on that clip, and no km/h figure "
+        "derived from it appears anywhere on this page or in the reports behind it."
+    )
+    assert _ABSENCE_REACHING_THE_REPORTS.search(withdrawn) is not None
+    also_withdrawn = (
+        "no absolute km/h figure from that clip appears anywhere in this "
+        "project — not in the README, not on the site, not in a report."
+    )
+    assert _ABSENCE_REACHING_THE_REPORTS.search(also_withdrawn) is not None
+    # And the must-survive control: the narrow claim, which is what the page
+    # says now, and the README's framing of where the figure legitimately is.
+    assert _ABSENCE_REACHING_THE_REPORTS.search(
+        "no km/h figure derived from it appears anywhere on this page — the "
+        "parity record carries one, from a matrix reconstructed there to hand "
+        "two engines the same plane: an instrument, not a calibration."
+    ) is None
+    assert _ABSENCE_REACHING_THE_REPORTS.search(
+        "It is an instrument, not a calibration, and no km/h figure about this "
+        "clip is reported anywhere."
+    ) is None
+
+
 def test_a_redaction_whose_field_has_gone_refuses_the_bake(tmp_path):
     """A stale redaction must fail loudly rather than protect nothing."""
     reports = tmp_path / "reports"
