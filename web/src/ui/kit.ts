@@ -7,7 +7,7 @@
  * a section decides WHAT to show, this module decides how a figure is allowed to
  * look, and the two cannot drift into disagreeing about precision.
  *
- * The one exception is `resolutionNote`, which reads the baked label resolution.
+ * The one exception is the resolution pair, which reads the baked label figure.
  * It is here because it is a formatting decision -- how many digits a rate on
  * this page is entitled to -- and it must be the same sentence everywhere it
  * appears. */
@@ -125,13 +125,23 @@ export function scientific(value: number, digits = 3): string {
   return threeSigFigs(value);
 }
 
+/** The counting resolution as a bare figure, for a stat tile.
+ *
+ * A tile has room for a number and not for a sentence, so the resolution now
+ * appears on this page in two shapes. They are one function apart on purpose:
+ * a tile that formatted `oneEventF1` itself would be a second spelling of this
+ * page's precision policy, free to drift from the caption sitting under it. */
+export function countingResolution(): string {
+  return `± ${rate(REPORTS.counting.resolution.oneEventF1)}`;
+}
+
 /** The resolution note that must travel with every counting figure on this page.
  *
  * One added or removed event moves F1 by this much, so two methods closer
  * together than this differ by one event rather than in quality. Computed in the
  * bake from the label count and the engine's own operating point. */
 export function resolutionNote(): string {
-  return `± ${rate(REPORTS.counting.resolution.oneEventF1)} F1 (one event)`;
+  return `${countingResolution()} F1 (one event)`;
 }
 
 /** The same warning, in the fragmentation metric's own terms.
@@ -143,9 +153,13 @@ export function resolutionNote(): string {
  * ratio by exactly `1 / labels`. Every difference smaller than that is one
  * identity, not a tracker being better at keeping them; and a row-by-row
  * comparison of three trackers is precisely where a reader over-reads one. */
-export function fragmentationResolutionNote(): string {
+export function fragmentationResolution(): string {
   const denominator = REPORTS.tracking.metricDefinitions.fragmentationRatio.denominator;
-  return `± ${rate(1 / denominator)} fragmentation (one identity)`;
+  return `± ${rate(1 / denominator)}`;
+}
+
+export function fragmentationResolutionNote(): string {
+  return `${fragmentationResolution()} fragmentation (one identity)`;
 }
 
 // -- DOM helpers --------------------------------------------------------------
@@ -276,6 +290,57 @@ export function figures(items: readonly (readonly [string, string])[]): HTMLElem
     { class: "figure-run" },
     items.flatMap(([term, value]) => [h("dt", {}, [term]), h("dd", {}, [value])]),
   );
+}
+
+/** One stat tile: a label, a figure set large in mono, and an optional note.
+ *
+ * The same vocabulary the control room above uses for a live count -- an
+ * uppercase label over a big mono figure -- so a measurement taken last month
+ * and a measurement taken in this tab read as one instrument rather than as a
+ * dashboard and a report stapled together. `lead` marks the one figure a row is
+ * about; it is drawn as a rule in the structural accent, which is the only
+ * colour this page spends on anything that is not a chart mark. */
+export interface Tile {
+  readonly label: string;
+  readonly value: string;
+  readonly note?: string;
+  readonly lead?: boolean;
+}
+
+/** A row of stat tiles.
+ *
+ * A definition list, because that is what a label and its figure are, and
+ * because it keeps the pairing for a reader who never sees the grid. `"minor"`
+ * is for a row that qualifies the row above it rather than leading a section:
+ * same component, one step down in size, so the reading order is visible before
+ * a word is read. */
+export function tiles(items: readonly Tile[], variant: "" | "minor" = ""): HTMLElement {
+  return h(
+    "dl",
+    { class: variant === "minor" ? "tiles tiles--minor" : "tiles" },
+    items.map((item) =>
+      h("div", { class: item.lead === true ? "tile tile--lead" : "tile" }, [
+        h("dt", { class: "tile__label" }, [item.label]),
+        h("dd", { class: "tile__value" }, [
+          item.value,
+          ...(item.note === undefined ? [] : [h("span", { class: "tile__note" }, [item.note])]),
+        ]),
+      ]),
+    ),
+  );
+}
+
+/** The face of an honest-negative card: one figure, large, and what it is.
+ *
+ * The card's claim sentence is authored in the markup; this is the measurement
+ * under it. Everything else the finding rests on goes in the disclosure beside
+ * it rather than being cut -- the words are what this page shed, not the
+ * figures. */
+export function headlineFigure(term: string, value: string): HTMLElement {
+  return h("p", { class: "finding__figure" }, [
+    h("span", { class: "finding__value" }, [value]),
+    h("span", { class: "finding__label" }, [term]),
+  ]);
 }
 
 /** A figure and its caption. `<figure>` because that is what this is, and the

@@ -87,8 +87,8 @@
         // then follows the operating system, which is the right default anyway.
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-CnN4RbTk.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Bs9WFBfS.css">
+    <script type="module" crossorigin src="./assets/index-Cr0SpaAR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-C0nlI25P.css">
   </head>
   <body>
     <a class="skip-link" href="#control-room">Skip to the control room</a>
@@ -275,20 +275,10 @@
           <h2>How a crossing is decided</h2>
           <p class="lede">
             A gate is a directed line <strong>segment</strong>, not a line. Every frame, each
-            tracked vehicle's anchor — the bottom centre of its box, where it meets the road —
-            moves from one point to the next. If that step's path meets the gate segment, the
-            vehicle is counted once, labelled by the side it ended up on, and never counted
-            again however long it lingers.
+            tracked vehicle's anchor moves from one point to the next; if that step's path meets
+            the segment, the vehicle is counted once and never again.
           </p>
           <div data-results="rule-diagram"></div>
-          <p class="prose-p">
-            The common shortcut is a band: count a vehicle when it is within some pixels of the
-            line. The diagram shows both ways that fails. A fast vehicle steps clean across a
-            thin band between two frames and is never counted; a slow one sits inside the band
-            for a second and is counted on every frame it stays there. Crossing is a property of
-            the path, not of a distance, which is why the engine tests the path — and why the
-            band rule is measured below rather than argued about.
-          </p>
         </section>
 
         <hr class="leitlinie" />
@@ -296,11 +286,8 @@
         <section class="section" id="counting-accuracy">
           <h2>Counting accuracy</h2>
           <p class="lede">
-            One clip, one gate, and a ground-truth set built by hand from a slit-scan of the
-            gate line — the same geometry the diagram above draws. Every crossing is scored one
-            by one against a label rather than by comparing totals, because two totals can agree
-            while every event in them is wrong. The gate rule is measured against the two
-            shortcuts it replaces, and the engine's tracker against two simpler ones.
+            Every crossing scored one by one against a hand-labelled set, and the gate rule
+            measured against the two shortcuts it replaces.
           </p>
           <div data-results="counting"></div>
         </section>
@@ -310,11 +297,8 @@
         <section class="section" id="robustness">
           <h2>What happens when the input gets worse</h2>
           <p class="lede">
-            A figure measured on clean footage is a figure measured on the easy case. So the same
-            stream is degraded four ways — decimated, dropped, starved of detections, and
-            jittered — and every method is re-scored at every level. Two of these are exactly the
-            conditions a motion model exists for, which makes them the fair test of whether the
-            engine's tracker earns what it costs.
+            The same stream degraded four ways — decimated, dropped, starved of detections and
+            jittered — with every method re-scored at every level.
           </p>
           <div data-results="robustness"></div>
         </section>
@@ -324,11 +308,9 @@
         <section class="section" id="identity">
           <h2>What identities cost at the gate</h2>
           <p class="lede">
-            Crossing accuracy can hide an identity problem: a split track can still produce one
-            count. This benchmark scores the identities themselves, where they matter — in the
-            region around the gate — with the counting rule held fixed so a difference between
-            two rows belongs to the tracker. It also states plainly which identity claims it is
-            not entitled to make, because this clip has no frame-by-frame identity labels.
+            Crossing accuracy can hide an identity problem: a split track still produces one
+            count. This scores the identities themselves, around the gate, with the counting rule
+            held fixed.
           </p>
           <div data-results="tracking"></div>
         </section>
@@ -338,38 +320,23 @@
         <section class="section" id="speed">
           <h2>Speed, in two tiers</h2>
           <p class="lede">
-            Speed is where a traffic tool is easiest to fake and hardest to check, so it is
-            measured in two separate places. Against a synthetic scene the truth is exact and the
-            answer is a number. Against the real motorway clip the answer is that no absolute
-            speed can honestly be published at all — and that turned out to be one of the
-            strongest results here, because it comes with matched controls.
+            Against a synthetic scene the truth is exact and the answer is a number. Against the
+            real motorway clip the answer is that no absolute speed can honestly be published at
+            all.
           </p>
 
           <h3 class="tier">Tier one: exact truth, and what it excludes</h3>
-          <p class="prose-p">
-            A simulated overpass camera, vehicles driven at known speeds, and the road plane
-            fitted from surveyed correspondences with a holdout. This measures the tracking,
-            homography and speed chain. It does not measure the detector, and it does not measure
-            calibration error — the plane is fitted to the very camera that generated the boxes,
-            so the survey is perfect by construction. That makes these figures a ceiling, not a
-            prediction of field accuracy.
-          </p>
           <div data-results="speed-tier-1"></div>
 
           <hr class="leitlinie leitlinie--tight" />
 
           <h3 class="tier">Tier two: the real clip has no scale, and here is the proof</h3>
           <p class="prose-p">
-            Turning pixels per frame into km/h needs a known distance along the road. The
-            flagship clip was calibrated on an assumed lane-marking period, and measuring the
-            footage falsified the assumption's own justification. A dedicated survey then went
-            looking for an independent along-road anchor — guardrail posts, delineator posts,
-            median barrier joints, any repeating structure, a second marking line — and found
-            none that survives its own controls. So the calibration block was removed from the
-            shipped config, the engine returns nothing for speed on that clip, and no km/h figure
-            derived from it appears anywhere on this page — the parity record carries one, from a
-            matrix reconstructed there to hand two engines the same plane: an instrument, not a
-            calibration.
+            <strong>The flagship clip cannot be given a speed at all.</strong> A dedicated survey
+            found no along-road anchor that survives its own controls, so the engine returns
+            nothing for speed on it and no km/h figure derived from it appears anywhere on this
+            page. The parity record carries one, from a matrix reconstructed there to hand two
+            engines the same plane: an instrument, not a calibration.
           </p>
           <div data-results="speed-tier-2"></div>
         </section>
@@ -379,112 +346,92 @@
         <section class="section" id="negatives">
           <h2>What this does badly</h2>
           <p class="lede">
-            Nine findings that went against what the project expected. They are here because they
-            are the most useful content on the page: anyone can publish the number that came out
-            well, and a reader has no way to tell which numbers were not published. Each claim is
-            followed by the measurement it rests on.
+            Nine findings that went against what the project expected. Anyone can publish the
+            number that came out well, and a reader has no way to tell which numbers were not
+            published.
           </p>
 
-          <div class="negative">
-            <h3>The engine's own tracker does not pay for itself on this clip</h3>
-            <p class="prose-p">
-              On clean footage its Kalman filter and Hungarian assignment score
-              <strong>below</strong> both simpler baselines — by one event, so read that one as
-              a tie — and under degradation it scores lowest of the three at every level where
-              they differ. It is also the most expensive of the three by a wide margin.
-              Sophistication that does not earn its cost is a result, not something to bury.
-            </p>
-            <div data-results="negative-tracker"></div>
-          </div>
+          <div class="findings">
+            <div class="finding">
+              <h3>The engine's own tracker does not pay for itself on this clip</h3>
+              <p class="finding__claim">
+                On clean footage it scores <strong>below</strong> both simpler baselines — by one
+                event, so read that one as a tie — and lowest of the three at every degraded level
+                where they differ.
+              </p>
+              <div data-results="negative-tracker"></div>
+            </div>
 
-          <div class="negative">
-            <h3>It stops counting entirely at a low frame rate, and mild box jitter costs it real accuracy</h3>
-            <p class="prose-p">
-              At two frames a second it makes no predictions at all — not wrong ones, none. And
-              per-corner jitter of two pixels, which is a small multiple of the box noise measured
-              on this very clip, costs it real accuracy: most of the score survives, and what it
-              loses is many times the one-event resolution below which this page draws no
-              comparison between methods at all. The two figures are below; read them rather than
-              this sentence.
-            </p>
-            <div data-results="negative-collapse"></div>
-          </div>
+            <div class="finding">
+              <h3>It stops counting entirely at a low frame rate, and mild box jitter costs it real accuracy</h3>
+              <p class="finding__claim">
+                At two frames a second it makes no predictions at all. Per-corner jitter of two
+                pixels costs it many times the one-event resolution.
+              </p>
+              <div data-results="negative-collapse"></div>
+            </div>
 
-          <div class="negative">
-            <h3>The one degradation it handles gracefully has an undiagnosed cause</h3>
-            <p class="prose-p">
-              Detection dropout is what a motion model is for, and here the engine does degrade
-              smoothly with no cliff. But the association-floor ablation, which explains its other
-              collapses, explicitly does <strong>not</strong> explain what it loses here. That
-              makes this a second, separate fault, and it is <strong>undiagnosed</strong>.
-            </p>
-            <div data-results="negative-dropout"></div>
-          </div>
+            <div class="finding">
+              <h3>The one degradation it handles gracefully has an undiagnosed cause</h3>
+              <p class="finding__claim">
+                The association-floor ablation explains its other collapses and explicitly does
+                <strong>not</strong> explain this one. It is <strong>undiagnosed</strong>.
+              </p>
+              <div data-results="negative-dropout"></div>
+            </div>
 
-          <div class="negative">
-            <h3>Nothing measures the shipped association floor as better than SORT's, except under detection dropout</h3>
-            <p class="prose-p">
-              Loosening the IoU floor recovers a large amount of accuracy the moment the input
-              degrades, and recovers nothing at all on undegraded footage, where the two floors
-              tie exactly. Nothing measured here makes the shipped floor better than the looser
-              one except under detection dropout, where loosening it costs a little — that single
-              result is the only argument these measurements make for keeping it.
-            </p>
-            <div data-results="negative-floor"></div>
-          </div>
+            <div class="finding">
+              <h3>Nothing measures the shipped association floor as better than SORT's, except under detection dropout</h3>
+              <p class="finding__claim">
+                Loosening the floor recovers a large amount of accuracy the moment the input
+                degrades, and nothing at all on undegraded footage, where the two tie exactly.
+              </p>
+              <div data-results="negative-floor"></div>
+            </div>
 
-          <div class="negative">
-            <h3>Quantising the detector was measured and refused</h3>
-            <p class="prose-p">
-              An int8 dynamic quantisation of the browser model was compared against the float32
-              one before either shipped. It is a real saving on download and a real loss of
-              detections. In a counting product a missed detection is a missed count, so the trade
-              is refused at any download size and the page pays the full weight.
-            </p>
-            <div data-results="negative-int8"></div>
-          </div>
+            <div class="finding">
+              <h3>Quantising the detector was measured and refused</h3>
+              <p class="finding__claim">
+                A real saving on download and a real loss of detections. In a counting product a
+                missed detection is a missed count, so the page pays the full weight.
+              </p>
+              <div data-results="negative-int8"></div>
+            </div>
 
-          <div class="negative">
-            <h3>The band rule fails on crossing time, not crossing count</h3>
-            <p class="prose-p">
-              Its totals look almost right, which is exactly what makes it dangerous: it predicts
-              about as many crossings as there are and lands hardly any of them on the frame the
-              crossing happened. The per-frame rule fails the other way and over-counts wildly —
-              and that over-count is a lower bound, because a vehicle stopped on the gate emits
-              nothing at all where the failure would be worst.
-            </p>
-            <div data-results="negative-band"></div>
-          </div>
+            <div class="finding">
+              <h3>The band rule fails on crossing time, not crossing count</h3>
+              <p class="finding__claim">
+                Its totals look almost right and it lands hardly any of them on the frame the
+                crossing happened. The per-frame rule fails the other way and over-counts wildly.
+              </p>
+              <div data-results="negative-band"></div>
+            </div>
 
-          <div class="negative">
-            <h3>Every accuracy figure here is an upper bound</h3>
-            <p class="prose-p">
-              The evidence rests on one clip and one gate, and that gate was chosen for label
-              reliability rather than for the engine's convenience: its traffic is the largest,
-              best separated and least foreshortened in the frame. That is the easiest case for
-              association as well as for labelling. No second clip was labelled, and no claim is
-              made about one.
-            </p>
-            <div data-results="negative-one-clip"></div>
-          </div>
+            <div class="finding">
+              <h3>Every accuracy figure here is an upper bound</h3>
+              <p class="finding__claim">
+                One clip, one gate, and that gate was chosen for label reliability — the easiest
+                case for association as well as for labelling.
+              </p>
+              <div data-results="negative-one-clip"></div>
+            </div>
 
-          <div class="negative">
-            <h3>The flagship clip cannot be given a speed at all</h3>
-            <p class="prose-p">
-              A scale uncertainty this wide is not a speed figure. Publishing nothing is the
-              defensible product, so the engine returns nothing and the config ships with no
-              calibration block. The survey behind this is above, with its matched controls.
-            </p>
-            <div data-results="negative-scale"></div>
-          </div>
+            <div class="finding">
+              <h3>The flagship clip cannot be given a speed at all</h3>
+              <p class="finding__claim">
+                A scale uncertainty this wide is not a speed figure, so the engine returns nothing
+                and the config ships with no calibration block.
+              </p>
+              <div data-results="negative-scale"></div>
+            </div>
 
-          <div class="negative">
-            <h3>Four identity claims this project does not make</h3>
-            <p class="prose-p">
-              Rendered from the tracking benchmark's own record rather than paraphrased. The
-              reasons are in the identity section above.
-            </p>
-            <div data-results="negative-tracking"></div>
+            <div class="finding">
+              <h3>Four identity claims this project does not make</h3>
+              <p class="finding__claim">
+                Rendered from the tracking benchmark's own record rather than paraphrased.
+              </p>
+              <div data-results="negative-tracking"></div>
+            </div>
           </div>
         </section>
 
@@ -494,22 +441,11 @@
           <h2>How it is built</h2>
           <p class="lede">
             One core, written twice. The Python engine is where the measurement happens; the
-            TypeScript engine is what runs in this tab. They are not two implementations trusted
-            separately — every tunable both read is generated from one Python source, and
-            committed fixtures written by the Python engine are replayed through the browser
-            engine in your own browser at
-            <a href="?selftest=1">?selftest=1</a>, including cases sitting exactly on each
-            decision boundary.
+            TypeScript engine is what runs in this tab. Committed fixtures written by the Python
+            engine are replayed through the browser engine in your own browser at
+            <a href="?selftest=1">?selftest=1</a>.
           </p>
           <div data-results="architecture"></div>
-          <p class="prose-p">
-            The published site is a build output that lives in the repository, and a whole-tree
-            manifest records a digest of every file the build reads and every file it writes, so
-            a stale bundle serving next to a green test suite is a test failure rather than
-            something nobody notices. The three fonts are self-hosted as subsetted woff2 and no
-            chart library is fetched from anywhere: the claim that nothing leaves your device
-            after load has to be true of the page as well as of the detector.
-          </p>
         </section>
 
         <hr class="leitlinie" />

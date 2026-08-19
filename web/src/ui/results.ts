@@ -5,21 +5,23 @@
  *
  *   **The markup carries the argument. This module carries the figures.**
  *
- * Every heading, every lead paragraph and every claim sentence is authored in the
- * HTML, so the page reads with JavaScript off and a crawler sees prose rather
- * than an empty div. Every NUMBER is rendered here, from
- * `../generated/reports.ts`, which `scripts/build_site_data.py` bakes out of
- * `reports/*.json`. Nothing numeric is typed into either surface. That is not
- * tidiness: a figure typed beside a baked table reads as protected when it is
- * not, and this project has already caught four figures restated where they had
- * stopped being true.
+ * Every heading and every claim sentence is authored in the HTML, so the page
+ * reads with JavaScript off and a crawler sees prose rather than an empty div.
+ * Every NUMBER is rendered here, from `../generated/reports.ts`, which
+ * `scripts/build_site_data.py` bakes out of `reports/*.json`. Nothing numeric is
+ * typed into either surface. That is not tidiness: a figure typed beside a baked
+ * table reads as protected when it is not, and this project has already caught
+ * four figures restated where they had stopped being true.
  *
- * The other rule the sections are built to: **every figure carries its protocol
- * within one glance.** Each measured section opens with a protocol strip -- clip,
- * frames, rate, gate, label count, detector, match window, resolution -- in mono,
- * directly under the heading and above the numbers it governs. It costs a line
- * per section and it is the reason a reader can trust a rate on this page: the
- * conditions are not in a footnote, they are in the same eyeful.
+ * What changed, and why the shape of this module changed with it: the results
+ * half read as an article. It is a dashboard now. Each section leads with a row
+ * of stat tiles -- the same uppercase-label-over-big-mono-figure the control room
+ * uses for a live count -- then the chart or the compact table, then a
+ * single-line caption. The protocol strips, the report's own verdict prose, the
+ * level-by-level tables and the caveats have not been deleted; they are behind a
+ * disclosure per section. **The words moved. The numbers did not.** A visitor who
+ * never opens one still gets every headline figure, and one who is checking gets
+ * every condition it was measured under.
  *
  * Where a number could not be sourced from a report, it is absent rather than
  * approximated. The whole-loop backend timings are the case that came up: they
@@ -29,20 +31,22 @@
  *
  * Split three ways, and the seams are about who knows what: `kit.ts` decides how
  * a figure may look and knows nothing about any benchmark; `figures.ts` draws the
- * three static charts; `results-speed.ts` carries the two speed sections, the
- * longest pair and the pair most likely to be read line by line. What is left
- * here is the remaining sections and the mount. */
+ * three static charts; `results-speed.ts` carries the two speed sections. What is
+ * left here is the remaining sections and the mount. */
 
 import { REPORTS } from "../generated/reports";
 import { crossingRuleDiagram, robustnessPanel } from "./figures";
 import type { Panel, Series } from "./figures";
 import {
   count,
+  countingResolution,
   disclosure,
   figures,
   fixed,
+  fragmentationResolution,
   fragmentationResolutionNote,
   h,
+  headlineFigure,
   legend,
   list,
   megabytes,
@@ -55,9 +59,17 @@ import {
   scientific,
   signed,
   table,
+  tiles,
 } from "./kit";
 import type { Cell, Child } from "./kit";
-import { speedTierOneSection, speedTierTwoSection } from "./results-speed";
+import { speedTierOneSection, speedTierTwoSection, usableAnchorCount } from "./results-speed";
+
+// Re-exported because the scale survey's verdict table lives with the survey,
+// in `results-speed.ts`, while the negatives card that reports "none found" is
+// built here. One definition, reachable from both, and from the test that
+// asserts an unclassifiable verdict throws rather than being counted as another
+// failure.
+export { usableAnchorCount };
 
 // -- addressing the bake by name, which must not fail quietly -----------------
 //
@@ -89,8 +101,8 @@ export function protocolNamed(name: string) {
  *
  * The same rule as `protocolNamed`, one report across: `methods.find(...)` with
  * a `?? Number.NaN` fallback prints an em dash where a figure should be, and
- * both call sites sit directly under a sentence that asserts the figure. A
- * rename must be loud. */
+ * every call site sits directly under a sentence or a tile that asserts the
+ * figure. A rename must be loud. */
 export function methodNamed(name: string) {
   const found = REPORTS.counting.methods.find((item) => item.method === name);
   if (found === undefined) {
@@ -162,35 +174,6 @@ export function distinct(values: readonly string[]): number {
   return new Set(values).size;
 }
 
-/** Verdicts the scale survey uses, and which of them would license a scale.
- *
- * The negatives section states that none of the five anchor candidates was
- * usable. That was typed as `"0"`. It is computed here from the verdict the
- * survey itself recorded for each candidate, against a table that names the
- * verdict which WOULD count -- so the row is not a constant, and a verdict this
- * page has never seen refuses to be classified rather than being quietly counted
- * as another failure. */
-const ANCHOR_VERDICT_LICENSES_A_SCALE: Record<string, boolean> = {
-  ABSENT: false,
-  "PRESENT BUT NOT MEASURABLE": false,
-  "PRESENT AND MEASURABLE BUT UNUSABLE": false,
-  "PRESENT AND MEASURABLE AND CONTRADICTORY": false,
-  "PRESENT AND MEASURABLE AND CONSISTENT": true,
-};
-
-export function usableAnchorCount(candidates: readonly { readonly verdict: string }[]): number {
-  return candidates.filter((candidate) => {
-    const licensed = ANCHOR_VERDICT_LICENSES_A_SCALE[candidate.verdict];
-    if (licensed === undefined) {
-      throw new Error(
-        `the scale survey recorded a verdict this page cannot classify: ` +
-          `"${candidate.verdict}"`,
-      );
-    }
-    return licensed;
-  }).length;
-}
-
 const USABLE_ANCHORS = usableAnchorCount(REPORTS.speedReal.anchorCandidates);
 
 // -- the method and tracker vocabulary ----------------------------------------
@@ -215,10 +198,20 @@ function ruleOf(method: string): string {
   return method.split("+").slice(1).join("+");
 }
 
+/** One tracker's figure beside the two baselines', for a tile's note.
+ *
+ * The comparison is the point of every tile in the identity row, and a tile that
+ * printed the engine's number alone would be the same defect the prose had: a
+ * figure with nothing to read it against. */
+function against(values: readonly number[]): string {
+  return `baselines ${values.map((value) => rate(value)).join(" / ")}`;
+}
+
 // -- section: counting accuracy ----------------------------------------------
 
 function countingSection(): readonly Child[] {
   const data = REPORTS.counting;
+  const engine = methodNamed("engine+gate");
   const timing = new Map(data.timing.map((row) => [row.method, row.msPerFrame]));
 
   const rows = (rule: string) =>
@@ -239,19 +232,35 @@ function countingSection(): readonly Child[] {
       });
 
   return [
-    protocol([
-      data.clip,
-      `${count(data.frames)} frames`,
-      `${fixed(data.fps, 0)} fps`,
-      `gate ${data.gate.name}`,
-      `${data.labels.total} labelled crossings (${data.labels.certain} certain, ${data.labels.probable} probable)`,
-      `${data.detector.model} at conf ${data.detector.confidence}, ${data.detector.imgsz} px`,
-      `match window +${data.matchWindow.framesAfter}/−${data.matchWindow.framesBefore} frames`,
-      resolutionNote(),
+    tiles([
+      { label: "F1", value: rate(engine.f1), note: "engine, gate rule", lead: true },
+      { label: "precision", value: rate(engine.precision) },
+      { label: "recall", value: rate(engine.recall) },
+      {
+        label: "resolution",
+        value: countingResolution(),
+        note: "one event, on F1",
+      },
     ]),
+    tiles(
+      [
+        {
+          label: "F1, certain labels only",
+          value: rate(engine.certainOnlyF1),
+          note: "the same crossings, adjudicated strictly",
+        },
+        {
+          label: "labels adjudicated certain",
+          value: `${count(data.labels.certain)} of ${count(data.labels.total)}`,
+          note: `${count(data.labels.probable)} probable`,
+        },
+      ],
+      "minor",
+    ),
     table(
-      `Crossings scored one by one against ${data.labels.total} labels. ` +
-        `Two methods closer together than ${resolutionNote()} differ by one event, not in quality.`,
+      `${count(data.labels.total)} hand-labelled crossings, one clip and one gate, scored one ` +
+        `by one — upper bounds. Two methods closer together than ${resolutionNote()} differ by ` +
+        `one event, not in quality. Protocol in the README.`,
       [
         { head: "tracker" },
         { head: "predicted", numeric: true },
@@ -267,37 +276,38 @@ function countingSection(): readonly Child[] {
         rows: rows(rule),
       })),
     ),
-    figures([
-      [
-        "the engine's tracker, against a baseline tracker's CPU",
-        `${rate(data.engineCpuMultiple)}×`,
-      ],
-      ["one event, on precision", `± ${rate(data.resolution.oneEventPrecision)}`],
-      ["one event, on F1", `± ${rate(data.resolution.oneEventF1)}`],
-      ["class agreement on matched crossings, engine + gate", rate(engineClassConsistency())],
-    ]),
-    p(
-      "Timing covers the tracker and the counting rule only. Detections are read from a cache, " +
-        "so the detector's cost — by far the largest per-frame cost in a real session — is " +
-        "excluded, and is identical for every method by construction.",
-      "aside",
-    ),
-    disclosure("How the matching works, and where it is not optimal", [
-      p(data.matching.rule),
-      p(data.matching.limitation),
+    disclosure("Protocol, matching, the band sweep, and what these figures do not say", [
+      protocol([
+        data.clip,
+        `${count(data.frames)} frames`,
+        `${fixed(data.fps, 0)} fps`,
+        `gate ${data.gate.name}`,
+        `${data.labels.total} labelled crossings (${data.labels.certain} certain, ${data.labels.probable} probable)`,
+        `${data.detector.model} at conf ${data.detector.confidence}, ${data.detector.imgsz} px`,
+        `match window +${data.matchWindow.framesAfter}/−${data.matchWindow.framesBefore} frames`,
+        resolutionNote(),
+      ]),
       figures([
+        [
+          "the engine's tracker, against a baseline tracker's CPU",
+          `${rate(data.engineCpuMultiple)}×`,
+        ],
+        ["one event, on precision", `± ${rate(data.resolution.oneEventPrecision)}`],
+        ["class agreement on matched crossings, engine + gate", rate(engineClassConsistency())],
         [
           "greedy matching equalled maximum cardinality here",
           data.matching.greedyEqualsMaxCardinality ? "yes" : "no",
         ],
-        ["match window", `+${data.matchWindow.framesAfter}/−${data.matchWindow.framesBefore} frames`],
       ]),
+      p(
+        "Timing covers the tracker and the counting rule only. Detections are read from a " +
+          "cache, so the detector's cost is excluded and is identical for every method by " +
+          "construction.",
+        "aside",
+      ),
+      p(data.matching.rule),
+      p(data.matching.limitation),
       p(data.matchWindow.reason),
-    ]),
-    disclosure(`What these figures do not say (${data.caveats.length})`, [list(data.caveats)]),
-    disclosure("The band rule across every width tried", [
-      p(REPORTS.counting.bandSweep.note),
-      p(REPORTS.counting.bandSweep.entriesNote),
       table(
         `Band half-width swept with the ${REPORTS.counting.bandSweep.tracker} tracker. ` +
           `Median approach speed at the gate: ` +
@@ -319,6 +329,9 @@ function countingSection(): readonly Child[] {
           rate(entry.f1),
         ]),
       ),
+      p(REPORTS.counting.bandSweep.note),
+      p(REPORTS.counting.bandSweep.entriesNote),
+      list(data.caveats),
     ]),
   ];
 }
@@ -375,6 +388,27 @@ function engineLowestWhereTheyDiffer(): number {
   return separation.levelsWhereEngineLowest.filter((level) => differ.has(level)).length;
 }
 
+/** How many of the swept levels actually degrade the input.
+ *
+ * `engineLeadsAnyDegradedLevel` is scoped to the degraded levels, so a tile
+ * reporting it against `levelsMeasured` would state the finding over four rows
+ * the flag never considered. The identity levels are the undegraded ones -- one
+ * per protocol, the knob at its no-op setting -- so the difference is the
+ * denominator the flag was computed under. It throws rather than printing a
+ * nonsense count if the two ever stop being nested. */
+export function degradedLevelCount(): number {
+  const separation = REPORTS.robustness.trackerSeparation;
+  const degraded = separation.levelsMeasured - separation.identityLevels.length;
+  if (degraded <= 0) {
+    throw new Error(
+      `the sweep reports ${separation.levelsMeasured} levels and ` +
+        `${separation.identityLevels.length} of them undegraded, which leaves no ` +
+        `degraded level for the engine to lead at`,
+    );
+  }
+  return degraded;
+}
+
 function robustnessSection(): readonly Child[] {
   const data = REPORTS.robustness;
   const panels: Panel[] = data.protocols.map((item) => ({
@@ -393,46 +427,77 @@ function robustnessSection(): readonly Child[] {
   const separation = data.trackerSeparation;
 
   return [
-    protocol([
-      data.clip,
-      `${data.protocols.length} protocols`,
-      `${separation.levelsMeasured} levels`,
-      `seed ${data.seed}`,
-      "gate rule held fixed",
-      `${data.labels.total} labelled crossings`,
-      resolutionNote(),
-    ]),
     plate(
       grid,
-      "Crossing F1 against degradation level, one panel per protocol. Levels sit at equal " +
-        "spacing because they are ordered steps of the sweep, not points on a linear scale; " +
-        "each panel names its own knob underneath. The hairline is the undegraded score. Every " +
-        "value is in the level-by-level table further down.",
+      `Crossing F1 against degradation level, one panel per protocol; the hairline is the ` +
+        `undegraded score and each panel names its own knob. Levels sit at equal spacing ` +
+        `because they are ordered steps of a sweep, not points on a scale. Two trackers ` +
+        `closer together than ${resolutionNote()} differ by one event, not in quality.`,
       [legend(panels[0]?.series ?? [])],
     ),
-    p(separation.verdict, "verdict"),
-    figures([
-      ["levels measured", count(separation.levelsMeasured)],
-      ["levels where the three trackers differ", count(separation.levelsWhereTrackersDiffer.length)],
-      [
-        "of those, levels where the engine scores lowest",
-        `${count(engineLowestWhereTheyDiffer())} of ${count(separation.levelsWhereTrackersDiffer.length)}`,
-      ],
-      ["the engine leads at any degraded level", separation.engineLeadsAnyDegradedLevel ? "yes" : "no"],
-      ["widest F1 spread across trackers", rate(separation.maxF1Spread)],
-      [
-        "widest spread on undegraded footage",
-        `${rate(separation.maxIdentityF1Spread)} (${separation.identityLevels.length} identity levels)`,
-      ],
-      [
-        "the engine is lowest on every undegraded level",
-        separation.engineLowestOnEveryIdentityLevel ? "yes" : "no",
-      ],
+    tiles([
+      {
+        label: "engine lowest",
+        value: `${count(engineLowestWhereTheyDiffer())} of ${count(separation.levelsWhereTrackersDiffer.length)}`,
+        note: "levels where the three trackers differ at all",
+        lead: true,
+      },
+      {
+        label: "levels where it leads",
+        value: separation.engineLeadsAnyDegradedLevel ? "some" : "none",
+        // The flag is about the DEGRADED levels, so the denominator has to be
+        // too: `levelsMeasured` counts the undegraded rows in as well, and a
+        // tile that read "none of 21" would be claiming over four levels this
+        // measurement never looked at.
+        note: `of ${count(degradedLevelCount())} degraded levels`,
+      },
+      {
+        label: "widest F1 spread",
+        value: rate(separation.maxF1Spread),
+        note: "across the three trackers",
+      },
+      {
+        label: "undegraded spread",
+        value: rate(separation.maxIdentityF1Spread),
+        note: `over ${count(separation.identityLevels.length)} identity levels`,
+      },
     ]),
-    p(data.reduction.claim, "aside"),
     associationFloorBlock(),
-    jitterBlock(),
-    disclosure("Every level, every tracker", [
+    disclosure("Protocol, the jitter calibration, every level, and what these figures do not say", [
+      protocol([
+        data.clip,
+        `${data.protocols.length} protocols`,
+        `${separation.levelsMeasured} levels`,
+        `seed ${data.seed}`,
+        "gate rule held fixed",
+        `${data.labels.total} labelled crossings`,
+        resolutionNote(),
+      ]),
+      p(separation.verdict, "verdict"),
+      figures([
+        ["levels measured", count(separation.levelsMeasured)],
+        ["levels where the three trackers differ", count(separation.levelsWhereTrackersDiffer.length)],
+        [
+          "the engine is lowest on every undegraded level",
+          separation.engineLowestOnEveryIdentityLevel ? "yes" : "no",
+        ],
+        ["measured box-width residual, std", `${rate(data.jitter.medianBoxWidthPx)} px median box width`],
+        [
+          "per-corner sigma equivalent to the measurement",
+          `${rate(data.jitter.cornerSigmaEquivalentPx.minPx)} to ${rate(data.jitter.cornerSigmaEquivalentPx.maxPx)} px`,
+        ],
+        [
+          `the sweep's top level (σ = ${fixed(data.jitter.stressAtMaxSigma.sigmaPx, 0)} px), as a multiple of that`,
+          `${rate(data.jitter.stressAtMaxSigma.lowest)}× to ${rate(data.jitter.stressAtMaxSigma.highest)}×`,
+        ],
+        [
+          "σ = 2 px, as a multiple of that",
+          `${rate(data.jitter.stressAtSigma2.lowest)}× to ${rate(data.jitter.stressAtSigma2.highest)}×`,
+        ],
+      ]),
+      p(data.jitter.note, "aside"),
+      p(data.jitter.cornerSigmaEquivalentPx.method, "aside"),
+      p(data.reduction.claim, "aside"),
       ...data.protocols.map((item) =>
         table(
           `${PROTOCOL_TITLE[item.name] ?? item.name} — knob ${item.knob}, ` +
@@ -473,16 +538,33 @@ function robustnessSection(): readonly Child[] {
           ),
         ),
       ),
+      list(data.caveats),
     ]),
-    disclosure(`What these figures do not say (${data.caveats.length})`, [list(data.caveats)]),
   ];
+}
+
+/** The two-line takeaway that replaced the ablation's own paragraph.
+ *
+ * Every figure in it is counted from the bake rather than restated: the number
+ * of protocols the floor explains, the number it does not, and the shipped floor
+ * itself. The report's own verdict prose is still on the page, one disclosure
+ * down -- this is the reading, not a replacement for the record. */
+export function floorTakeaway(): string {
+  const floor = REPORTS.robustness.associationFloor;
+  const total = floor.explains.length + floor.doesNotExplain.length;
+  return (
+    `The floor explains ${count(floor.explains.length)} of ${count(total)} collapses. It does ` +
+    `not explain ${floor.doesNotExplain.join(", ")}, which is a second and undiagnosed fault. ` +
+    `On undegraded footage the two floors tie exactly; loosening it only costs F1 under ` +
+    `detection dropout, and that single result is the whole argument for keeping ` +
+    `${floor.shippedFloor}.`
+  );
 }
 
 function associationFloorBlock(): HTMLElement {
   const floor = REPORTS.robustness.associationFloor;
   return h("div", { class: "block" }, [
-    h("h3", {}, ["Is the association floor what does it?"]),
-    p(floor.heldFixed, "aside"),
+    h("h3", {}, ["Is it the association floor that does it?"]),
     table(
       `Loosening the engine's IoU association floor from ${floor.shippedFloor} to ` +
         `${floor.floors[1]}, changing nothing else. The comparison value is ` +
@@ -506,21 +588,16 @@ function associationFloorBlock(): HTMLElement {
         ];
       }),
     ),
-    p(floor.verdict, "verdict"),
-    figures([
-      ["shipped floor", String(floor.shippedFloor)],
-      ["gain that counts as an explanation", rate(floor.gainThreshold)],
-      ["protocols the floor explains", floor.explains.join(", ")],
-      ["protocols it does not explain", floor.doesNotExplain.join(", ")],
-    ]),
+    p(floorTakeaway(), "verdict"),
     disclosure("The ablation level by level, including the undegraded rows", [
-      p(
-        "The undegraded rows are the control on this ablation: where the input has not been " +
-          "degraded at all, loosening the floor recovers nothing — the two tie exactly. What " +
-          "stops this being a straight argument for the looser floor is the detection-dropout " +
-          "rows above, where loosening it costs F1.",
-        "aside",
-      ),
+      figures([
+        ["shipped floor", String(floor.shippedFloor)],
+        ["gain that counts as an explanation", rate(floor.gainThreshold)],
+        ["protocols the floor explains", floor.explains.join(", ")],
+        ["protocols it does not explain", floor.doesNotExplain.join(", ")],
+      ]),
+      p(floor.heldFixed, "aside"),
+      p(floor.verdict, "verdict"),
       ...floor.byProtocol.map((item) =>
         table(
           `${PROTOCOL_TITLE[item.name] ?? item.name} — crossing F1 at the shipped floor ` +
@@ -553,53 +630,56 @@ function associationFloorBlock(): HTMLElement {
   ]);
 }
 
-function jitterBlock(): HTMLElement {
-  const jitter = REPORTS.robustness.jitter;
-  return h("div", { class: "block" }, [
-    h("h3", {}, ["How much jitter is 2 px of jitter?"]),
-    p(jitter.note, "aside"),
-    figures([
-      ["measured box-width residual, std", `${rate(jitter.medianBoxWidthPx)} px median box width`],
-      [
-        "per-corner sigma equivalent to the measurement",
-        `${rate(jitter.cornerSigmaEquivalentPx.minPx)} to ${rate(jitter.cornerSigmaEquivalentPx.maxPx)} px`,
-      ],
-      [
-        `the sweep's top level (σ = ${fixed(jitter.stressAtMaxSigma.sigmaPx, 0)} px), as a multiple of that`,
-        `${rate(jitter.stressAtMaxSigma.lowest)}× to ${rate(jitter.stressAtMaxSigma.highest)}×`,
-      ],
-      [
-        "σ = 2 px, as a multiple of that",
-        `${rate(jitter.stressAtSigma2.lowest)}× to ${rate(jitter.stressAtSigma2.highest)}×`,
-      ],
-    ]),
-    p(jitter.cornerSigmaEquivalentPx.method, "aside"),
-  ]);
-}
-
 // -- section: identity at the gate -------------------------------------------
+
+/** One tracker's undegraded identity row, addressed by name.
+ *
+ * The same rule as `methodNamed`, one report across, and it matters more here
+ * than it did in the prose it replaced: the identity tiles print the engine's
+ * fragmentation and class agreement AS the section's headline figures, with the
+ * baselines beside them. `find(...)?.fragmentationRatio ?? NaN` would print an em
+ * dash in a tile the size of a hero number. A rename must be loud. */
+export function cleanTracker(name: string) {
+  const found = REPORTS.tracking.clean.trackers.find((row) => row.tracker === name);
+  if (found === undefined) {
+    throw new Error(
+      `the identity benchmark's undegraded row has no tracker named "${name}"; it ` +
+        `carries ${REPORTS.tracking.clean.trackers.map((row) => row.tracker).join(", ")}`,
+    );
+  }
+  return found;
+}
 
 function trackingSection(): readonly Child[] {
   const data = REPORTS.tracking;
+  const clean = data.clean.trackers;
+  const engine = cleanTracker("engine");
+  const baselines = clean.filter((row) => row.tracker !== "engine");
+
   return [
-    protocol([
-      data.clip,
-      `${count(data.frames)} frames`,
-      `${data.labels.total} labelled vehicles`,
-      `gate region ± ${fixed(data.gateRegion.halfWidthPx, 0)} px`,
-      `${data.countingRule} rule held fixed`,
-      `${data.separation.levelsMeasured} levels`,
-      // The metric here is fragmentation rather than F1, so the counting note
-      // would be the wrong units -- but the hazard is the same one, and this is
-      // the section that invites it most: seventeen labels means a one-identity
-      // difference is the smallest step the instrument can take, and the tables
-      // below put three trackers side by side row after row.
-      fragmentationResolutionNote(),
+    tiles([
+      {
+        label: "fragmentation",
+        value: rate(engine.fragmentationRatio),
+        note: `engine — ${against(baselines.map((row) => row.fragmentationRatio))}`,
+        lead: true,
+      },
+      {
+        label: "class agreement",
+        value: rate(engine.classConsistency),
+        note: `engine — ${against(baselines.map((row) => row.classConsistency))}`,
+      },
+      {
+        label: "resolution",
+        value: fragmentationResolution(),
+        note: "one identity, on fragmentation",
+      },
     ]),
     table(
-      `Undegraded footage, ${data.clean.levelLabel}. A fragmentation ratio of 1.0 is one ` +
-        `predicted identity per labelled vehicle; identity deviation is the multiplicative ` +
-        `fold from 1.0, so losing identities is not flattered against splitting them.`,
+      `The ${data.clean.levelLabel} level, with the ${data.countingRule} rule held ` +
+        `fixed. A fragmentation ratio of 1.0 is one predicted identity per labelled vehicle; ` +
+        `identity deviation is the multiplicative fold from 1.0, so losing identities is not ` +
+        `flattered against splitting them. ${fragmentationResolutionNote()}.`,
       [
         { head: "tracker" },
         { head: "identities at the gate", numeric: true },
@@ -609,7 +689,7 @@ function trackingSection(): readonly Child[] {
         { head: "crossing-id ratio", numeric: true },
         { head: "class agreement", numeric: true },
       ],
-      data.clean.trackers.map((row): readonly Cell[] => {
+      clean.map((row): readonly Cell[] => {
         const emphasis = row.tracker === "engine";
         return [
           { text: TRACKER_LABEL[row.tracker] ?? row.tracker, emphasis },
@@ -622,41 +702,33 @@ function trackingSection(): readonly Child[] {
         ];
       }),
     ),
-    p(data.cleanDegeneracy.verdict, "verdict"),
-    p(data.separation.verdict, "verdict"),
-    p(data.agreement.verdict, "verdict"),
-    figures([
-      ["fragmentation spread on clean footage", rate(data.cleanDegeneracy.spread)],
-      ["widest fragmentation spread under degradation", rate(data.separation.maxSpread)],
-      ["levels where the trackers differ", count(data.separation.levelsWhereTrackersDiffer.length)],
-      [
-        "levels where the engine is furthest from one identity per vehicle",
-        count(data.separation.levelsWhereEngineFurthest.length),
-      ],
-      [
-        "levels where this metric and crossing F1 agree",
-        `${count(data.agreement.levelsWhereTheyAgree.length)} of ${count(data.agreement.levelsWhereF1Separates.length)}`,
-      ],
-      ["levels where they disagree", data.agreement.levelsWhereTheyDisagree.join(", ")],
-    ]),
-    h("div", { class: "block" }, [
-      h("h3", {}, ["What is not claimed here"]),
-      p(
-        "Rendered from the benchmark's own record, word for word. A benchmark that says what it " +
-          "cannot measure is worth more than one that does not.",
-        "aside",
-      ),
-      h(
-        "dl",
-        { class: "claims" },
-        data.claimsNotMade.flatMap((item) => [
-          h("dt", {}, [item.claim]),
-          h("dd", {}, [item.reason]),
-        ]),
-      ),
-    ]),
-    disclosure("What the metrics mean, exactly", [
+    claimsNotMadeBlock(),
+    disclosure("Protocol, the metric definitions, every level, and what these figures do not say", [
+      protocol([
+        data.clip,
+        `${count(data.frames)} frames`,
+        `${data.labels.total} labelled vehicles`,
+        `gate region ± ${fixed(data.gateRegion.halfWidthPx, 0)} px`,
+        `${data.countingRule} rule held fixed`,
+        `${data.separation.levelsMeasured} levels`,
+        fragmentationResolutionNote(),
+      ]),
+      p(data.cleanDegeneracy.verdict, "verdict"),
+      p(data.separation.verdict, "verdict"),
+      p(data.agreement.verdict, "verdict"),
       figures([
+        ["fragmentation spread on clean footage", rate(data.cleanDegeneracy.spread)],
+        ["widest fragmentation spread under degradation", rate(data.separation.maxSpread)],
+        ["levels where the trackers differ", count(data.separation.levelsWhereTrackersDiffer.length)],
+        [
+          "levels where the engine is furthest from one identity per vehicle",
+          count(data.separation.levelsWhereEngineFurthest.length),
+        ],
+        [
+          "levels where this metric and crossing F1 agree",
+          `${count(data.agreement.levelsWhereTheyAgree.length)} of ${count(data.agreement.levelsWhereF1Separates.length)}`,
+        ],
+        ["levels where they disagree", data.agreement.levelsWhereTheyDisagree.join(", ")],
         ["fragmentation denominator", count(data.metricDefinitions.fragmentationRatio.denominator)],
         ["gate region half-width", `${fixed(data.gateRegion.halfWidthPx, 0)} px`],
         ["half-widths swept", data.gateRegionSweep.halfWidthsPx.map((value) => fixed(value, 0)).join(", ")],
@@ -672,8 +744,6 @@ function trackingSection(): readonly Child[] {
       p(data.countingRuleNote),
       p(data.separation.furthestTieRule),
       p(data.agreement.criterion),
-    ]),
-    disclosure("Every level, every tracker", [
       ...data.protocols.map((item) =>
         table(
           `${PROTOCOL_TITLE[item.name] ?? item.name} — knob ${item.knob}.`,
@@ -696,15 +766,36 @@ function trackingSection(): readonly Child[] {
           ),
         ),
       ),
+      list(data.caveats),
     ]),
-    disclosure(`What these figures do not say (${data.caveats.length})`, [list(data.caveats)]),
   ];
+}
+
+/** The refusals, headline visible and reason on expand.
+ *
+ * One disclosure per claim rather than one holding all four: the claim itself is
+ * the thing that must be read without asking, and burying four headlines behind
+ * a single summary would hide the refusals rather than compress them. Word for
+ * word from the benchmark's own record -- paraphrasing a refusal is how a refusal
+ * softens. */
+function claimsNotMadeBlock(): HTMLElement {
+  return h("div", { class: "block" }, [
+    h("h3", {}, ["What is not claimed"]),
+    h(
+      "div",
+      { class: "claims" },
+      REPORTS.tracking.claimsNotMade.map((item) => disclosure(item.claim, [p(item.reason)])),
+    ),
+  ]);
 }
 
 // -- section: the honest negatives -------------------------------------------
 //
-// The claim sentences are authored in the markup. What lands here is the
-// measurement behind each one, keyed by the slot it fills.
+// The claim sentence is authored in the markup, one line per card. What lands
+// here is the measurement behind it: the FIRST pair of each list is the card's
+// headline figure, drawn large; the rest sit in the card's own disclosure. The
+// order is therefore load-bearing, which is why `mountResults` reads it by
+// position and `results.test.ts` reads the rows it pins by their term.
 
 export function negativeFigures(): Record<string, readonly (readonly [string, string])[]> {
   const counting = REPORTS.counting;
@@ -723,7 +814,7 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
 
   return {
     "negative-tracker": [
-      ["engine, undegraded F1", rate(engineGate.f1)],
+      ["engine F1, undegraded", rate(engineGate.f1)],
       [
         "the two baselines, undegraded",
         counting.methods
@@ -756,6 +847,8 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
       ],
     ],
     "negative-dropout": [
+      ["F1 the looser association floor recovers here", rate(DROPOUT_FLOOR_GAIN)],
+      ["so the floor explains it", DROPOUT_EXPLAINED ? "yes" : "no"],
       [
         `engine F1 at ${dropoutFirstEntry.levelLabel}`,
         rate(dropoutFirstEntry.engine.f1),
@@ -768,16 +861,12 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
         "every step in between",
         DROPOUT.entries.map((entry) => rate(entry.engine.f1)).join(" → "),
       ],
-      ["F1 the looser association floor recovers here", rate(DROPOUT_FLOOR_GAIN)],
-      ["so the floor explains it", DROPOUT_EXPLAINED ? "yes" : "no"],
     ],
     "negative-floor": [
+      ["most F1 the looser floor recovers", rate(robustness.associationFloor.largestGain.gain)],
+      ["where it recovers it", robustness.associationFloor.largestGain.levelLabel],
       ["shipped association floor", String(robustness.associationFloor.shippedFloor)],
       ["floor compared against", String(robustness.associationFloor.floors[1])],
-      [
-        "most F1 the looser floor recovers",
-        `${rate(robustness.associationFloor.largestGain.gain)} at ${robustness.associationFloor.largestGain.levelLabel}`,
-      ],
       [
         "what it recovers on undegraded footage",
         identityRowGains()
@@ -788,8 +877,8 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
       ["and does not", robustness.associationFloor.doesNotExplain.join(", ")],
     ],
     "negative-int8": [
-      ["download saved", megabytes(model.bytesSaved)],
       ["detections lost", percent(model.detectionsLostFraction)],
+      ["download saved", megabytes(model.bytesSaved)],
       [
         "boxes that survive are placed well",
         `mean IoU ${rate(model.meanIouOfMatched.int8 ?? Number.NaN)}`,
@@ -800,6 +889,7 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
       ],
     ],
     "negative-band": [
+      ["band rule F1, engine tracker", rate(methodNamed("engine+band").f1)],
       [
         // The label count comes from the bake even inside a term string. It was
         // typed here as `17` two lines from the baked value it restates, which is
@@ -823,9 +913,9 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
       // names its own clip and the counting benchmark names its own gate, so a
       // second clip or a second gate moves these rows by itself instead of
       // leaving the page asserting one.
+      ["labelled crossings, on one clip and one gate", count(counting.labels.total)],
       ["clips labelled", count(distinct([counting.clip, robustness.clip, REPORTS.tracking.clip]))],
       ["gates labelled", count(distinct([counting.gate.name]))],
-      ["labelled crossings", count(counting.labels.total)],
       [
         "of which adjudicated as certain",
         `${count(counting.labels.certain)}; ${count(counting.labels.probable)} probable`,
@@ -833,32 +923,19 @@ export function negativeFigures(): Record<string, readonly (readonly [string, st
       ["so every accuracy figure here is an", "UPPER bound"],
     ],
     "negative-scale": [
+      [
+        "the honest bracket, propagated to every speed",
+        `${signed(speedReal.bracket.bandPercent[0] ?? 0)} % to ${signed(speedReal.bracket.bandPercent[1] ?? 0)} %`,
+      ],
       ["anchor candidates searched for", count(speedReal.anchorCandidates.length)],
       ["usable ones found", count(USABLE_ANCHORS)],
       [
         "honest bracket on the along-road scale",
         `${fixed(speedReal.bracket.lowerM, 1)} m to ${fixed(speedReal.bracket.upperM, 1)} m`,
       ],
-      [
-        "which propagates to speed as",
-        `${signed(speedReal.bracket.bandPercent[0] ?? 0)} % to ${signed(speedReal.bracket.bandPercent[1] ?? 0)} %`,
-      ],
       ["km/h published from this clip", speedReal.absoluteSpeedPublished ? "yes" : "none"],
     ],
   };
-}
-
-/** The four identity claims, verbatim, as a list rather than a figure run.
- *
- * They are sentences, and a figure run is for a term and its number: putting a
- * sentence in the value column squeezes the term column to nothing and breaks it
- * one letter per line. Kept word for word from the benchmark's own record --
- * paraphrasing a refusal is how a refusal softens. */
-function claimsNotMadeList(): HTMLElement {
-  return list(
-    REPORTS.tracking.claimsNotMade.map((item) => item.claim),
-    "plain-list",
-  );
 }
 
 /** What the looser association floor recovers at each protocol's IDENTITY level.
@@ -884,13 +961,6 @@ function architectureSection(): readonly Child[] {
   const model = REPORTS.model;
 
   return [
-    protocol([
-      "one core, two implementations",
-      `${parity.caseCount} committed parity cases`,
-      `${parity.straddleKinds.length} boundary kinds`,
-      `speeds agree to ${scientific(parity.speedToleranceKmh)} km/h`,
-      `crossing decisions agree exactly`,
-    ]),
     table(
       "The cross-surface fixtures. Written by the Python engine, replayed through the " +
         "browser engine in the visitor's own tab at ?selftest=1, so a green verdict is about " +
@@ -909,40 +979,45 @@ function architectureSection(): readonly Child[] {
         ["crossings emitted", count(parity.realClip.events)],
       ],
     ),
-    h("div", { class: "block" }, [
-      h("h3", {}, ["The detector the page downloads, and the one it refused"]),
-      table(
-        `Both graphs decoded through identical letterboxing and class-wise NMS at ` +
-          `confidence ${model.confidence} and IoU ${model.nmsIou}, over ${model.sampledFrames} ` +
-          `frames sampled every ${model.sampleStride}th from the motorway clip.`,
+    table(
+      `The detector the page downloads, and the one it refused. Both graphs decoded through ` +
+        `identical letterboxing and class-wise NMS at confidence ${model.confidence} and IoU ` +
+        `${model.nmsIou}, over ${model.sampledFrames} frames sampled every ` +
+        `${model.sampleStride}th from the motorway clip.`,
+      [
+        { head: "" },
+        { head: "float32, shipped", numeric: true },
+        { head: "int8 dynamic, refused", numeric: true },
+      ],
+      [
         [
-          { head: "" },
-          { head: "float32, shipped", numeric: true },
-          { head: "int8 dynamic, refused", numeric: true },
+          "file size",
+          count(model.fileSizeBytes.float32 ?? Number.NaN),
+          count(model.fileSizeBytes.int8 ?? Number.NaN),
         ],
         [
-          [
-            "file size",
-            count(model.fileSizeBytes.float32 ?? Number.NaN),
-            count(model.fileSizeBytes.int8 ?? Number.NaN),
-          ],
-          [
-            "detections over the sample",
-            count(model.detections.float32 ?? Number.NaN),
-            count(model.detections.int8 ?? Number.NaN),
-          ],
-          ["recall against float32", "—", rate(model.recallAgainstFloat32.int8 ?? Number.NaN)],
-          ["mean IoU of matched boxes", "—", rate(model.meanIouOfMatched.int8 ?? Number.NaN)],
+          "detections over the sample",
+          count(model.detections.float32 ?? Number.NaN),
+          count(model.detections.int8 ?? Number.NaN),
         ],
-      ),
+        ["recall against float32", "—", rate(model.recallAgainstFloat32.int8 ?? Number.NaN)],
+        ["mean IoU of matched boxes", "—", rate(model.meanIouOfMatched.int8 ?? Number.NaN)],
+      ],
+    ),
+    disclosure("Protocol, and the detector noise the robustness sweep is calibrated against", [
+      protocol([
+        "one core, two implementations",
+        `${parity.caseCount} committed parity cases`,
+        `${parity.straddleKinds.length} boundary kinds`,
+        `speeds agree to ${scientific(parity.speedToleranceKmh)} km/h`,
+        `crossing decisions agree exactly`,
+      ]),
       p(
         `int8 saves ${megabytes(model.bytesSaved)} of download and loses ` +
           `${percent(model.detectionsLostFraction)} of detections. In a counting product a ` +
           `missed detection is a missed count, so the trade is refused at any download size.`,
         "verdict",
       ),
-    ]),
-    disclosure("The detector noise the robustness sweep is calibrated against", [
       p(noise.caveat, "aside"),
       p(noise.association, "aside"),
       table(
@@ -1084,10 +1159,10 @@ const SECTIONS: Record<string, () => readonly Child[]> = {
   "rule-diagram": () => [
     plate(
       crossingRuleDiagram(),
-      "One gate segment and four vehicle paths. A count fires where the step between two frame " +
-        "samples meets the segment — which is why a path that clears the band in one step is " +
-        "still counted, a path that sits inside the band without changing side is not, and a " +
-        "path crossing the gate's line past its end never is.",
+      "One gate segment and four vehicle paths: a count fires where the step between two frame " +
+        "samples meets the segment, which is why a path that clears the band in one step is " +
+        "still counted, one that sits inside the band is not, and one crossing the gate's line " +
+        "past its end never is.",
     ),
   ],
   counting: countingSection,
@@ -1122,6 +1197,25 @@ function slot(name: string): HTMLElement {
   return found;
 }
 
+/** One honest-negative card's body: the headline figure, then the rest.
+ *
+ * The first pair is the card's face. The remainder is not cut -- it is the
+ * evidence the claim rests on -- so it sits in a disclosure on the same card,
+ * counted in the summary so a reader knows how much is there before opening it. */
+function findingBody(items: readonly (readonly [string, string])[]): readonly Child[] {
+  const head = items[0];
+  if (head === undefined) {
+    throw new Error("an honest-negative card was given no figures at all");
+  }
+  const rest = items.slice(1);
+  return [
+    headlineFigure(head[0], head[1]),
+    ...(rest.length === 0
+      ? []
+      : [disclosure(`every figure (${count(items.length)})`, [figures(rest)])]),
+  ];
+}
+
 /** Fill every results slot in the page.
  *
  * Throws on a missing slot rather than skipping it: the slots and this module are
@@ -1133,7 +1227,17 @@ export function mountResults(): void {
     slot(name).replaceChildren(...build());
   }
   for (const [name, items] of Object.entries(negativeFigures())) {
-    slot(name).replaceChildren(figures(items));
+    slot(name).replaceChildren(...findingBody(items));
   }
-  slot("negative-tracking").replaceChildren(claimsNotMadeList());
+  const claims = REPORTS.tracking.claimsNotMade;
+  slot("negative-tracking").replaceChildren(
+    headlineFigure("identity claims this project does not make", count(claims.length)),
+    disclosure(
+      `every claim (${count(claims.length)})`,
+      // Word for word from the benchmark's own record, as a list rather than a
+      // figure run: they are sentences, and a figure run's value column would
+      // squeeze the term column to nothing and break it one letter per line.
+      [list(claims.map((item) => item.claim))],
+    ),
+  );
 }

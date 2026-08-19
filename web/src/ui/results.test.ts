@@ -17,7 +17,9 @@ import { describe, expect, test } from "vitest";
 import { REPORTS } from "../generated/reports";
 import {
   count,
+  countingResolution,
   fixed,
+  fragmentationResolution,
   fragmentationResolutionNote,
   megabytes,
   percent,
@@ -28,8 +30,11 @@ import {
 } from "./kit";
 import {
   COMMANDS,
+  cleanTracker,
+  degradedLevelCount,
   distinct,
   floorExplains,
+  floorTakeaway,
   levelOf,
   methodNamed,
   negativeFigures,
@@ -37,7 +42,7 @@ import {
   slotNames,
   usableAnchorCount,
 } from "./results";
-import { classifyControlBands } from "./results-speed";
+import { classifyControlBands, fastestBand } from "./results-speed";
 
 describe("count", () => {
   test("groups thousands with a narrow no-break space, not a comma", () => {
@@ -142,6 +147,27 @@ describe("the fragmentation resolution note", () => {
   });
 });
 
+describe("a resolution now appears in two shapes, and they are one arithmetic", () => {
+  // The dashboard put both resolutions in a stat tile, which has room for a
+  // figure and not for a sentence. Two shapes is fine; two SPELLINGS of the
+  // arithmetic is the defect -- a tile formatting `1 / denominator` itself
+  // would be free to drift from the caption directly beneath it, and nothing
+  // else on this page compares the two.
+  test("the tile figure is the opening of the caption sentence, not a second rounding", () => {
+    expect(resolutionNote().startsWith(`${countingResolution()} `)).toBe(true);
+    expect(fragmentationResolutionNote().startsWith(`${fragmentationResolution()} `)).toBe(true);
+  });
+
+  test("and each bare figure is still the baked step, so neither is an empty string", () => {
+    // The control, on a different axis: the assertion above compares the two
+    // shapes to each other and would be satisfied by both being "". This one
+    // reads each against the measurement it comes from.
+    expect(countingResolution()).toBe(`± ${rate(REPORTS.counting.resolution.oneEventF1)}`);
+    const denominator = REPORTS.tracking.metricDefinitions.fragmentationRatio.denominator;
+    expect(fragmentationResolution()).toBe(`± ${rate(1 / denominator)}`);
+  });
+});
+
 describe("fixed and scientific", () => {
   test("fixed prints an em dash for a null rather than a zero", () => {
     expect(fixed(null, 2)).toBe("—");
@@ -229,7 +255,11 @@ describe("no figure in the negatives is typed into TS prose", () => {
   const items = negativeFigures();
 
   test("the band-rule term states the baked label count, not a typed 17", () => {
-    const term = items["negative-band"]?.[0]?.[0];
+    // Found by what it says rather than by where it sits: the card's headline
+    // figure is now the first pair, so pinning this row to index 0 would pin the
+    // layout instead of the rule. The rule is that the label count in the term
+    // comes from the bake.
+    const term = items["negative-band"]?.find(([label]) => label.includes("predictions"))?.[0];
     expect(term).toBeDefined();
     expect(term).toContain(count(REPORTS.counting.labels.total));
     expect(term).toBe(`band rule predictions against ${count(REPORTS.counting.labels.total)} labels`);
@@ -241,7 +271,9 @@ describe("no figure in the negatives is typed into TS prose", () => {
       count(distinct([REPORTS.counting.clip, REPORTS.robustness.clip, REPORTS.tracking.clip])),
     );
     expect(values.get("gates labelled")).toBe(count(distinct([REPORTS.counting.gate.name])));
-    expect(values.get("labelled crossings")).toBe(count(REPORTS.counting.labels.total));
+    expect(values.get("labelled crossings, on one clip and one gate")).toBe(
+      count(REPORTS.counting.labels.total),
+    );
   });
 
   test("and `distinct` actually counts, so those rows are not constants", () => {
@@ -458,8 +490,11 @@ describe("the slots and the sections are two halves of one document", () => {
   // its own. Each is pinned to what it counts.
 
   test("the negatives lede counts the negatives that are actually there", () => {
-    const blocks = [...html.matchAll(/class="negative"/g)].length;
-    expect(blocks).toBe(9);
+    // The nine essays are nine cards now. The defect the assertion exists for is
+    // unchanged: "Nine findings" over eight findings is the same kind of stale
+    // figure as a stale F1, and the markup carries no test of its own.
+    const cards = [...html.matchAll(/class="finding"/g)].length;
+    expect(cards).toBe(9);
     expect(html).toContain("Nine findings");
   });
 
@@ -476,8 +511,11 @@ describe("the slots and the sections are two halves of one document", () => {
     const jitter = REPORTS.robustness.protocols.find((item) => item.name === "box_jitter");
     expect(rates?.entries.map((entry) => entry.levelLabel)).toContain("2 fps");
     expect(jitter?.entries.map((entry) => entry.levelLabel)).toContain("sigma=2 px");
-    expect(html).toContain("At two frames a second");
-    expect(html).toContain("jitter of two pixels");
+    // Collapsed, for the same reason the tracker assertion above is: the card's
+    // claim wraps across source lines and a line break is not a change of claim.
+    const collapsed = html.replace(/\s+/g, " ");
+    expect(collapsed).toContain("At two frames a second");
+    expect(collapsed).toContain("jitter of two pixels");
   });
 
   test("and the jitter negative does not claim a loss the figures deny", () => {
@@ -495,6 +533,117 @@ describe("the slots and the sections are two halves of one document", () => {
     expect(stressed! / clean!).toBeGreaterThan(0.5);
     expect(html).not.toContain("takes most of it");
     expect(html).not.toContain("removes most of its remaining accuracy");
+  });
+});
+
+describe("the honest negatives, as cards", () => {
+  // Each card shows ONE figure on its face and keeps the rest in a disclosure
+  // whose summary counts them. Two things can go wrong silently there and
+  // neither throws: a slot with no figures at all renders a card with a claim
+  // and no evidence under it, and a slot with exactly one renders a summary
+  // promising figures that are all already on the face.
+  const items = negativeFigures();
+
+  test("every card has a headline figure and more evidence behind it", () => {
+    for (const [slot, figures] of Object.entries(items)) {
+      expect(figures.length, slot).toBeGreaterThanOrEqual(2);
+      const [term, value] = figures[0] as readonly [string, string];
+      expect(term.length, slot).toBeGreaterThan(0);
+      expect(value.length, slot).toBeGreaterThan(0);
+      // An em dash on a card's face is the failure the throwing resolvers exist
+      // to prevent, arriving by a different road.
+      expect(value, slot).not.toBe("—");
+    }
+  });
+
+  test("and there is a card for every finding the page claims", () => {
+    // The floor, so the sweep above cannot be passing over an emptied set.
+    expect(Object.keys(items)).toHaveLength(8);
+  });
+});
+
+describe("the association-floor takeaway that replaced the ablation's paragraph", () => {
+  test("counts the protocols from the bake rather than restating them", () => {
+    const floor = REPORTS.robustness.associationFloor;
+    const total = floor.explains.length + floor.doesNotExplain.length;
+    const takeaway = floorTakeaway();
+    expect(takeaway).toContain(`explains ${floor.explains.length} of ${total} collapses`);
+    // The unexplained protocol is NAMED, not summarised away: it is the one the
+    // page must keep calling undiagnosed.
+    for (const name of floor.doesNotExplain) {
+      expect(takeaway).toContain(name);
+    }
+    expect(takeaway).toContain(String(floor.shippedFloor));
+  });
+
+  test("and the split it counts really is a split, not a list and an empty one", () => {
+    // The control, on a different axis from the assertion above: that one reads
+    // the takeaway's arithmetic, this one reads the measurement it is arithmetic
+    // over. A bake with nothing in `doesNotExplain` would make the takeaway's
+    // sentence true and its finding false.
+    const floor = REPORTS.robustness.associationFloor;
+    expect(floor.explains.length).toBeGreaterThan(0);
+    expect(floor.doesNotExplain.length).toBeGreaterThan(0);
+    expect(floor.doesNotExplain).toContain("detection_dropout");
+    expect(floorExplains("detection_dropout")).toBe(false);
+  });
+});
+
+describe("the denominators the robustness tiles state their findings over", () => {
+  test("the leads-nowhere tile counts DEGRADED levels, not every swept level", () => {
+    // `engineLeadsAnyDegradedLevel` is scoped to the degraded levels, and the
+    // tile prints "none of N". Reading N off `levelsMeasured` would state the
+    // finding over the undegraded rows too -- rows the flag never looked at.
+    const separation = REPORTS.robustness.trackerSeparation;
+    expect(degradedLevelCount()).toBe(
+      separation.levelsMeasured - separation.identityLevels.length,
+    );
+    expect(degradedLevelCount()).toBeLessThan(separation.levelsMeasured);
+  });
+
+  test("and the undegraded levels really are a proper subset, so the two differ", () => {
+    // The control, on a different axis: the assertion above is arithmetic over
+    // two baked counts and would hold if `identityLevels` were empty, which is
+    // exactly the bake that would make the wrong denominator look right.
+    const separation = REPORTS.robustness.trackerSeparation;
+    expect(separation.identityLevels.length).toBeGreaterThan(0);
+    expect(separation.identityLevels.length).toBeLessThan(separation.levelsMeasured);
+  });
+});
+
+describe("the fastest speed band the tier-one tile names", () => {
+  test("is found by its speed, not by sitting last in the report", () => {
+    // The tile says "at 130 km/h, the fastest band". Taking the last row would
+    // make that a claim about the report's row ORDER, which nothing pins.
+    expect(fastestBand([{ speedKmh: 30 }, { speedKmh: 130 }, { speedKmh: 70 }])).toEqual({
+      speedKmh: 130,
+    });
+    expect(() => fastestBand([])).toThrow(/no speed bands/);
+  });
+
+  test("and it picks the same row the committed sweep's last entry happens to be", () => {
+    // The control, varying the input rather than the mechanism: on the ordered
+    // bake the two agree, which is why taking the last row survived until now.
+    const bands = REPORTS.speedSynthetic.fullChain.byBand;
+    expect(fastestBand(bands)).toBe(bands[bands.length - 1]);
+  });
+});
+
+describe("the identity tiles are addressed by tracker name", () => {
+  test("a tracker the undegraded row does not carry throws instead of printing a dash", () => {
+    // The engine's fragmentation and class agreement are the identity section's
+    // headline figures now, set at hero size. A missed lookup would render an em
+    // dash there rather than failing.
+    expect(() => cleanTracker("engines")).toThrow(/no tracker named/);
+    expect(() => cleanTracker("")).toThrow(/no tracker named/);
+  });
+
+  test("and the three the section prints do resolve", () => {
+    // The control, varying the name rather than the mechanism: a resolver that
+    // threw on everything would satisfy the assertions above.
+    expect(cleanTracker("engine").fragmentationRatio).toBeGreaterThan(0);
+    expect(cleanTracker("centroid").classConsistency).toBeGreaterThan(0);
+    expect(cleanTracker("greedy-iou").fragmentationRatio).toBeGreaterThan(0);
   });
 });
 

@@ -224,6 +224,9 @@ COVERAGE = [
     ("counting/methods", "methods", "engine+gate", "full", "precision"),
     ("counting/methods", "methods", "engine+gate", "full", "recall"),
     ("counting/methods", "methods", "engine+gate", "full", "f1"),
+    # The strict adjudication, now a stat tile of its own rather than a row in a
+    # disclosure, which is why it came off UNRENDERED below.
+    ("counting/methods", "methods", "engine+gate", "certain_only", "f1"),
     ("counting/methods", "methods", "centroid+gate", "full", "f1"),
     ("counting/methods", "methods", "greedy-iou+gate", "full", "f1"),
     ("counting/methods", "methods", "engine+band", "full", "true_positives"),
@@ -411,7 +414,6 @@ UNRENDERED = [
     ("agreesEverywhere", "tracking/agreement/agreesEverywhere", "questions/agreement_with_crossing_f1/agrees_everywhere"),
     ("bandStepOver", "robustness/bandStepOver/verdict", "questions/band_step_over/verdict"),
     ("baselineReport", "robustness/baselineReport", "baseline_report"),
-    ("certainOnlyF1", "counting/methods/0/certainOnlyF1", "methods/engine+gate/certain_only/f1"),
     ("classConsistencySpread", "tracking/cleanDegeneracy/classConsistencySpread", "questions/clean_clip_degeneracy/class_consistency_spread"),
     ("controlIsOneUlpBelow", "parity/iouStraddle/controlIsOneUlpBelow", "iouStraddle/controlIsOneUlpBelow"),
     ("detectionsKept", "robustness/protocols/0/entries/1/detectionsKept", "protocols/frame_rate/entries/1/detections_kept"),

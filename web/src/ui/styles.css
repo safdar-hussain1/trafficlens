@@ -980,20 +980,33 @@ table.data tbody tr:last-child td {
   margin-bottom: 0.3rem;
 }
 
+/* One disclosure per refusal, rather than one holding all four: the claim is
+   the thing that has to be readable without asking, and only the reason behind
+   it is detail. Word for word from the benchmark's own record either way. */
 .claims {
   margin: var(--gap) 0 0;
-  max-width: 78ch;
+  max-width: 82ch;
+  border-top: var(--rule) solid var(--line);
 }
 
-.claims dt {
+.claims > .reveal {
+  margin: 0;
+  border-top: 0;
+  border-bottom: var(--rule) solid var(--line);
+  padding: 0.15rem 0;
+}
+
+.claims > .reveal > summary {
+  color: var(--text);
   font-weight: 600;
-  margin-top: 0.9rem;
+  font-size: 0.9rem;
+  padding: 0.45rem 0;
 }
 
-.claims dd {
-  margin: 0.2rem 0 0;
+.claims > .reveal > p {
   color: var(--text-dim);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
+  margin: 0 0 0.7rem;
 }
 
 .block {
@@ -1003,6 +1016,16 @@ table.data tbody tr:last-child td {
 .block h3 {
   font-size: 1.05rem;
   margin-bottom: 0.4rem;
+}
+
+/* Sub-headings inside a disclosure. One level below the section's own h3, which
+   is what they are: the survey's chapters, reachable rather than in the way. */
+.reveal h4 {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  font-size: 0.98rem;
+  margin: calc(var(--gap) * 1.2) 0 0.3rem;
 }
 
 /* A limitation is not an alert, so it does not get amber. It gets the sunk
@@ -1030,14 +1053,165 @@ table.data tbody tr:last-child td {
   margin-bottom: 0.4rem;
 }
 
-.negative {
-  margin-top: calc(var(--gap) * 1.8);
-  max-width: 78ch;
+/* -- stat tiles ------------------------------------------------------------- */
+
+/* The results half now opens each section the way the control room opens the
+   page: an uppercase label over a big mono figure. Same component, same reading,
+   so a measurement taken last month and one taken in this tab are visibly one
+   instrument rather than a dashboard with a report stapled underneath it.
+
+   The 1px grid gap over a --line ground draws the hairlines between tiles, so
+   the row is one ruled block instead of a strip of floating boxes -- and no tile
+   needs a border of its own to be told from its neighbour. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: var(--rule);
+  margin: var(--gap) 0;
+  background: var(--line);
+  border: var(--rule) solid var(--line);
 }
 
-.negative h3 {
-  font-size: clamp(1rem, 2.2vw, 1.15rem);
-  max-width: 46ch;
+.tile {
+  position: relative;
+  background: var(--panel);
+  padding: 0.8rem 0.85rem 0.85rem;
+  min-width: 0;
+}
+
+/* The one figure a row is about. Structure blue, because that is this palette's
+   one structural accent -- amber means an alert and a measurement is not one. */
+.tile--lead::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--structure);
+}
+
+/* Deliberately the same declaration as `.readout h3` in the control room, one
+   step smaller for a four-across row: the claim these tiles make is that a
+   measurement from last month and a count from this tab are one instrument, and
+   a label set in different tracking would give that away immediately. */
+.tile__label {
+  display: block;
+  font-family: var(--body);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* No `tabular-nums` here, unlike every table on this page: a standalone figure
+   at display size wants the font's proportional widths, and forcing every digit
+   to the width of a zero makes a value like 0.914 read loose. Alignment is a
+   property of a column, and a tile is not one. */
+.tile__value {
+  display: block;
+  margin: 0.35rem 0 0;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: clamp(1.4rem, 3.2vw, 1.95rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+/* A row that qualifies the row above it. The certain-only bracket is the case:
+   it is the same measurement adjudicated more strictly, so it reads as a
+   footnote to the headline rather than a second headline. */
+.tiles--minor .tile__value {
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+}
+
+.tiles--minor {
+  margin-top: calc(var(--gap) * -0.55);
+}
+
+/* Inside the value, so it inherits nothing it should not: the note is a sentence
+   about the figure, not another figure. */
+.tile__note {
+  display: block;
+  margin-top: 0.4rem;
+  font-family: var(--body);
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0;
+  color: var(--text-dim);
+  overflow-wrap: normal;
+}
+
+/* -- the honest negatives, as cards ----------------------------------------- */
+
+/* Nine findings, one card each: the claim in a line or two, the measurement it
+   rests on set large underneath, and the rest of that measurement one click
+   away. Compressed it reads stronger than it did as nine essays -- a reader can
+   see the whole audit at once, which is the point of publishing it. */
+/* The minimum is set so that a full-width page lands on THREE columns, not
+   four: there are nine findings, and nine in threes is a filled block while
+   nine in fours is two rows and an orphan. */
+.findings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--gap);
+  margin-top: var(--gap);
+}
+
+.finding {
+  display: flex;
+  flex-direction: column;
+  border: var(--rule) solid var(--line);
+  background: var(--panel);
+  padding: 0.9rem 0.95rem 0.7rem;
+}
+
+.finding h3 {
+  font-size: 1rem;
+  line-height: 1.2;
+  max-width: 34ch;
+}
+
+.finding__claim {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.finding__claim strong {
+  color: var(--text);
+}
+
+/* The slot the figures mount into, pushed to the bottom so the big numbers line
+   up across a row of cards whose claims run to different lengths. */
+.finding > [data-results] {
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+}
+
+.finding__figure {
+  margin: 1rem 0 0;
+}
+
+.finding__value {
+  display: block;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.finding__label {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.finding .reveal {
+  margin-bottom: 0;
 }
 
 .reveal {
