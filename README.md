@@ -1,14 +1,21 @@
 # TrafficLens
 
-Traffic analytics from one camera: it counts what crosses a gate, in which
-direction, of which class, and — where the camera is calibrated — how fast.
-The same detector and the same tracker run two ways: as a Python package and
-CLI on a server, and as a byte-parity TypeScript engine in a browser tab, where
-inference happens on the visitor's own GPU and no frame is ever uploaded.
+[![tests](https://github.com/safdar-hussain1/trafficlens/actions/workflows/tests.yml/badge.svg)](https://github.com/safdar-hussain1/trafficlens/actions/workflows/tests.yml)
+[![live demo](https://img.shields.io/badge/live_demo-GitHub_Pages-0058A3)](https://safdar-hussain1.github.io/trafficlens/)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
-**Live demo: <https://safdar-hussain1.github.io/trafficlens/>** — load one of the
-bundled clips or drop in your own file, drag the gate where you want it, and watch
-the count. Everything runs locally in the tab.
+Traffic analytics from one camera: TrafficLens counts what crosses a gate you
+draw, by class and by direction, and, where the camera is calibrated, how fast
+it was going. The same detector and tracker run two ways: as a Python package
+and CLI, and as a byte-parity TypeScript engine in a browser tab, where
+inference runs on the visitor's own hardware (WebGPU where the browser offers
+it, WebAssembly where it does not) and no frame is ever uploaded.
+
+**Live demo: <https://safdar-hussain1.github.io/trafficlens/>** — pick one of the
+two bundled clips or your own webcam, press Start, drag the gate where you want
+it, and watch the count. Everything runs locally in the tab.
+
+![The TrafficLens control room counting the motorway clip: a gate drawn across the road with detection boxes on the cars, and a time-space diagram marking each counted crossing](web/public/og-image.png)
 
 Every number below is read from a JSON file under [`reports/`](reports/), and
 `tests/test_docs_numbers.py` fails if this file and those reports disagree.
@@ -24,6 +31,7 @@ Every number below is read from a JSON file under [`reports/`](reports/), and
 - [The honest negatives](#the-honest-negatives)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
+- [Tests and CI](#tests-and-ci)
 - [Reproducing every number](#reproducing-every-number)
 - [Licence and attribution](#licence-and-attribution)
 
@@ -56,7 +64,8 @@ Every number below is read from a JSON file under [`reports/`](reports/), and
 
 ## Install
 
-Python 3.10 or newer.
+Python 3.10 or newer for the package (CI runs the suite on 3.12 and 3.13), and
+Node 22.12 or newer for the browser engine and the site build (CI runs 22 and 24).
 
 ```bash
 git clone https://github.com/safdar-hussain1/trafficlens.git
@@ -70,66 +79,159 @@ for the server detector, `onnx` pulls in `onnxruntime` for the ONNX adapter, and
 `dev` pulls in the test and figure dependencies. The core package needs none of
 them.
 
-Then fetch the Creative Commons sample clips — three files, about 17 MB, into
+Then fetch the Creative Commons sample clips — three files, about 18 MB, into
 `data/samples/`:
 
 ```bash
 .venv/bin/trafficlens fetch-samples
 ```
 
-Every command below also works from a checkout without installing, which is how
-the benchmarks in this repository are driven:
+And, for the browser engine and the site:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m trafficlens.cli --help
+cd web && npm ci
 ```
+
+If a step fails:
+
+- **`CERTIFICATE_VERIFY_FAILED` from `fetch-samples`** on macOS means the
+  python.org installer's Python has no certificate store yet. Run its
+  `Install Certificates.command` once (in `/Applications/Python 3.x/`), or for
+  one session `export SSL_CERT_FILE="$(.venv/bin/python -m certifi)"`.
+- **`The read operation timed out`** from `fetch-samples`: run it again. Clips
+  already on disk are skipped.
+- **`bad interpreter` or `No module named 'trafficlens'`** means the virtual
+  environment was created at another path (a moved or renamed checkout) or its
+  editable-install hook is not being read. Recreate `.venv`, or run any command
+  from the repository root as `PYTHONPATH=src .venv/bin/python -m trafficlens.cli`,
+  which needs no install at all and is the form this repository's scripts use.
+- **The first `run`** with a `.pt` model that is not on disk downloads it into
+  the repository root, where `*.pt` is git-ignored: `yolo11s.pt`, the model the
+  shipped configs name, is about 19 MB.
 
 ---
 
 ## Commands
 
-**Source:** `src/trafficlens/cli.py`, `--help` on each command.
+**Source:** `src/trafficlens/cli.py` and `--help` on each command. Every line in
+this section was run against this repository.
 
 | command | what it does |
 |---|---|
 | `trafficlens run` | Analyse a source and report what crossed each gate. Writes `events.csv`, `summary.json` and `session.json` with `--export-dir`. |
 | `trafficlens fetch-samples` | Download the sample clips, with their licences, into `data/samples/`. |
 | `trafficlens calibrate` | Explain how to survey a camera, and check a config's calibration block against its own held-out points. |
-| `trafficlens export-model` | Export a YOLO11 checkpoint to the ONNX graph the browser engine runs. |
-| `trafficlens serve` | A placeholder. It prints what it will do and exits; the published site is the browser surface today. |
-| `trafficlens bench` | A placeholder. It points at `scripts/`, which is where the benchmarks actually live. |
+| `trafficlens export-model` | Export a YOLO11 checkpoint to an ONNX graph fixed at one input size. |
+| `trafficlens serve` | A placeholder. It serves nothing and says how to serve `docs/` instead. |
+| `trafficlens bench` | A placeholder. It names the benchmark scripts under `scripts/`, which is where the benchmarks live. |
 
-Count what crosses both carriageways of the motorway clip:
-
-```bash
-PYTHONPATH=src .venv/bin/python -m trafficlens.cli run \
-  --config configs/motorway.yaml \
-  --export-dir out/motorway
-```
-
-Draw your own gate, in coordinates normalized to the frame, and write an
-annotated video:
+Every command and every flag, with the values each accepts, run from the
+repository root:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m trafficlens.cli run \
-  --config configs/street.yaml \
-  --gate kerbside,0.10,0.62,0.90,0.62 \
-  --save-video out/street-annotated.mp4
+.venv/bin/trafficlens --version              # trafficlens, version 1.0.0
+.venv/bin/trafficlens --help                 # -h works too, on every command
+
+# fetch-samples [--dest DIR]                 default data/samples
+.venv/bin/trafficlens fetch-samples --dest data/samples
+
+# run --config FILE                          required; the three in configs/ are worked examples
+.venv/bin/trafficlens run --config configs/motorway.yaml --export-dir exports/motorway
+#   --export-dir DIR       events.csv, summary.json and session.json
+#   --max-frames N         stop after N frames
+#   --classes A,B          COCO class names: car, truck, bus, motorcycle, bicycle, person, ...
+#   --gate NAME,X1,Y1,X2,Y2
+#                          replaces the config's gates; coordinates are fractions of the
+#                          frame, 0 to 1; repeat for more than one gate. A gate given here
+#                          has the default labels in/out and no expected direction.
+.venv/bin/trafficlens run --config configs/motorway.yaml --classes car,truck --gate inbound,0.06,0.80,0.46,0.80 --max-frames 300
+#   --save-video FILE      .avi, .mkv, .mov or .mp4; anything else is refused before the model loads
+.venv/bin/trafficlens run --config configs/street.yaml --gate kerbside,0.10,0.62,0.90,0.62 --save-video exports/street-annotated.mp4
+#   --source SPEC          a video file, a webcam index (0, 1, ...) or an rtsp://, http:// or https:// URL
+.venv/bin/trafficlens run --config configs/webcam.yaml --source data/samples/person-bicycle-car-detection.mp4 --max-frames 120
+#   --model FILE           .pt runs through ultralytics, .onnx through onnxruntime. An ONNX graph
+#                          is fixed at the size it was exported at, which must equal the config's
+#                          detector.imgsz: 640 in every shipped config.
+.venv/bin/trafficlens run --config configs/motorway.yaml --model yolo11n.pt --max-frames 300
+.venv/bin/trafficlens run --config configs/motorway.yaml --model exports/yolo11n.onnx --max-frames 300   # after export-model below
+#   --limit KMH            flags crossings faster than this; it needs a calibration block, and
+#                          no shipped config has one, so on them it changes nothing
+.venv/bin/trafficlens run --config configs/motorway.yaml --limit 100 --max-frames 300
+
+# calibrate --config FILE [--width PX --height PX]
+#                          the frame size is read from the source unless both are given
+.venv/bin/trafficlens calibrate --config configs/webcam.yaml
+.venv/bin/trafficlens calibrate --config configs/motorway.yaml --width 1280 --height 720
+
+# export-model --output FILE [--weights FILE] [--imgsz N]
+#                          defaults yolo11n.pt and 640; N must be a multiple of 32
+.venv/bin/trafficlens export-model --output exports/yolo11n.onnx
+.venv/bin/trafficlens export-model --weights yolo11n.pt --imgsz 480 --output exports/yolo11n-480.onnx
+
+# the two placeholders
+.venv/bin/trafficlens serve --host 127.0.0.1 --port 8000
+.venv/bin/trafficlens bench
 ```
 
-Check a calibration before trusting a speed:
+`exports/` is git-ignored, which is why every example writes there. None of the
+shipped configs carries a calibration block — the flagship clip's along-road
+scale could not be anchored, see [CALIBRATION.md](web/public/CALIBRATION.md) — so
+on them `calibrate` prints the survey guide and reports that speeds are off, and
+`run` prints `Speeds: not available`.
+
+The first command above prints, for the whole motorway clip:
+
+```text
+Source: data/samples/motorway-a40.webm (1280x720 @ 30 fps)
+Frames: 735
+Speeds: not available (no calibration block in this config)
+
+Gate inbound:
+  bus          toward 1
+  car          toward 14
+  truck        toward 3
+
+Gate outbound:
+  car          away 6
+  truck        away 1
+
+Crossings: 25
+Incidents: 0
+```
+
+These are the engine's raw counts, not a scored result; the inbound gate's are
+scored against hand labels under [Measured results](#measured-results).
+
+Two commands rewrite committed files, which is worth knowing before a demo:
+
+- `export-model` pointed at `web/public/models/yolo11n-480.onnx` replaces the
+  graph the site ships. The graph itself comes out identical, but the export
+  stamps its own date into the file's metadata, so the bytes change: the digest
+  pinned in `web/src/model-asset.ts` and the build manifest stop matching and two
+  tests fail. Restore it with `git checkout -- web/public/models/yolo11n-480.onnx`.
+- `scripts/bench_counting.py` rewrites the wall-clock timings in
+  `reports/counting_accuracy.json`, which the documents and the site quote, so
+  nine tests fail until it is restored with
+  `git checkout -- reports/counting_accuracy.json`. Its accuracy figures
+  reproduce exactly.
+
+### Viewing the site locally
+
+The site is the static build in `docs/`. It must be served over HTTP rather than
+opened as a file: it loads ES modules, fetches the 10.7 MB model and the
+WebAssembly runtime, and decodes the clips, and browsers block all of that from
+`file://`.
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m trafficlens.cli calibrate \
-  --config configs/webcam.yaml
+python3 -m http.server 4199 --bind 127.0.0.1 --directory docs
+open http://127.0.0.1:4199/        # xdg-open on Linux; Ctrl-C stops the server
 ```
 
-Export the browser graph:
-
-```bash
-PYTHONPATH=src .venv/bin/python -m trafficlens.cli export-model \
-  --weights yolo11n.pt --imgsz 480 --out web/public/models/yolo11n-480.onnx
-```
+`http://127.0.0.1:4199/?selftest=1` replays the committed parity fixtures
+through the engine the page ships and writes the verdict into the tab title
+(`PASS 68/68 — browser engine agrees with the Python engine`);
+`?measure=1` times the per-frame path, see
+[Browser performance](#browser-performance).
 
 ---
 
@@ -672,22 +774,35 @@ Full document: **[ARCHITECTURE.md](web/public/ARCHITECTURE.md)**.
 
 ```
 src/trafficlens/
-  core/          geometry predicates, gate counting, road-plane homography, constants
+  core/          COCO classes, geometry predicates, gate counting, road-plane homography, constants
   track/         constant-velocity Kalman filter, association, two-stage tracker
   analytics/     speed, incidents, speed-limit violations
   detect/        shared preprocessing and decoding + ultralytics and ONNX adapters
   io/            frame sources and export formats
-  bench/         baselines, degradations, scoring, slit-scan ground truth, simulator
+  bench/         baselines, degradations, scoring, slit-scan ground truth, scale survey, simulator
   pipeline.py    one frame in, detections through tracking through analytics out
-  cli.py         run / fetch-samples / calibrate / export-model
-web/src/
-  engine/        the TypeScript mirror: geometry, gate, kalman, associate, tracker, homography, speed
-  runtime/       onnxruntime-web session, preprocessing, decoding, model cache
-  ui/            the page: controls, overlay, charts, results sections
-  generated/     constants.ts and reports.ts, both generated and never hand-edited
-scripts/         the benchmarks, the exporters, the page verifier, the timing harness
-reports/         every measured number, as JSON
+  config.py      the YAML session schema, validated on load
+  annotate.py    the overlay drawn onto an annotated video
+  samples.py     the sample-clip fetcher
+  cli.py         run / calibrate / fetch-samples / export-model, and the serve and bench placeholders
+web/
+  index.html     the page template: head, section slots, footer
+  public/        copied into docs/ as-is: the ONNX graph, the onnxruntime-web runtime, the clips,
+                 fonts, the three cards, favicon, share image and sitemap
+  src/
+    engine/      the TypeScript mirror: geometry, gate, kalman, associate, tracker, homography, speed
+    runtime/     onnxruntime-web session, preprocessing, decoding, model cache
+    ui/          the page: controls, overlay, charts, results sections
+    generated/   constants.ts and reports.ts, both generated and never hand-edited
+    fixtures/    the parity fixture the Python engine writes
+    main.ts      the entry point: the page, ?selftest=1 and ?measure=1
+configs/         motorway, street and webcam session configs
+data/            the hand-labelled crossings, their protocol, the scale-survey fixture; samples/ is fetched
+tests/           the Python suite, including the guards over reports/, the documents and docs/
+scripts/         the benchmarks, the generators, the page verifier, the timing harness, the mutation battery
+reports/         every measured number, as JSON, and the figures drawn from them
 docs/            the published site, byte-reproduced by `npm run build`
+.github/         the CI workflow
 ```
 
 Three properties hold the two implementations together. The constants live in one
@@ -727,34 +842,85 @@ make that claim false.
 
 ---
 
+## Tests and CI
+
+```bash
+# the Python suite, from the repository root
+.venv/bin/python -m pytest
+
+# the browser engine's suite, and the type check
+cd web && npm test && npm run typecheck
+```
+
+Run the Python suite from a git clone rather than an unpacked archive: the
+repository guards in `tests/test_guards.py` read `git ls-files`, the ignore rules
+and the commit history, and fail outside a repository.
+
+A test that needs a file a fresh clone does not have skips and says why; none
+fails for it:
+
+- four need the git-ignored YOLO weights (`yolo11n.pt`) and the detector extra,
+  and two of those the clip as well;
+- six decode the real motorway clip, which `fetch-samples` downloads, among them
+  the two that regenerate the parity fixture byte for byte;
+- on Python 3.10, whose newest matplotlib is 3.10, the check that each committed
+  robustness figure is the picture its report draws skips, because the figures
+  were drawn by matplotlib 3.11 and another minor version lays a figure out
+  differently.
+
+[CI](.github/workflows/tests.yml) runs on every push to `main` and every pull
+request, on Ubuntu:
+
+- **python**, on Python 3.12 and 3.13: `pip install -e ".[onnx,dev]"`, then the
+  whole suite. It installs no detector extra and downloads no clips, so the ten
+  tests in the first two bullets above skip there.
+- **web**, on Node 22 and 24: `npm ci`, the Vitest suite, the type-check,
+  `npm run build`, and a check that the build reproduces the committed `docs/`
+  byte for byte.
+
+Neither job runs a browser or a GPU. The page's own selftest and the backend
+timings need a real Chrome, and run with the two scripts at the end of the next
+section.
+
+---
+
 ## Reproducing every number
 
 ```bash
-# the Python suite
-PYTHONPATH=src .venv/bin/python -m pytest tests/
+# the benchmarks, in the order their shared detection cache requires
+PYTHONPATH=src .venv/bin/python scripts/bench_counting.py    # detects once into private/bench/ (git-ignored); counting_accuracy.json, detection_noise.json
+PYTHONPATH=src .venv/bin/python scripts/bench_robustness.py  # robustness.json + figures; refuses to run without the cache
+PYTHONPATH=src .venv/bin/python scripts/bench_tracking.py    # tracking.json; reads the cache and robustness.json
+PYTHONPATH=src .venv/bin/python scripts/bench_speed.py --figures  # speed_synthetic.json, speed_real.json + figures
 
-# the browser engine's suite, and the type check
-cd web && npm install && npm test && npx tsc --noEmit
+# regenerate what the site and the browser suite are built from
+PYTHONPATH=src .venv/bin/python scripts/export_constants.py       # web/src/generated/constants.ts
+PYTHONPATH=src .venv/bin/python scripts/build_site_data.py        # web/src/generated/reports.ts, baked from reports/
+PYTHONPATH=src .venv/bin/python scripts/make_parity_fixtures.py   # web/src/fixtures/parity.json, reports/parity.json; needs the clip
+PYTHONPATH=src .venv/bin/python scripts/make_runtime_fixtures.py  # web/src/runtime/fixtures/; needs the clip
+cd web && npm run build                                           # docs/; a second run is byte-identical
 
-# regenerate the site into docs/; a second run is byte-identical
-cd web && npm run build
-
-# the benchmarks, in the order their caches allow
-PYTHONPATH=src .venv/bin/python scripts/bench_counting.py    # counting_accuracy.json, detection_noise.json
-PYTHONPATH=src .venv/bin/python scripts/bench_robustness.py  # robustness.json + figures
-PYTHONPATH=src .venv/bin/python scripts/bench_tracking.py    # tracking.json
-PYTHONPATH=src .venv/bin/python scripts/bench_speed.py --figures  # speed_synthetic.json, speed_real.json
-
-# the published page's own verdict, in a real browser
+# the published page's own verdict, in a real browser: serve docs/ on 4199 first
 scripts/verify_page.sh 'http://127.0.0.1:4199/?selftest=1'
 
-# the browser timings in the table above
+# the browser timings in the table above; serves docs/ itself on the port given
 scripts/measure_backend.sh 120 4199
+
+# break each headline claim in turn and require a named test to notice; needs a clean tree
+PYTHONPATH=src .venv/bin/python scripts/mutation_battery.py --list
+PYTHONPATH=src .venv/bin/python scripts/mutation_battery.py
 ```
 
 `bench_counting.py` writes the cached detection stream the other three read; they
 refuse to run without it rather than detecting for themselves, so every report in
-`reports/` describes the same detections.
+`reports/` describes the same detections. Run again on the machine that produced
+the committed reports, the three benchmarks after it and the four generators
+reproduce their outputs byte for byte; `bench_counting.py` reproduces every
+accuracy figure and rewrites only its wall-clock timings (see the warning under
+[Commands](#commands)).
+
+The two browser scripts drive Chrome through its DevTools port, 9222 unless
+`DEVTOOLS_PORT` says otherwise; set `CHROME` if it is not in the usual place.
 
 ---
 
