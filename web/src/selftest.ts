@@ -27,7 +27,7 @@ import { Tracker } from "./engine/tracker";
 import type { Detection } from "./engine/tracker";
 import { decodeYolo } from "./runtime/postprocess";
 
-/** The plan's speed tolerance, and the same one `parity.test.ts` uses. */
+/** The published speed tolerance, and the same one `parity.test.ts` uses. */
 const SPEED_TOLERANCE_KMH = 1e-6;
 
 /** Crossing points are a pure float64 line intersection on both sides. */

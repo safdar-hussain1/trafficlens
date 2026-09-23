@@ -194,7 +194,7 @@ def test_the_default_match_window_is_asymmetric_one_before_four_after():
 
 
 def test_the_window_boundaries_are_closed_and_asymmetric():
-    """The whole point of the ruling: a 4-frames-LATE prediction matches
+    """The whole point of the asymmetric window: a 4-frames-LATE prediction matches
     and a 2-frames-EARLY one does not. A symmetric window fails this in
     one direction or the other whatever its width."""
     window = DEFAULT_MATCH_WINDOW
@@ -775,7 +775,7 @@ def test_the_report_publishes_a_computed_max_cardinality_not_the_greedy_count():
 
 def test_the_report_publishes_no_speed_figure():
     """Speed validation is gated on an independently anchored along-road
-    scale; this task publishes counting only."""
+    scale; this benchmark publishes counting only."""
     report = _benchmark({"only": lambda detections: []})
     text = json.dumps(report).lower()
     assert "kmh" not in text
@@ -1146,7 +1146,7 @@ def test_the_committed_counting_report_is_self_consistent():
 
     # The headline that lands on the site, pinned explicitly.
     #
-    # These moved once, in Task 20, and the reason is recorded here rather than
+    # These moved once, and the reason is recorded here rather than
     # only in a report: `detect.base.letterbox` changed from `cv2.INTER_LINEAR`
     # to `cv2.INTER_LINEAR_EXACT`, because plain INTER_LINEAR is intercepted by
     # a vendor resize HAL on some builds and so cannot be mirrored in the

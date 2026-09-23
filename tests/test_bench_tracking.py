@@ -418,8 +418,8 @@ def test_the_gate_region_reading_counts_a_track_that_crosses_twice_once():
 
 
 def test_splitting_a_two_traversal_track_DOES_double_the_crossing_count():
-    """The limit of the claim that justifies substituting the brief's metric,
-    pinned rather than described.
+    """The limit of the claim that justifies replacing a count of IDs crossing
+    the gate with the gate-region reading, pinned rather than described.
 
     "A split cannot double the crossing-emitting count" is true of a
     SINGLE-traversal trajectory -- only one half of a monotone track can
@@ -1084,7 +1084,7 @@ def test_the_published_report_reduces_exactly_to_its_own_clean_clip_block():
 
 
 def test_the_published_report_shares_the_counting_benchmarks_detection_stream():
-    """Ruling: the same cached detections, or this report could not be
+    """The same cached detections, or this report could not be
     compared with the ones beside it.
 
     The clean block's gate-rule crossings must be exactly the ones

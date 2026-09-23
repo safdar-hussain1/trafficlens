@@ -35,8 +35,8 @@ frame value should be read as accurate to about **+0/−4 frames**, not exact.
 Any scorer must use a matching tolerance at least this wide; `PROTOCOL.md`
 fixes the tolerance to be used.
 
-This convention is the opposite of what an earlier draft of the tooling brief
-asserted. That draft claimed the roof reaches the gate first for approaching
+This convention is the opposite of what an earlier draft of the labelling
+instructions asserted. That draft claimed the roof reaches the gate first for approaching
 traffic, which is geometrically backwards — a vehicle moving down the image
 contacts the gate band with its wheels first. Proposals generated under the
 wrong convention were **discarded**, not corrected; they were late by 8–78

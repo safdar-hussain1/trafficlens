@@ -4,13 +4,13 @@
 // Where the Python test drew random jitter from numpy's default_rng(42), the
 // drawn values are transcribed below so both suites fit the same data. Several
 // tests additionally pin the exact float64 km/h Python produces, measured from
-// a run of the Python estimator: those are the rehearsal for Task 21's
-// cross-engine speed agreement.
+// a run of the Python estimator: those rehearse the cross-engine speed
+// agreement the parity suite asserts.
 //
 // Those pins are `toBe`, deliberately. They were `toBeCloseTo(..., 9)` first,
 // and that was a guard in name only: a summation-order change moves these
-// values by ~1e-14 and the tolerance was ~5e-10, so review reversed the
-// accumulation loop and all 21 tests stayed green -- while the shipped code
+// values by ~1e-14 and the tolerance was ~5e-10, so reversing the
+// accumulation loop left all 21 tests green -- while the shipped code
 // was at that moment carrying exactly such a defect (a plain running total
 // where CPython 3.12's builtin sum() compensates). Exact equality is the whole
 // point of a parity pin; anything looser cannot see the class of bug it exists
@@ -274,7 +274,7 @@ describe("outlier rejection", () => {
     // returns 7.000000000000001 and would reject it. One ULP further out,
     // both agree the sample is an outlier.
     //
-    // This is the shape of case Task 21 constructs, so both halves are pinned.
+    // This is the shape of case the parity fixtures construct, so both halves are pinned.
     const identityPlane = new RoadPlane([
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],

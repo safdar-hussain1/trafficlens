@@ -96,7 +96,7 @@ describe("createSession", () => {
 //   wasmPaths -> "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/"  190 passed
 //   numThreads -> always 4                                             190 passed
 //
-// The first is the one that matters. It undoes this task's headline: the
+// The first is the one that matters. It undoes this module's headline: the
 // vendored-identity test would stay green while the browser executed a
 // different wasm binary entirely, so `public/` would be provably pristine and
 // provably unused.
@@ -164,9 +164,9 @@ describe("browserDeps", () => {
 
   it("asks for a single wasm thread when the page is not cross-origin isolated", async () => {
     const { ort } = await build({ isolated: false });
-    // Binding, per the plan: GitHub Pages cannot send COOP/COEP, so
-    // SharedArrayBuffer is unavailable and the published fallback figure was
-    // measured single-threaded.
+    // Required: GitHub Pages cannot send COOP/COEP, so SharedArrayBuffer is
+    // unavailable there, and the published fallback figure was measured
+    // single-threaded.
     expect(ort.env.wasm.numThreads).toBe(1);
   });
 

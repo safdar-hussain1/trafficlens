@@ -143,7 +143,7 @@ def test_single_outlier_is_rejected_not_smoothed():
     assert clean_speed is not None and dirty_speed is not None
     # The wild sample is rejected outright, so the only difference from the
     # clean run is one missing good sample -- far tighter than the 2 km/h
-    # the task demands.
+    # the requirement allows.
     assert abs(dirty_speed - clean_speed) < 0.1
     assert abs(dirty_speed - 90.0) < 0.5
 

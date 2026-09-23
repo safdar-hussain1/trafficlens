@@ -56,7 +56,7 @@ export interface LetterboxResult extends LetterboxGeometry {
 
 /** Steps 1-3 and 5: everything about a letterbox that does not touch pixels.
  *
- * Split out because it is the half Task 21 needs to reason about, and because
+ * Split out because it is the half the parity suite reasons about, and because
  * the shipped 1280x720 case can be asserted here without materialising a
  * 2.7 MB tensor. */
 export function letterboxGeometry(
@@ -384,9 +384,9 @@ const canvasPixelReader = createCanvasPixelReader();
  * shipped to the browser is exported at 480. So omitting `size` here builds a
  * `[1, 3, 640, 640]` tensor that onnxruntime rejects against the model's
  * `[1, 3, 480, 480]` input. That failure is loud and immediate rather than
- * silent, but it is not obvious from the call site, so Task 22 should pass 480
- * explicitly (or read it from the session's own input shape) rather than lean
- * on this default. */
+ * silent, but it is not obvious from the call site, so every caller passes 480
+ * explicitly -- the control room and the measure page both pass
+ * `MODEL_INPUT_SIZE` -- rather than lean on this default. */
 export function letterbox(
   source: FrameSource,
   size: number = DETECT_DEFAULT_INPUT_SIZE,

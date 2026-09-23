@@ -138,7 +138,7 @@ export const KALMAN_ASPECT_MEASUREMENT_STD = 0.1;
 // (one DOF per measured component: cx, cy, a, h). A squared Mahalanobis
 // gating distance above this value means the measurement has under a 5%
 // chance of belonging to the track under Gaussian assumptions; the tracker
-// (Task 7) refuses to associate such pairs. scipy.stats.chi2.ppf(0.95, 4)
+// refuses to associate such pairs. scipy.stats.chi2.ppf(0.95, 4)
 // = 9.487729036781154, conventionally quoted as 9.4877.
 export const KALMAN_GATING_CHI2_95_4DOF = 9.4877;
 

@@ -294,8 +294,8 @@ def build_boundary() -> tuple[np.ndarray, dict]:
     # that scanned with `>=` would take the LAST and call it a truck. Both
     # classes are kept, so the column survives either way and the disagreement
     # is a wrong class_id rather than a missing detection -- which is precisely
-    # the kind of difference Task 21's class-agreement assertion exists to
-    # catch, and precisely the kind that is invisible without a tie to test.
+    # the kind of difference the cross-engine class-agreement assertion
+    # exists to catch, and precisely the kind that is invisible without a tie to test.
     # Placed clear of every other box so no NMS interaction can mask it.
     _put(raw, 18, (1000, 700, 30, 30), car, 0.66)
     _put(raw, 18, (1000, 700, 30, 30), truck, 0.66)

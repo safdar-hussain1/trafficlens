@@ -10,8 +10,8 @@ tensor by whatever means their own backend provides, and hand it to
 TypeScript browser engine, run the exact same math and can only ever
 differ in how they obtain the raw tensor.
 
-``letterbox`` is parity-critical: a TypeScript mirror (Task 20) is later
-asserted to produce byte-identical tensors from this function's exact
+``letterbox`` is parity-critical: its TypeScript mirror is asserted to
+produce byte-identical tensors from this function's exact
 documented rules, so its docstring below is the source of truth for that
 port, not just documentation of this implementation.
 """
@@ -63,9 +63,8 @@ def letterbox(
     ``size`` x ``size`` square, preserving aspect ratio, and centre-pad the
     remainder with a constant grey so the whole square is filled.
 
-    Exact rules (this is the specification the TypeScript mirror in Task
-    20 is written from -- every detail here matters for byte-identical
-    output):
+    Exact rules (this is the specification the TypeScript mirror is
+    written from -- every detail here matters for byte-identical output):
 
     1. ``h, w = frame.shape[:2]``.
     2. ``scale = min(size / w, size / h)`` -- the single scale factor that

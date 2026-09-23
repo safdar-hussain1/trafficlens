@@ -1344,7 +1344,7 @@ export const REPORTS = {
     },
     "caveats": [
       "The labelling gate was chosen in the near field for label RELIABILITY, not for the engine's convenience, so every accuracy figure here -- degraded or not -- is an UPPER bound on what the same engine scores on the far carriageway or in a queue.",
-      "Crossing-level precision, recall and F1 are published with the count error at every level, never the count error alone. Count error alone is the metric this benchmark exists to discredit: Task 14's band rule predicted 18 crossings against 17 real ones -- a near-perfect total -- while landing one or two of them on the right frame.",
+      "Crossing-level precision, recall and F1 are published with the count error at every level, never the count error alone. Count error alone is the metric this benchmark exists to discredit: on the clean clip the band rule predicts 18 or 19 crossings against 17 real ones -- a near-perfect total -- while landing one or two of them on the right frame.",
       "The two resampling protocols are scored with a match window widened on the LATE side by the realised sampling gap, because a method that sees only every Delta-th frame cannot report a crossing before the next sampled one. The widening is derived from the retained pattern a priori, never fitted to output, and the window used is published beside every level it scored.",
       "No degradation result is expressed as a speed. The clip's along-road scale cannot be anchored, so displacements are given in pixels per frame and durations in frames or seconds.",
       "This report measures accuracy only. Per-method cost is published in counting_accuracy.json and is deliberately absent here: a wall-clock column would make two runs of this report differ, and reproducibility is the property it most needs to be able to prove.",
@@ -1383,7 +1383,7 @@ export const REPORTS = {
         "definition": "max(fragmentation_ratio, 1 / fragmentation_ratio): the MULTIPLICATIVE distance from one predicted identity per labelled vehicle, floor 1.0, read as 'N times away from one'. null where the ratio is zero -- an infinite fold, because not one identity reached the gate -- and null ranks as the worst possible value."
       },
       "classConsistency": {
-        "definition": "Among MATCHED crossings only: how many carry the class the labeller recorded, and which confusions the rest are. Matching is class-blind by ruling, so a detector class error surfaces here once, as a confusion, instead of twice as a miss plus a false alarm -- which is why this is a separate axis from precision, recall and F1 and must never be folded into them."
+        "definition": "Among MATCHED crossings only: how many carry the class the labeller recorded, and which confusions the rest are. Matching is class-blind by design, so a detector class error surfaces here once, as a confusion, instead of twice as a miss plus a false alarm -- which is why this is a separate axis from precision, recall and F1 and must never be folded into them."
       }
     },
     "clean": {
@@ -1889,7 +1889,7 @@ export const REPORTS = {
       "spread": 0.05882352941176472,
       "classConsistencySpread": 0.0625,
       "discriminates": true,
-      "verdict": "On the undegraded clip the fragmentation ratio DOES separate the three trackers, by 0.0588: centroid 1.0588, engine 1.1176, greedy-iou 1.0588. That is a change from Task 14's finding that all three scored identically with the gate rule, so it is the ratio -- not the crossing count -- that sees the difference."
+      "verdict": "On the undegraded clip the fragmentation ratio DOES separate the three trackers, by 0.0588: centroid 1.0588, engine 1.1176, greedy-iou 1.0588."
     },
     "separation": {
       "metric": "fragmentation_ratio",
@@ -2006,7 +2006,7 @@ export const REPORTS = {
     "claimsNotMade": [
       {
         "claim": "No ID-switch count, IDF1, MOTA, MOTP or any other identity-preservation figure is published, here or on any other surface of this project.",
-        "reason": "All of them need a frame-by-frame identity label set -- which vehicle each box belongs to, over the whole labelled window -- and this clip has none. Producing one is a human adjudication of the same kind Task 12's 17 crossings required, at a far larger scale, and it was not done. No proxy is offered in its place: a proxy derived from the tracker's own output would be the tracker grading its own identities, which is not evidence."
+        "reason": "All of them need a frame-by-frame identity label set -- which vehicle each box belongs to, over the whole labelled window -- and this clip has none. Producing one is a human adjudication of the same kind the 17 labelled crossings required, at a far larger scale, and it was not done. No proxy is offered in its place: a proxy derived from the tracker's own output would be the tracker grading its own identities, which is not evidence."
       },
       {
         "claim": "The fragmentation ratio is not a count of identity errors and must not be quoted as one.",

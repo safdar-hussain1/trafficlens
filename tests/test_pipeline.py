@@ -93,7 +93,7 @@ def spin(seconds: float) -> None:
     Busy-wait rather than ``time.sleep`` for a narrower reason than the
     first version of this docstring claimed. Sleep's overshoot is a
     roughly CONSTANT wake-up latency, not a proportional one (~2.1 ms
-    here at both the 5 ms and 4 ms targets; a reviewer measured ~1.1 ms on
+    here at both the 5 ms and 4 ms targets; ~1.1 ms was measured on
     other hardware), so its relative error is large AND machine-dependent
     -- a tolerance calibrated on one machine does not port. The spin's
     overshoot stays inside 6% even at 1.4x oversubscription, which is what

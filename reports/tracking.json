@@ -87,7 +87,7 @@
       "equivalent_to": "abs(log(fragmentation_ratio)), monotonically: max(r, 1/r) = exp(abs(log r)). The two rank identically; the fold form is published because '2.83x away from one' is legible and a log is not."
     },
     "class_consistency": {
-      "definition": "Among MATCHED crossings only: how many carry the class the labeller recorded, and which confusions the rest are. Matching is class-blind by ruling, so a detector class error surfaces here once, as a confusion, instead of twice as a miss plus a false alarm -- which is why this is a separate axis from precision, recall and F1 and must never be folded into them.",
+      "definition": "Among MATCHED crossings only: how many carry the class the labeller recorded, and which confusions the rest are. Matching is class-blind by design, so a detector class error surfaces here once, as a confusion, instead of twice as a miss plus a false alarm -- which is why this is a separate axis from precision, recall and F1 and must never be folded into them.",
       "denominator": "matched pairs at this level, per tracker",
       "matched_by": "trafficlens.bench.scoring.match_crossings: one-to-one, greedy nearest-frame-first, class-blind, direction-aware, over the asymmetric window published beside every level. The same matcher and the same pairing counting_accuracy.json publishes, so the clean figures here are directly comparable with it."
     },
@@ -2076,7 +2076,7 @@
       "spread": 0.05882352941176472,
       "class_consistency_spread": 0.0625,
       "discriminates": true,
-      "verdict": "On the undegraded clip the fragmentation ratio DOES separate the three trackers, by 0.0588: centroid 1.0588, engine 1.1176, greedy-iou 1.0588. That is a change from Task 14's finding that all three scored identically with the gate rule, so it is the ratio -- not the crossing count -- that sees the difference."
+      "verdict": "On the undegraded clip the fragmentation ratio DOES separate the three trackers, by 0.0588: centroid 1.0588, engine 1.1176, greedy-iou 1.0588."
     },
     "tracker_separation": {
       "question": "The clean clip separates the trackers by only 0.0588. Does degradation -- the condition a motion model exists for -- separate them further on the fragmentation ratio?",
@@ -2547,7 +2547,7 @@
   "claims_not_made": [
     {
       "claim": "No ID-switch count, IDF1, MOTA, MOTP or any other identity-preservation figure is published, here or on any other surface of this project.",
-      "reason": "All of them need a frame-by-frame identity label set -- which vehicle each box belongs to, over the whole labelled window -- and this clip has none. Producing one is a human adjudication of the same kind Task 12's 17 crossings required, at a far larger scale, and it was not done. No proxy is offered in its place: a proxy derived from the tracker's own output would be the tracker grading its own identities, which is not evidence."
+      "reason": "All of them need a frame-by-frame identity label set -- which vehicle each box belongs to, over the whole labelled window -- and this clip has none. Producing one is a human adjudication of the same kind the 17 labelled crossings required, at a far larger scale, and it was not done. No proxy is offered in its place: a proxy derived from the tracker's own output would be the tracker grading its own identities, which is not evidence."
     },
     {
       "claim": "The fragmentation ratio is not a count of identity errors and must not be quoted as one.",

@@ -221,7 +221,7 @@ def test_gate_from_normalized_rejects_negative_coordinate():
 # diagonal) specifically to exercise this.
 
 def test_crossing_beyond_gate_end_point_not_counted():
-    # Repro from review: gate spans x in [4, 6]; the track crosses the
+    # Reproduces the defect: gate spans x in [4, 6]; the track crosses the
     # infinite line at x=50, 44 px past the gate's end point.
     gate = Gate("g", (4.0, 0.0), (6.0, 0.0))
     gc = GateCounter(gate)

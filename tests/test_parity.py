@@ -14,7 +14,7 @@ generator always reproduces its own output, and it would pass just as
 happily on an empty fixture. So it is paired with three independent
 families of check that a degenerate fixture fails:
 
-1. **The straddle inventory.** Every boundary the brief mandates must be
+1. **The straddle inventory.** Every mandated boundary kind must be
    present at least once, with a non-empty floor, and each is
    re-measured from the fixture's own recorded inputs -- the IoU is
    recomputed and compared to ``TRACK_MATCH_IOU``, the on-line anchor is
@@ -78,9 +78,9 @@ needs_sample = pytest.mark.skipif(
     ),
 )
 
-#: Every boundary kind the fixture is required to carry. The first three
-#: are the brief's mandate; the last two were added because this session
-#: measured both live (see the task report).
+#: Every boundary kind the fixture is required to carry: each is a place
+#: where the two engines would decide differently if either side got the
+#: rule wrong.
 REQUIRED_STRADDLES = (
     "anchorExactlyOnGate",
     "iouExactlyAtMatchThresh",

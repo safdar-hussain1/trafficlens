@@ -781,8 +781,8 @@ class _PointerLog:
     compare exactly, and the coincidence guard hands out an exemption on the
     strength of it. Re-listing the pointer SHAPES beside the builders -- which
     is what this module used to do -- makes that exemption a claim about code
-    somewhere else, and the claim was false: a reviewer shrank a builder's
-    field tuple and the hand-written list went on granting exemptions for
+    somewhere else, and the claim was false: after a mutation shrank a builder's
+    field tuple, the hand-written list went on granting exemptions for
     coverage that had stopped existing.
 
     So the builders read every cell through this object and the exemption set
@@ -1138,8 +1138,8 @@ def _cell_pinned_pointers(document_key: str) -> set[str]:
     set of pointers they were observed reading on this run of this report. A
     field dropped from a builder drops out of here in the same edit, and the
     exemption it granted goes with it -- which is the property the docstring at
-    the top of this module claims and, until the reviewer drove it apart, did
-    not have.
+    the top of this module claims and, until a mutation drove the two apart,
+    did not have.
 
     Every pointer is resolved by ``_PointerLog.cell`` as it is recorded, so a
     pointer that has stopped existing raises rather than granting an exemption.
@@ -1233,7 +1233,7 @@ def test_the_coincidence_check_fires_on_a_pin_that_is_not_exactly_covered():
     covered. Without it, a broken ``_one_step`` or ``_mentions_number`` would make the
     assertion pass by finding no collisions at all.
 
-    ``labels/certain`` is the reviewer's own example: the README prints both 6 and 8,
+    ``labels/certain`` is the motivating example: the README prints both 6 and 8,
     so a bare presence pin on 7 survives a report saying either.
     """
     collisions = _coincidence_prone("README", "counting_accuracy.json", "labels/certain", "int")

@@ -53,7 +53,7 @@ describe("decodeYolo", () => {
       // single float32 add, subtract, multiply, divide or compare, and each is
       // reproducible in JavaScript by rounding the float64 result once. If
       // this can only pass to a tolerance, the mirror is wrong somewhere and
-      // Task 21's boundary fixtures will find it.
+      // the parity suite's boundary fixtures will find it.
       expect(got.map((d) => ({ ...d }))).toEqual(want.map((d) => ({ ...d })));
     });
   }
@@ -145,7 +145,7 @@ describe("decodeYolo", () => {
   // numpy's argmax returns the FIRST maximum. Column 18 ties car and truck at
   // the identical float32 score, and both are kept, so a mirror scanning with
   // `>=` takes the LAST and emits a truck where Python emits a car -- the same
-  // detection, a different class. Task 21 asserts class agreement, so this is
+  // detection, a different class. The parity suite asserts class agreement, so this is
   // the case that has to decide the same way in both languages.
   it("labels an exact class tie with the FIRST maximum, as numpy's argmax does", () => {
     const tie = runCase("boundary").filter((d) => d.score === Math.fround(0.66));

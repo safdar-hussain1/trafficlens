@@ -6,8 +6,7 @@ what the numbers mean, and the asymmetric match window are all decided
 there, by a module that imports no tracker and no detector. This module
 is the other half -- it composes trackers with counting rules, drives
 them over cached detections, times them, and assembles the JSON. The two
-were split at the whole-branch review's seam when the combined file
-passed 1200 lines.
+were split along that seam when the combined file passed 1200 lines.
 
 Timing
 ------
@@ -341,7 +340,7 @@ def run_counting_benchmark(
     """Run every method over ONE shared detection stream and score each
     against ``gt``, on the full label set and on the ``certain`` rows.
 
-    ``detections`` stands in for the brief's ``clip`` argument: every
+    ``detections`` stands in for a ``clip`` argument: every
     method must see the identical detections, or a measured difference
     could be detector variance rather than a difference in the counting
     rule or the tracker. Passing the decoded stream itself -- rather than a

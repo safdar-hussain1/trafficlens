@@ -4,8 +4,8 @@ later stage can turn pixel displacement into a speed in km/h.
 Policy -- the reason this module exists at all: **an uncalibrated camera
 reports no speed, ever -- never a pixel-derived guess.** ``NO_CALIBRATION``
 (an alias for ``None``) is the sentinel a caller passes wherever a
-``RoadPlane`` is expected but no survey has been done for this camera. A
-later task's ``SpeedEstimator`` takes a ``RoadPlane | None`` and must return
+``RoadPlane`` is expected but no survey has been done for this camera.
+``SpeedEstimator`` takes a ``RoadPlane | None`` and must return
 ``None`` for every speed when it is handed ``NO_CALIBRATION``, rather than
 falling back to a raw pixel-per-frame estimate dressed up as a speed. This
 module defines that policy and gives ``SpeedEstimator`` the tool

@@ -9,8 +9,8 @@ install. See ``tests/test_detect.py::
 test_importing_ultralytics_adapter_module_does_not_import_torch_at_top_level``.
 
 Route taken for "both adapters must agree": the frame is letterboxed with
-``trafficlens.detect.base.letterbox`` (the exact function the browser
-TypeScript mirror runs in Task 20), the checkpoint's own
+``trafficlens.detect.base.letterbox`` (the exact function the browser's
+TypeScript mirror reproduces), the checkpoint's own
 ``DetectionModel`` is called DIRECTLY -- bypassing ultralytics' own
 ``Predictor`` preprocessing *and* its own NMS/postprocessing entirely --
 to obtain a raw ``(1, 84, N)`` prediction tensor, and that tensor is handed

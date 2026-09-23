@@ -1,5 +1,5 @@
 """ONNX Runtime YOLO11 detector adapter -- runs the exact ONNX graph the
-browser engine (TypeScript + onnxruntime-web, Task 20) will also run,
+browser engine (TypeScript + onnxruntime-web) also runs,
 through the exact same shared ``letterbox``/``decode_yolo`` path as
 ``trafficlens.detect.ultralytics_yolo.UltralyticsDetector`` (see that
 module's docstring for the full "both adapters agree" argument).

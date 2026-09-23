@@ -488,7 +488,7 @@ def test_the_battery_accepts_a_genuinely_open_known_finding(sandbox):
 # shrinking into something that passes by covering nothing.
 
 
-#: Every claim family the task requires the table to cover, keyed by a fragment
+#: Every claim family the table is required to cover, keyed by a fragment
 #: that must appear in some row's claim string. Written as fragments rather than
 #: whole claim names so a reworded row does not need this list touched, while a
 #: DELETED family does.

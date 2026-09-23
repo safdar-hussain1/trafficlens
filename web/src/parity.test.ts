@@ -14,14 +14,14 @@
  * ---------------------------------------------
  * Track IDs, class names, crossing frames and crossing directions are
  * asserted EXACTLY: they are decisions, and a decision either matches or does
- * not. Speeds are asserted to 1e-6 km/h, the plan's tolerance.
+ * not. Speeds are asserted to 1e-6 km/h, the published parity tolerance.
  *
  * Boxes, anchors and Kalman covariances are NOT asserted bit-for-bit, and
  * that is a measured decision rather than a hedge: numpy on the machine that
  * generated these fixtures dispatches to Accelerate, whose kernels fuse
  * multiply-add, so the two covariance paths agree only to ~7e-15 and the
  * gating distances to ~1e-14. The mirror was proven exact against a BLAS-free
- * Python transliteration in Task 19; asserting bit-identity here would be
+ * Python transliteration; asserting bit-identity here would be
  * asserting that Accelerate does not exist. The gate ADMITS the same pairs,
  * the same tracks are confirmed and reaped, the same IDs are allocated --
  * those are the facts that survive the last-bit noise, and those are what
@@ -195,7 +195,7 @@ const REQUIRED_STRADDLES = [
   "deferredOnLineUsesLastOffLinePoint",
 ] as const;
 
-/** The plan's speed tolerance. The worst delta measured across these fixtures
+/** The published speed tolerance. The worst delta measured across these fixtures
  * is eight orders of magnitude under it. */
 const SPEED_TOLERANCE_KMH = 1e-6;
 
@@ -286,7 +286,7 @@ function replay(testCase: TrackerCase): ReplayResult {
 // -- assertions ---------------------------------------------------------------
 
 /** Compare one frame's live tracks. IDs and classes are exact; speeds carry
- * the plan's tolerance, and a null on one side must be a null on the other --
+ * the published tolerance, and a null on one side must be a null on the other --
  * "no trustworthy number" is a decision, not a value. */
 function expectFrameAgrees(
   caseName: string,

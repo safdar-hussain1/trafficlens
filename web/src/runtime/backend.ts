@@ -10,7 +10,7 @@
 
 /** Substrings that mark a renderer as a CPU rasteriser pretending to be a GPU.
  *
- * Notes §3 of this task's plan is binding: every published hardware timing
+ * The rule this enforces: every published hardware timing
  * carries its `glRenderer` string, and a software-renderer string invalidates
  * the number. The probe cannot refuse to run on such a machine -- the demo
  * should still work -- so instead it labels the result, and anything that

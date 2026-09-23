@@ -172,12 +172,12 @@ def test_noise_sigma_is_read_from_the_measured_detection_noise_report():
 
 
 def test_zero_noise_recovers_the_exact_input_speeds(plane):
-    """The brief's hard requirement, on the chain it is a requirement
+    """The hard requirement, on the chain it is a requirement
     about: homography -> speed, driven by the simulator's own noise-free
     detections. Where the plane is known, the scale is known, and the
     recovery must be exact.
 
-    The 0.1 km/h bound is the brief's; the 0.01 km/h bound below it is
+    The 0.1 km/h bound is the requirement; the 0.01 km/h bound below it is
     what keeps this test from passing on slack -- the measured figure is
     four orders of magnitude inside the requirement, so a regression that
     merely stayed under 0.1 would still be caught.

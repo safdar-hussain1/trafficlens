@@ -605,7 +605,7 @@ def run_tier_2(survey: dict) -> dict:
         "shipped_config_calibrated": False,
         "limitations": LIMITATIONS,
         "what_this_replaces": (
-            "The plan's Tier 2 was to calibrate from German motorway "
+            "Tier 2 was designed to calibrate from German motorway "
             "lane-divider geometry (6 m stroke, 18 m period) and validate "
             "it three ways. Every part of that is unavailable. The 6 m + "
             "18 m justification is falsified by the clip's own paint: "

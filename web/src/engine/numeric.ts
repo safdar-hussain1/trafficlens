@@ -425,9 +425,9 @@ export function roundHalfEven(x: number): number {
  * A caveat that only applies to `float` inputs: CPython's `sum` takes an
  * UNCOMPENSATED path for `int` items, so `sum([1e16, 3, -1e16])` is 4.0 while
  * `sum([1e16, 3.0, -1e16])` is 3.0. TypeScript has no such distinction, so this
- * always behaves like the all-float list. See the timestamp-coercion hazard in
- * the task report: a fixture whose timestamps load as Python ints would put the
- * two engines on different paths. */
+ * always behaves like the all-float list, which is why timestamps are coerced
+ * to float where a fixture is loaded: a fixture whose timestamps load as Python
+ * ints would put the two engines on different paths. */
 export function sumFloats(values: Iterable<number>): number {
   let total = 0.0;
   let compensation = 0.0;

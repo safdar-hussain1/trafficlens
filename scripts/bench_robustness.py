@@ -112,8 +112,8 @@ DEFAULT_JITTER_SIGMAS = (0.0, 1.0, 2.0, 4.0, 8.0)
 #: benchmark used so the two curves are directly comparable.
 DEFAULT_BAND_VALUES = (5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0)
 
-#: The three trackers compared with the counting rule held fixed. Task 14
-#: found them indistinguishable on clean footage; whether degradation
+#: The three trackers compared with the counting rule held fixed. On clean
+#: footage they are within one event of each other; whether degradation
 #: separates them is question (b).
 GATE_RULE_METHODS = ("engine+gate", "centroid+gate", "greedy-iou+gate")
 
@@ -188,10 +188,11 @@ def _band_sweep(
     rate, for two trackers, driven through the same widening and mapping
     every other figure goes through.
 
-    This is the instrument for question (a). Task 14 measured a gate
-    approach of 1.13 px per frame, at which no band in this sweep is ever
-    stepped over, so the classic band miss mode never appeared and miss
-    rate and phantom rate rose together instead of trading. Decimation is
+    This is the instrument for question (a). The counting benchmark
+    measures a gate approach of about 1.14 px per frame on clean footage,
+    at which no band in this sweep is ever stepped over, so the classic
+    band miss mode never appears and miss rate and phantom rate rise
+    together instead of trading. Decimation is
     the protocol that should restore it: the same vehicle moves the stride
     multiple further between samples, and a narrow band can be jumped
     clean over.
@@ -506,8 +507,8 @@ def _band_step_over_answer(report_protocols, band_values) -> dict:
             "that is the finding. At no swept (tracker, rate, band) does the "
             "band rule emit fewer events than the gate rule fed by the same "
             "tracker over the same stream, so every band miss is a MISTIMED "
-            "crossing rather than a skipped one -- exactly what Task 14 "
-            "measured on clean footage, now measured at a sixteenth of the "
+            "crossing rather than a skipped one -- exactly what the counting "
+            "benchmark measures on clean footage, now at a sixteenth of the "
             "frame rate as well. Note what this does NOT say: below 15 fps "
             "every rule under-counts heavily, but the gate rule under-counts "
             "by the same amount at the same rate, so those losses belong to "
@@ -516,10 +517,11 @@ def _band_step_over_answer(report_protocols, band_values) -> dict:
 
     return {
         "question": (
-            "Task 14 measured the gate approach at 1.13 px per frame, at which "
-            "no band is ever stepped over, so the band rule's classic miss mode "
-            "never occurred and miss rate and phantom rate rose together "
-            "instead of trading. Does decimation restore it, and at which rate?"
+            "On clean 30 fps footage the counting benchmark measures the gate "
+            "approach at about 1.14 px per frame, at which no band is ever "
+            "stepped over, so the band rule's classic miss mode never occurs "
+            "and miss rate and phantom rate rise together instead of trading. "
+            "Does decimation restore it, and at which rate?"
         ),
         "criterion": (
             "A (tracker, rate, band) row counts as stepped over when the band "
@@ -572,8 +574,8 @@ def _tracker_separation_answer(report_protocols, identity_levels) -> dict:
 
     ``identity_levels`` is passed in rather than assumed so the clean-footage
     claim below is DERIVED from the same numbers the reduction proof uses. It
-    was hardcoded prose once -- "Task 14 found all three identical on clean 30
-    fps footage" -- and Task 20's interpolation correction made that false
+    was hardcoded prose once -- "all three identical on clean 30 fps
+    footage" -- and a later change to the letterbox interpolation made that false
     while the sentence carried on asserting it, in a report that recorded the
     contradicting spread three keys further down.
     """
@@ -671,8 +673,8 @@ def _tracker_separation_answer(report_protocols, identity_levels) -> dict:
             "Across all four degradation protocols and every level of each, "
             "the engine's Kalman-plus-Hungarian tracker, a centroid tracker "
             "and a greedy-IoU tracker score the identical crossing F1 with "
-            "the gate rule -- the same result Task 14 published on clean 30 "
-            "fps footage, now measured under exactly the conditions a motion "
+            "the gate rule -- the same result the counting benchmark gives on "
+            "clean 30 fps footage, now measured under exactly the conditions a motion "
             "model exists for. On this clip, at this gate, the engine's "
             "association buys no accuracy at any level of any degradation "
             "measured here."
@@ -680,15 +682,14 @@ def _tracker_separation_answer(report_protocols, identity_levels) -> dict:
 
     return {
         "question": (
-            "Task 14 reported that on clean 30 fps footage all three trackers "
-            "scored identically with the gate rule, while the engine's Kalman "
-            "plus second association stage costs about 21x the CPU of a "
-            "baseline tracker. Dropout and dropped frames are exactly the "
-            "conditions a motion model exists for. Does degradation separate "
-            "them -- and do they still tie undegraded? Both halves are "
-            "re-measured here rather than carried over, because this family's "
-            "identity levels ARE clean footage: see "
-            "identity_f1_spread_by_level."
+            "On clean 30 fps footage the three trackers score within one event "
+            "of each other with the gate rule, while the engine's Kalman plus "
+            "second association stage costs about 21x the CPU of a baseline "
+            "tracker. Dropout and dropped frames are exactly the conditions a "
+            "motion model exists for. Does degradation separate them -- and "
+            "are they level undegraded? Both halves are measured here rather "
+            "than carried over, because this family's identity levels ARE "
+            "clean footage: see identity_f1_spread_by_level."
         ),
         "methods_compared": list(GATE_RULE_METHODS),
         "f1_by_level": detail,
@@ -1005,9 +1006,9 @@ def build_report(
             "Crossing-level precision, recall and F1 are published with the "
             "count error at every level, never the count error alone. Count "
             "error alone is the metric this benchmark exists to discredit: "
-            "Task 14's band rule predicted 18 crossings against 17 real ones "
-            "-- a near-perfect total -- while landing one or two of them on "
-            "the right frame.",
+            "on the clean clip the band rule predicts 18 or 19 crossings "
+            "against 17 real ones -- a near-perfect total -- while landing "
+            "one or two of them on the right frame.",
             "The two resampling protocols are scored with a match window "
             "widened on the LATE side by the realised sampling gap, because a "
             "method that sees only every Delta-th frame cannot report a "

@@ -731,7 +731,7 @@ def test_a_model_card_cell_emptied_with_an_em_dash_refuses_the_bake(tmp_path, ro
     the parse fails loudly. It did not, for three of the five figures -- a card
     with an em-dashed ``Detections over 40 frames`` int8 cell exited 0 and baked
     ``model.detections.int8 = null``, and the architecture table then printed that
-    null into a published comparison. A silent fallback here turns the ruling into
+    null into a published comparison. A silent fallback here turns the refusal into
     a hole, so the refusal is asserted cell by cell.
     """
     text = MODEL_CARD.read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 // letterbox is the one function in this repository that has to agree with
-// Python to the BIT: Task 21 compares the two engines' detections, and a
+// Python to the BIT: the parity suite compares the two engines' detections, and a
 // one-grey-level difference in the tensor moves every box in the frame. So
 // these tests are not "does it look right" -- they compare against tensors
 // `scripts/make_runtime_fixtures.py` produced by calling the real
@@ -31,7 +31,7 @@ describe("letterboxGeometry", () => {
     expect(got.padY).toBe(want.padY);
   });
 
-  // Notes §1's measured case. `Math.round(358.5)` is 359; Python's `round` is
+  // The measured case. `Math.round(358.5)` is 359; Python's `round` is
   // half-to-even and gives 358. Asserted directly rather than only through a
   // tensor, so the failure names the hazard instead of reporting "1179648
   // bytes differ".
@@ -147,7 +147,7 @@ describe("letterboxRgb", () => {
 //   RGBA -> RGB reading channel 2 first (i.e. BGR)            190 passed
 //
 // All three are hazards the module's own comments name, which is exactly the
-// shape of defect this session keeps producing: a documented rule with nothing
+// shape of defect this project has kept producing: a documented rule with nothing
 // enforcing it.
 
 describe("frameSize", () => {

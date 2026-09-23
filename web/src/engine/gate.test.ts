@@ -1,5 +1,5 @@
 // Ported from tests/test_gate.py. The bounded-segment section and the
-// on-line-deferral section each encode a defect found by review on the Python
+// on-line-deferral section each encode a defect found and fixed on the Python
 // side, so they are ported case for case rather than paraphrased.
 
 import { describe, expect, it } from "vitest";
@@ -266,7 +266,7 @@ describe("Gate construction", () => {
 
 describe("bounded gate segment", () => {
   it("does not count a crossing beyond the gate's end point", () => {
-    // Repro from review: gate spans x in [4, 6]; the track crosses the
+    // Reproduces the defect: gate spans x in [4, 6]; the track crosses the
     // infinite line at x=50, 44 px past the gate's end point.
     const gate = new Gate("g", [4.0, 0.0], [6.0, 0.0]);
     const gc = new GateCounter(gate);

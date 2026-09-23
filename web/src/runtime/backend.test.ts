@@ -82,7 +82,7 @@ describe("probeBackend", () => {
     expect(probe.renderer).toBe("unknown");
   });
 
-  // Notes §3: a software-renderer string invalidates a published timing. The
+  // A software-renderer string invalidates a published timing. The
   // probe cannot refuse to run, but it must mark the result so a number taken
   // from it is never published as hardware.
   it("marks a software renderer so its timings are not published as hardware", async () => {

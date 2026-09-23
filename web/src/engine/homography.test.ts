@@ -31,7 +31,7 @@ const IMG4: readonly Point[] = [
 
 // The float64 values Python's RoadPlane.to_world produces for IMG4 through
 // H_TRUE, transcribed from a measured run. Asserted exactly: the projective
-// divide is on the speed path, and Task 21 compares speeds across the two
+// divide is on the speed path, and the parity suite compares speeds across the two
 // engines, so a change in evaluation order here must be visible.
 const WORLD4_PROJECTED: readonly Point[] = [
   [-3.5, 5.000000000000002],

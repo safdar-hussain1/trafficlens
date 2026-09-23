@@ -7,7 +7,7 @@ so each failure mode has a test that can see it:
 
 - **A protocol that does not reduce to the undegraded baseline.** If the
   identity level (30 fps / 0 % dropped / p = 0 / sigma = 0) does not
-  reproduce the Task 14 numbers EXACTLY, the degradation is not the only
+  reproduce the counting benchmark's numbers EXACTLY, the degradation is not the only
   thing that changed and every other row is uninterpretable. The identity
   level runs the general code path, never a short-circuit branch, so the
   reduction proves the transform rather than proving a branch.
@@ -394,7 +394,7 @@ def test_the_late_side_widens_by_the_gap_minus_one_and_the_early_side_never_move
 def test_a_gap_of_one_leaves_the_undegraded_window_exactly_unchanged():
     """The reduction proof for the window itself: at 30 fps, at 0 %
     dropped frames, and under both protocols that resample nothing, the
-    scorer must be the one Task 14 fixed, to the frame."""
+    scorer must be the one the counting benchmark uses, to the frame."""
     widened = widen_for_gap(DEFAULT_MATCH_WINDOW, 1)
     assert widened.frames_before == 1
     assert widened.frames_after == 4
@@ -1343,7 +1343,7 @@ def test_the_published_report_reduces_exactly_to_the_counting_report():
                 == baseline[name]["certain_only"]["f1"]
             ), (protocol, name)
 
-    # Moved once, in Task 20, with the interpolation change described in
+    # Moved once, with the interpolation change described in
     # tests/test_bench_counting.py's headline block and in
     # `detect.base.letterbox`. Recall is unchanged -- the same 16 of 17, still
     # missing only frame 192 -- and the whole movement is one extra phantom at
@@ -1359,7 +1359,7 @@ def test_the_published_report_reduces_exactly_to_the_counting_report():
 
 
 def test_the_published_report_carries_the_window_it_scored_each_level_with():
-    """Ruling: publish the window used at every rate. A widened window
+    """Publish the window used at every rate. A widened window
     quoted nowhere is a scorer nobody can audit."""
     report = _report()
     for protocol, block in report["protocols"].items():
@@ -1378,7 +1378,7 @@ def test_the_published_report_carries_the_window_it_scored_each_level_with():
 
 
 def test_the_published_report_marks_where_the_widened_window_loses_resolution():
-    """The honest consequence of §1, on the record: adjacent labels'
+    """The honest consequence of the window rule, on the record: adjacent labels'
     windows already share a frame undegraded, and every widening enlarges
     that overlap."""
     report = _report()
@@ -1399,8 +1399,8 @@ def test_the_published_report_marks_where_the_widened_window_loses_resolution():
 def test_the_published_report_answers_the_band_step_over_question_from_its_series():
     """The headline must follow from the numbers under it.
 
-    Task 14 measured 1.13 px/frame at the gate, at which no band is ever
-    stepped over. The claim that decimation restores the step-over mode is
+    The counting benchmark measures about 1.14 px/frame at the gate on clean
+    footage, at which no band is ever stepped over. The claim that decimation restores the step-over mode is
     checked against the published per-rate displacement and the published
     band sweep, not asserted.
     """
@@ -1427,7 +1427,7 @@ def test_the_published_report_answers_the_band_step_over_question_from_its_serie
         for entry in rates
     }
     assert question["engine_tracked_approach_px_per_frame_by_rate"] == engine_tracked
-    # Also moved by Task 20's interpolation change: the anchors this median is
+    # Also moved by the interpolation change: the anchors this median is
     # taken over are detector box edges, which shifted sub-pixel. Before:
     # 1.1326310188320008.
     assert engine_tracked["30.0"] == pytest.approx(1.142117260926284)
@@ -1549,8 +1549,8 @@ def test_a_band_shortfall_has_a_second_cause_besides_step_over():
 
 
 def test_the_published_report_answers_the_tracker_separation_question():
-    """Task 14's sharpest negative was that all three trackers scored
-    identically on clean footage. Whether degradation separates them is
+    """On clean footage the three trackers score within one event of each
+    other. Whether degradation separates them is
     recomputed here from the published per-level F1s rather than trusted.
 
     Everything the verdict rests on is recomputed from the PER-LEVEL
@@ -1558,7 +1558,7 @@ def test_the_published_report_answers_the_tracker_separation_question():
     from the question block's own summary of them. ``f1_by_level`` is a
     convenience copy; reading the engine's score out of it and comparing
     that against the records would let a fabricated copy agree with
-    itself, and the strongest negative claim this session makes could be
+    itself, and the strongest negative claim this project makes could be
     inverted by editing one number and two lists.
     """
     report = _report()
@@ -1627,8 +1627,8 @@ def test_the_published_report_answers_the_tracker_separation_question():
     # The CLEAN-footage clause, recomputed the same way.
     #
     # This is the one that went wrong. The verdict used to assert, in fixed
-    # prose, that Task 14 "found all three identical on clean 30 fps footage",
-    # and Task 20's interpolation correction made that false -- while the same
+    # prose, that the trackers were "all three identical on clean 30 fps
+    # footage", and a later interpolation change made that false -- while the same
     # report recorded the contradicting spread three keys away and this test
     # checked only that the verdict was non-empty. The whole argument depends
     # on the clean-footage baseline, so it is derived and pinned rather than
@@ -1851,9 +1851,9 @@ def test_the_published_report_states_no_speed_in_kilometres_per_hour():
 
 
 def test_the_published_report_publishes_crossing_level_metrics_not_only_counts():
-    """§2: a count error alone is the metric Task 14 proved worthless --
-    the band rule predicted 18 against 17 real crossings while landing one
-    or two on the right frame."""
+    """A count error alone is the metric the counting benchmark shows to be
+    worthless -- the band rule predicts 18 or 19 against 17 real crossings
+    while landing one or two on the right frame."""
     report = _report()
     required = {
         "n_predicted",

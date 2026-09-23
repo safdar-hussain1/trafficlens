@@ -1,7 +1,7 @@
 """The generated TypeScript constants must be exactly what the exporter
 produces from the Python source, byte for byte.
 
-Task 21 asserts the Python and TypeScript engines make identical crossing
+The parity suite asserts the Python and TypeScript engines make identical crossing
 decisions, produce identical track IDs and agree on speeds to 1e-6. That
 assertion is only worth something if the two engines are reading the same
 numbers. So the TypeScript side is never written by hand: it is generated,
@@ -105,7 +105,7 @@ def test_generated_constants_are_byte_identical_to_a_fresh_export(tmp_path):
 
 def test_export_is_deterministic_across_runs(tmp_path):
     """Same input, same bytes, every run -- otherwise the test above would be
-    a coin flip and Task 24's reproducible build would be impossible."""
+    a coin flip and a reproducible site build would be impossible."""
     first = _regenerate(tmp_path / "first.ts")
     second = _regenerate(tmp_path / "second.ts")
     assert first == second
@@ -149,7 +149,7 @@ def test_every_python_constant_is_exported_with_its_exact_value():
 
 
 def test_constants_source_holds_only_upper_case_literal_assignments():
-    """The invariant the exporter is allowed to assume (controller notes, 0).
+    """The invariant the exporter is allowed to assume.
 
     If this fails, the fix is to move the computation to its point of use --
     not to teach the exporter to evaluate Python.

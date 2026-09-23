@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Measure tracking quality only where an identity error CHANGES AN OUTPUT.
 
-There is no frame-by-frame identity label set for this clip and this task
-does not produce one, so nothing here is an ID-switch count, an IDF1, a
+There is no frame-by-frame identity label set for this clip and this
+benchmark does not produce one, so nothing here is an ID-switch count, an IDF1, a
 MOTA or an identity-preservation figure -- see ``claims_not_made`` in the
 report, which states the refusal and the reason so an absence cannot later
 be read as a claim. A tracker cannot grade its own identities, and a proxy
 derived from the tracker's own output would be exactly that.
 
-What CAN be measured against the Task 12 ground truth is what identity
+What CAN be measured against the hand-labelled ground truth is what identity
 errors cost the two products the gate actually emits: how many distinct
 predicted identities the clip's labelled vehicles are spent on, and whether
 a matched crossing carries the class the labeller recorded. Both are scored
@@ -48,8 +48,8 @@ constructed here: a tracking report whose stream came from a different
 detector run could not be compared with ``counting_accuracy.json``, and
 the reduction to it is how this family proves its protocols correct.
 
-The clean clip can barely discriminate between trackers -- Task 14 measured
-all three scoring within one event of each other, and one event is the
+The clean clip can barely discriminate between trackers -- the counting
+benchmark puts all three within one event of each other, and one event is the
 smallest step a 17-label set can express -- so the same metrics are also
 swept across the four degradation protocols of
 ``trafficlens.bench.degrade``, at exactly the levels and seed
@@ -587,7 +587,7 @@ def metric_definitions(n_ground_truth: int, region_px: float) -> dict:
             "definition": (
                 "Among MATCHED crossings only: how many carry the class the "
                 "labeller recorded, and which confusions the rest are. "
-                "Matching is class-blind by ruling, so a detector class "
+                "Matching is class-blind by design, so a detector class "
                 "error surfaces here once, as a confusion, instead of twice "
                 "as a miss plus a false alarm -- which is why this is a "
                 "separate axis from precision, recall and F1 and must never "
@@ -625,8 +625,8 @@ def _degeneracy_answer(clean: dict) -> dict:
     """Whether these metrics can tell the three trackers apart on the clean
     clip at all.
 
-    Task 14 measured all three within one event of each other with the gate
-    rule, and one event is the smallest step a 17-label set can express, so
+    The counting benchmark puts all three within one event of each other
+    with the gate rule, and one event is the smallest step a 17-label set can express, so
     a degenerate answer here is the EXPECTED result rather than a failure --
     but it has to be measured and stated, not assumed, and the verdict is
     derived from the numbers so it cannot keep claiming a tie that has
@@ -647,10 +647,7 @@ def _degeneracy_answer(clean: dict) -> dict:
         verdict = (
             f"On the undegraded clip the fragmentation ratio DOES separate "
             f"the three trackers, by {spread:.4f}: "
-            f"{listed}"
-            f". That is a change from Task 14's finding that all three "
-            f"scored identically with the gate rule, so it is the ratio -- "
-            f"not the crossing count -- that sees the difference."
+            f"{listed}."
         )
     else:
         verdict = (
@@ -660,8 +657,8 @@ def _degeneracy_answer(clean: dict) -> dict:
             f"labelled vehicle at the gate, and the class-consistency "
             f"spread is {consistency_spread:.4f}. That is the finding, not "
             f"a result: the clean clip was already known to be unable to "
-            f"discriminate -- Task 14 measured all three trackers within "
-            f"one event of each other with the gate rule, and one event is "
+            f"discriminate -- the counting benchmark puts all three trackers "
+            f"within one event of each other with the gate rule, and one event is "
             f"the smallest step a "
             f"{next(iter(clean.values()))['n_ground_truth']}-label set can "
             f"express. Three identical numbers here measure the clip, not "
@@ -788,9 +785,9 @@ def _separation_answer(ratios: dict, trackers, *, clean_spread: float) -> dict:
             f"clip, at this gate, the metric has no discriminating power "
             f"even where crossing F1 does."
         )
-    # Derived from the CLEAN measurement, never predicted: the controller's
-    # own note expected the clean clip to be unable to discriminate, and the
-    # measurement falsified it while this sentence went on asserting it.
+    # Derived from the CLEAN measurement, never predicted: the clean clip was
+    # once expected to be unable to discriminate, and the measurement
+    # falsified that while this sentence went on asserting it.
     opening = (
         f"The clean clip separates the trackers by only {clean_spread:.4f}. "
         if clean_spread > 0.0
@@ -846,7 +843,7 @@ def _agreement_answer(
     on crossing F1 at every degradation level where the three differ, while
     costing about 21x a baseline tracker's CPU. If a second, independent
     metric agrees, that is worth saying plainly. If it disagrees, the
-    disagreement is the most valuable thing this task produces and must be
+    disagreement is the most valuable thing this benchmark produces and must be
     published rather than reconciled away -- so both lists are here, and
     the verdict is derived from them.
 
@@ -1117,7 +1114,7 @@ def claims_not_made() -> list[dict]:
                 "All of them need a frame-by-frame identity label set -- "
                 "which vehicle each box belongs to, over the whole labelled "
                 "window -- and this clip has none. Producing one is a human "
-                "adjudication of the same kind Task 12's 17 crossings "
+                "adjudication of the same kind the 17 labelled crossings "
                 "required, at a far larger scale, and it was not done. No "
                 "proxy is offered in its place: a proxy derived from the "
                 "tracker's own output would be the tracker grading its own "

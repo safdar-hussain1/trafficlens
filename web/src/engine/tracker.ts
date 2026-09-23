@@ -92,8 +92,8 @@ import { KalmanBoxFilter, xyahToXyxy, xyxyToXyah } from "./kalman";
 import { Matrix } from "./numeric";
 
 /** One decoded, post-NMS detection in ORIGINAL image pixel coordinates.
- * Mirrors `trafficlens.detect.base.Detection`; Task 20's ONNX runtime produces
- * these. */
+ * Mirrors `trafficlens.detect.base.Detection`; the browser's ONNX runtime
+ * produces these. */
 export interface Detection {
   readonly x1: number;
   readonly y1: number;

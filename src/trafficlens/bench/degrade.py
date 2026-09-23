@@ -1,7 +1,7 @@
 """Spoiling the input four independent ways, and scoring what survives.
 
-Task 14 measured the engine against hand-labelled ground truth on clean
-30 fps footage. This module measures what happens when the input stops
+The counting benchmark measures the engine against hand-labelled ground
+truth on clean 30 fps footage. This module measures what happens when the input stops
 being clean: the frame rate falls, frames go missing, detections drop out
 under occlusion, and boxes jitter. Each protocol is seeded, reproducible,
 and reduces exactly to the undegraded run at its identity level -- which
@@ -809,9 +809,9 @@ def _record(
 
     Crossing-level precision, recall and F1 come FIRST and the count error
     comes alongside, never instead: a count error alone is the metric this
-    benchmark exists to discredit -- Task 14's band rule predicted 18
-    crossings against 17 real ones, a near-perfect total, while landing
-    one or two of them on the right frame.
+    benchmark exists to discredit -- on the clean clip the band rule
+    predicts 18 or 19 crossings against 17 real ones, a near-perfect total,
+    while landing one or two of them on the right frame.
     """
     deltas = [delta for _prediction, _label, delta in joint.matches]
     false_positive_frames = [

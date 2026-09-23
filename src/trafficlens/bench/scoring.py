@@ -1,6 +1,6 @@
 """Scoring predicted gate crossings against hand-labelled ones.
 
-Split out of ``harness`` at the seam the whole-branch review named: this
+Split out of ``harness`` along the seam between scoring and producing: this
 module decides what a MATCH is and what the scores mean, and knows
 nothing about how a prediction was produced. It imports no tracker, no
 detector, no counting rule, and it never will -- hand it any source of

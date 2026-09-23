@@ -112,7 +112,7 @@ ALL_SAME_IMG = [IMG4[0]] * 4
 # the surveyed area; IMG5 is the exact, noiseless H_wi projection -- no
 # nudge.
 #
-# (History: round 1 of this test suite nudged the 5th image point by
+# (History: an earlier version of this suite nudged the 5th image point by
 # (+2px, -2px) because the OLD degeneracy diagnostic -- sigma_1/sigma_9,
 # i.e. dividing by the *smallest* singular value of the DLT design matrix --
 # reported any perfectly noiseless N>4 fit as catastrophically ill-
@@ -263,7 +263,7 @@ def test_validate_raises_on_four_point_fit_without_holdout_even_when_clean():
 
 
 def test_validate_raises_on_corrupted_four_point_fit_without_holdout():
-    # The reviewer's exact scenario: corrupt one image point by 25px, build
+    # The scenario that exposed the defect: corrupt one image point by 25px, build
     # the plane, call validate() with no holdout. Before this fix this
     # passed -- the self-fit error against the same corrupted 4 points was
     # ~1e-6m regardless -- even though the true (held-out) error is 0.656m.
