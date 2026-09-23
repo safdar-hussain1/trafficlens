@@ -389,9 +389,9 @@ def test_published_web_assets_are_not_git_ignored():
 
 
 # Process docs are DOCUMENTS. Restricting the name rule to document
-# extensions is what stops it firing on source: Task 20 adds
-# web/src/runtime/session.ts, an execution-provider wrapper that has nothing to
-# do with a work session, and the bare name rule matched it on "session.".
+# extensions is what stops it firing on source: web/src/runtime/session.ts is
+# an execution-provider wrapper that has nothing to do with a work session,
+# and the bare name rule matched it on "session.".
 # Widening the exclusion to "anything under web/src/" would have been the wrong
 # fix -- a process doc can be committed anywhere -- so the narrowing is by
 # extension, and the pair below proves it still bites.
@@ -430,7 +430,7 @@ def test_the_process_doc_rule_still_catches_documents_and_spares_source():
 
 def test_private_paths_are_git_ignored():
     for path in ["yolo11n.pt", "data/samples/motorway-a40.webm", "private/handbook.pdf",
-                 ".superpowers/sdd/progress.md"]:
+                 "private/bench/motorway-a40_detections.json"]:
         r = subprocess.run(["git", "check-ignore", "-q", path], cwd=ROOT)
         assert r.returncode == 0, f"{path} is NOT git-ignored"
 

@@ -1473,8 +1473,8 @@ def main(argv: list[str] | None = None) -> int:
                 "What this refusal does NOT cover: `git status --porcelain` "
                 "does not see git-IGNORED files, so uncommitted work under an "
                 "ignored path is invisible to it -- in this repository that is "
-                "private/, data/samples/, exports/, runs/, models/ and "
-                ".superpowers/. The post-run left-dirty check is blind to the "
+                "private/, data/samples/, exports/, runs/ and models/. The "
+                "post-run left-dirty check is blind to the "
                 "same set. No row in CLAIMS targets an ignored path; a --table "
                 "of your own could.\n\n" + dirty,
                 file=sys.stderr,

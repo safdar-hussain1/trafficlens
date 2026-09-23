@@ -31,6 +31,3 @@ runs/
 
 node_modules/
 web/dist/
-
-# git-ignored tooling workspace (process docs, plans, progress notes)
-.superpowers/
