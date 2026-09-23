@@ -30,6 +30,7 @@ must work on a bare core install, before cv2 or a model is involved.
 
 from __future__ import annotations
 
+import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -66,6 +67,19 @@ MIN_BYTES = 100_000
 # repository root.
 DEFAULT_DEST = Path("data") / "samples"
 
+# Sent with every download. Wikimedia Commons answers HTTP 403 to a request
+# carrying urllib's default User-Agent ("Python-urllib/3.x"), which is how the
+# flagship clip is served, and its User-Agent policy asks a client to name
+# itself and say where it comes from. Measured 2026-09-23: the default agent
+# gets 403, this one gets 200.
+USER_AGENT = (
+    "trafficlens-fetch-samples/1.0 (+https://github.com/safdar-hussain1/trafficlens)"
+)
+
+# Seconds a stalled connection may sit before the download is abandoned. It
+# bounds each blocking read, not the whole transfer.
+TIMEOUT_S = 60
+
 
 class SampleError(RuntimeError):
     """A sample clip could not be fetched. The message always names the
@@ -74,8 +88,14 @@ class SampleError(RuntimeError):
 
 def download(url: str, path: Path) -> None:
     """Fetch ``url`` to ``path``. Split out as a module-level function so
-    the fetch policy above can be tested without any network access."""
-    urllib.request.urlretrieve(url, path)
+    the fetch policy above can be tested without any network access.
+
+    Sends ``USER_AGENT`` rather than urllib's default, which Wikimedia
+    refuses."""
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+        with open(path, "wb") as out:
+            shutil.copyfileobj(response, out)
 
 
 def fetch(name: str, dest_dir) -> tuple[Path, bool]:

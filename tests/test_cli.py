@@ -8,6 +8,7 @@ test that genuinely exports an ONNX model skips unless ultralytics and the
 yolo11n checkpoint are both present.
 """
 
+import io
 import os
 import subprocess
 import sys
@@ -653,6 +654,33 @@ def test_a_trivially_small_download_is_rejected_and_not_kept(tmp_path, monkeypat
 def test_fetch_rejects_an_unknown_sample_name(tmp_path):
     with pytest.raises(samples.SampleError):
         samples.fetch("not-a-sample.mp4", tmp_path)
+
+
+def test_a_download_names_itself_because_wikimedia_refuses_the_default(
+    tmp_path, monkeypatch
+):
+    """Wikimedia Commons serves the flagship clip and answers HTTP 403 to
+    urllib's default User-Agent, so a fetcher that sends the default cannot
+    fetch the clip every benchmark runs on. Pinned where the header is set,
+    with the network call replaced: the request must carry this project's own
+    agent string, and the bytes the server sends must land in the file."""
+    seen = []
+
+    def fake_urlopen(request, timeout=None):
+        seen.append((request, timeout))
+        return io.BytesIO(b"clip bytes")
+
+    monkeypatch.setattr(samples.urllib.request, "urlopen", fake_urlopen)
+    target = tmp_path / "motorway-a40.webm.part"
+    samples.download(samples.SAMPLES["motorway-a40.webm"], target)
+
+    assert target.read_bytes() == b"clip bytes"
+    request, timeout = seen[0]
+    assert request.full_url == samples.SAMPLES["motorway-a40.webm"]
+    agent = request.get_header("User-agent")
+    assert agent == samples.USER_AGENT
+    assert "trafficlens" in agent and not agent.startswith("Python-urllib")
+    assert timeout == samples.TIMEOUT_S
 
 
 def test_fetch_samples_command_reports_each_clip(tmp_path, monkeypatch):
