@@ -51,7 +51,18 @@ class OnnxDetector:
         self._session = ort.InferenceSession(
             weights, providers=providers or ["CPUExecutionProvider"]
         )
-        self._input_name = self._session.get_inputs()[0].name
+        graph_input = self._session.get_inputs()[0]
+        self._input_name = graph_input.name
+        # An exported graph is fixed at the size it was exported at. Checked
+        # here, once, so a mismatch is one readable sentence rather than an
+        # onnxruntime shape error on the first frame. Symbolic (dynamic)
+        # dimensions arrive as strings and are accepted as they are.
+        height, width = graph_input.shape[2], graph_input.shape[3]
+        if isinstance(height, int) and isinstance(width, int) and (height, width) != (size, size):
+            raise ValueError(
+                f"{weights} was exported at {width}x{height} but detector.imgsz "
+                f"is {size}; set imgsz: {height} or re-export with --imgsz {size}"
+            )
         self.size = size
         self.conf = conf
         self.iou = iou

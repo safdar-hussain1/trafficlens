@@ -194,14 +194,22 @@ def build_detector(config):
         "conf": detector_config.confidence,
         "classes": tuple(detector_config.classes),
     }
+    model = detector_config.model
+    # An .onnx file must exist. A .pt name need not: ultralytics downloads its
+    # own published checkpoints (yolo11s.pt, ...) on first use, which is how a
+    # fresh clone runs the shipped configs, so it is left to fail there.
+    if model.endswith(".onnx") and not Path(model).is_file():
+        raise click.ClickException(f"model file not found: {model}")
     try:
-        if detector_config.model.endswith(".onnx"):
+        if model.endswith(".onnx"):
             from trafficlens.detect.onnx_yolo import OnnxDetector
 
-            return OnnxDetector(detector_config.model, **kwargs)
+            return OnnxDetector(model, **kwargs)
         from trafficlens.detect.ultralytics_yolo import UltralyticsDetector
 
-        return UltralyticsDetector(detector_config.model, **kwargs)
+        return UltralyticsDetector(model, **kwargs)
+    except (ValueError, FileNotFoundError) as error:
+        raise click.ClickException(f"cannot load the detector: {error}") from error
     except ImportError as error:
         extra = "onnx" if detector_config.model.endswith(".onnx") else "detect"
         raise click.ClickException(

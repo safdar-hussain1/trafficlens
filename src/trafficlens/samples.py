@@ -91,11 +91,19 @@ def download(url: str, path: Path) -> None:
     the fetch policy above can be tested without any network access.
 
     Sends ``USER_AGENT`` rather than urllib's default, which Wikimedia
-    refuses."""
+    refuses. When the server states a ``Content-Length``, a transfer that
+    ends short of it raises ``OSError``, so a truncated clip is deleted by
+    ``fetch`` rather than renamed into place."""
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
         with open(path, "wb") as out:
             shutil.copyfileobj(response, out)
+        declared = response.headers.get("Content-Length")
+    written = Path(path).stat().st_size
+    if declared is not None and declared.isdigit() and written != int(declared):
+        raise OSError(
+            f"the download stopped at {written} of {int(declared)} bytes"
+        )
 
 
 def fetch(name: str, dest_dir) -> tuple[Path, bool]:

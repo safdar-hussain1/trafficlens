@@ -151,7 +151,8 @@ repository root:
 .venv/bin/trafficlens run --config configs/webcam.yaml --source data/samples/person-bicycle-car-detection.mp4 --max-frames 120
 #   --model FILE           .pt runs through ultralytics, .onnx through onnxruntime. An ONNX graph
 #                          is fixed at the size it was exported at, which must equal the config's
-#                          detector.imgsz: 640 in every shipped config.
+#                          detector.imgsz: 640 in every shipped config. A mismatch, or a model file
+#                          that does not exist, stops with one "Error:" line before any frame is read.
 .venv/bin/trafficlens run --config configs/motorway.yaml --model yolo11n.pt --max-frames 300
 .venv/bin/trafficlens run --config configs/motorway.yaml --model exports/yolo11n.onnx --max-frames 300   # after export-model below
 #   --limit KMH            flags crossings faster than this; it needs a calibration block, and

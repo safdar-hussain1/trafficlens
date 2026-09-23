@@ -497,6 +497,56 @@ def test_a_writer_failure_is_reported_without_a_traceback(
     assert "could not open a video writer" in result.output
 
 
+# --- bad --model paths --------------------------------------------------------
+
+
+BROWSER_GRAPH = ROOT / "web" / "public" / "models" / "yolo11n-480.onnx"
+
+
+def test_an_onnx_graph_of_the_wrong_input_size_is_one_readable_error(session):
+    """The committed browser graph is fixed at 480; every shipped config runs
+    at 640. That used to surface as an onnxruntime shape traceback on the
+    first frame. It must be refused when the detector is built, naming both
+    sizes and both ways out."""
+    pytest.importorskip("onnxruntime")
+    config, _ = session
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--model", str(BROWSER_GRAPH)]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "480x480" in result.output and "imgsz is 640" in result.output
+    assert "--imgsz 640" in result.output
+
+
+def test_a_missing_onnx_model_is_one_readable_error(session, tmp_path):
+    config, _ = session
+    missing = tmp_path / "nowhere.onnx"
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--model", str(missing)]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "model file not found" in result.output
+    assert str(missing) in result.output
+
+
+def test_a_missing_pt_model_is_one_readable_error(session, tmp_path):
+    """A .pt name is not pre-checked -- ultralytics downloads its own published
+    checkpoints on first use -- so the FileNotFoundError it raises for any
+    other name is what has to be turned into one line."""
+    pytest.importorskip("torch")
+    pytest.importorskip("ultralytics")
+    config, _ = session
+    missing = tmp_path / "nowhere.pt"
+    result = CliRunner().invoke(
+        cli, ["run", "--config", str(config), "--model", str(missing)]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "cannot load the detector" in result.output
+
+
 # --- serve / bench stubs ------------------------------------------------------
 
 
@@ -661,6 +711,41 @@ def test_fetch_rejects_an_unknown_sample_name(tmp_path):
         samples.fetch("not-a-sample.mp4", tmp_path)
 
 
+class _FakeResponse(io.BytesIO):
+    """What ``urlopen`` hands back: a readable body plus its headers."""
+
+    def __init__(self, body: bytes, content_length: int | None = None) -> None:
+        super().__init__(body)
+        length = len(body) if content_length is None else content_length
+        self.headers = {"Content-Length": str(length)}
+
+
+def test_a_download_cut_short_of_its_content_length_is_not_kept(tmp_path, monkeypatch):
+    """A connection that drops mid-transfer still ends the read cleanly, so
+    the only sign is a byte count short of the declared length. Without this
+    check a truncated clip over the size floor was renamed into place and
+    failed later, somewhere unrelated."""
+    body = b"x" * (samples.MIN_BYTES + 10)
+
+    def truncated(request, timeout=None):
+        return _FakeResponse(body, content_length=len(body) + 5000)
+
+    monkeypatch.setattr(samples.urllib.request, "urlopen", truncated)
+    with pytest.raises(samples.SampleError) as caught:
+        samples.fetch("car-detection.mp4", tmp_path)
+    assert "stopped at" in str(caught.value)
+    assert list(tmp_path.iterdir()) == [], "a truncated download must be removed"
+
+    # The control, varying only the declared length: the same body with an
+    # honest header is kept.
+    def complete(request, timeout=None):
+        return _FakeResponse(body)
+
+    monkeypatch.setattr(samples.urllib.request, "urlopen", complete)
+    path, downloaded = samples.fetch("car-detection.mp4", tmp_path)
+    assert downloaded and path.read_bytes() == body
+
+
 def test_a_download_names_itself_because_wikimedia_refuses_the_default(
     tmp_path, monkeypatch
 ):
@@ -673,7 +758,7 @@ def test_a_download_names_itself_because_wikimedia_refuses_the_default(
 
     def fake_urlopen(request, timeout=None):
         seen.append((request, timeout))
-        return io.BytesIO(b"clip bytes")
+        return _FakeResponse(b"clip bytes")
 
     monkeypatch.setattr(samples.urllib.request, "urlopen", fake_urlopen)
     target = tmp_path / "motorway-a40.webm.part"
