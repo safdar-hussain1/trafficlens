@@ -10,6 +10,9 @@
 
 import "./ui/styles.css";
 
+// Who built this and where the source lives, once per load, in every mode.
+console.info("TrafficLens — built by Safdar Hussain · https://github.com/safdar-hussain1/trafficlens");
+
 const params = new URLSearchParams(location.search);
 
 async function boot(): Promise<void> {
