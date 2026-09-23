@@ -900,6 +900,9 @@ PYTHONPATH=src .venv/bin/python scripts/make_parity_fixtures.py   # web/src/fixt
 PYTHONPATH=src .venv/bin/python scripts/make_runtime_fixtures.py  # web/src/runtime/fixtures/; needs the clip
 cd web && npm run build                                           # docs/; a second run is byte-identical
 
+# the review images the 17 crossings were labelled from (data/groundtruth/PROTOCOL.md)
+PYTHONPATH=src .venv/bin/python scripts/make_gt_slitscan.py --config configs/motorway.yaml --gate inbound --out exports/slitscan
+
 # the published page's own verdict, in a real browser: serve docs/ on 4199 first
 scripts/verify_page.sh 'http://127.0.0.1:4199/?selftest=1'
 
