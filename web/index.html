@@ -5,70 +5,88 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="author" content="Safdar Hussain" />
-    <title>TrafficLens — count vehicles across a line you draw, in your browser</title>
-    <!-- Inline, so the page makes no request for it: a favicon 404 is noise in
-         every console a visitor opens, and the mark is two shapes -- the road's
-         ground and the gate drawn across it. -->
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2322262B'/%3E%3Cpath d='M4 21h24' stroke='%230058A3' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M6 27h5M14 27h5M22 27h5' stroke='%23E8E6E1' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
-    />
+    <title>TrafficLens — vehicle counting that runs in your browser</title>
     <meta
       name="description"
-      content="Traffic analytics from any camera: gate counting on your own GPU, with the measured accuracy, the robustness sweep and the results that did not work out published beside it."
+      content="Draw a line on a traffic video and count the vehicles that cross it, by class and direction. The detector runs in your browser; no frame leaves your device."
     />
-    <link rel="canonical" href="https://safdar-hussain1.github.io/trafficlens/" />
     <meta name="google-site-verification" content="0SIEfExLTSQj1qvnHWF5A5fY58KVl2lpIEnePP9CtI0" />
+    <link rel="canonical" href="https://safdar-hussain1.github.io/trafficlens/" />
+    <!-- The mark is two shapes: the road's ground and the gate drawn across it. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
-    <!-- Open Graph and Twitter. No og:image: there is no measured artefact worth
-         depicting and a card mock-up would be the one image on this page nobody
-         measured, so the summary card is used instead of the large-image one --
-         it renders correctly without one. -->
+    <!-- Open Graph and Twitter. og-image.png is a screenshot of this page in a
+         real browser, counting the motorway clip -- not a mock-up. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="TrafficLens" />
-    <meta property="og:url" content="https://safdar-hussain1.github.io/trafficlens/" />
-    <meta property="og:title" content="TrafficLens — vehicle counting, measured in the open" />
+    <meta property="og:site_name" content="Safdar Hussain" />
+    <meta property="og:title" content="TrafficLens — vehicle counting that runs in your browser" />
     <meta
       property="og:description"
-      content="Drag a gate across a video and the detector runs in your own tab. Below it: the counting accuracy against a hand-labelled set, four degradation sweeps, and the results that refuted what the project believed."
+      content="Draw a line on a traffic video and count the vehicles that cross it, by class and direction. The detector runs in your browser; no frame leaves your device."
     />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="TrafficLens — vehicle counting, measured in the open" />
+    <meta property="og:url" content="https://safdar-hussain1.github.io/trafficlens/" />
+    <meta property="og:image" content="https://safdar-hussain1.github.io/trafficlens/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta
-      name="twitter:description"
-      content="Gate counting that runs on the visitor's own GPU, published with its accuracy, its robustness sweeps and its negative results."
+      property="og:image:alt"
+      content="The TrafficLens control room counting a motorway clip: a gate drawn across the road with detection boxes on the cars, and a time-space diagram marking each counted crossing."
     />
 
-    <!-- Structured data. Two things, because this page is two things: a piece of
-         software you can run, and a report of what it measured. Every figure
-         quoted here is also on the page, and the page renders it from the same
-         baked reports, so there is no third place for a number to drift. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TrafficLens — vehicle counting that runs in your browser" />
+    <meta
+      name="twitter:description"
+      content="Draw a line on a traffic video and count the vehicles that cross it, by class and direction. The detector runs in your browser; no frame leaves your device."
+    />
+    <meta name="twitter:image" content="https://safdar-hussain1.github.io/trafficlens/og-image.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The TrafficLens control room counting a motorway clip: a gate drawn across the road with detection boxes on the cars, and a time-space diagram marking each counted crossing."
+    />
+
+    <!-- Structured data: the page as an application you can run, and the
+         repository as its source. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@graph": [
           {
-            "@type": "SoftwareSourceCode",
+            "@type": "WebApplication",
             "name": "TrafficLens",
             "url": "https://safdar-hussain1.github.io/trafficlens/",
-            "description": "Traffic analytics from an ordinary camera: gate counting, calibrated speed where a camera is surveyed, and a browser engine that runs the detector on the visitor's own GPU.",
-            "programmingLanguage": ["Python", "TypeScript"],
-            "license": "https://opensource.org/licenses/MIT",
-            "runtimePlatform": "Browser (WebGPU, WebAssembly)",
-            "applicationCategory": "Computer vision"
+            "description": "Draw a line on a traffic video and count the vehicles that cross it, by class and direction. The detector runs in your browser; no frame leaves your device.",
+            "image": "https://safdar-hussain1.github.io/trafficlens/og-image.png",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Any (runs in a web browser)",
+            "browserRequirements": "Requires JavaScript and WebAssembly; uses WebGPU where the browser provides it",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "author": {
+              "@type": "Person",
+              "name": "Safdar Hussain",
+              "url": "https://github.com/safdar-hussain1",
+              "sameAs": [
+                "https://github.com/safdar-hussain1",
+                "https://www.linkedin.com/in/safdar-hussain-a8a61b248"
+              ]
+            }
           },
           {
-            "@type": "TechArticle",
-            "headline": "What TrafficLens measures, and what it does not",
-            "url": "https://safdar-hussain1.github.io/trafficlens/#results",
-            "inLanguage": "en",
-            "about": [
-              "vehicle counting",
-              "multi-object tracking",
-              "camera calibration",
-              "speed estimation"
-            ],
-            "abstract": "Counting accuracy against a hand-labelled ground-truth set with its protocol stated, four degradation sweeps against two baseline trackers, synthetic speed validation against exact truth, and the negative result that removed the flagship clip's calibration."
+            "@type": "SoftwareSourceCode",
+            "name": "TrafficLens",
+            "codeRepository": "https://github.com/safdar-hussain1/trafficlens",
+            "programmingLanguage": ["Python", "TypeScript"],
+            "license": "https://opensource.org/licenses/MIT",
+            "author": {
+              "@type": "Person",
+              "name": "Safdar Hussain",
+              "url": "https://github.com/safdar-hussain1",
+              "sameAs": [
+                "https://github.com/safdar-hussain1",
+                "https://www.linkedin.com/in/safdar-hussain-a8a61b248"
+              ]
+            }
           }
         ]
       }
