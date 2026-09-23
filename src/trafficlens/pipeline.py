@@ -114,11 +114,15 @@ STAGES: tuple[str, ...] = ("detect", "track", "analytics")
 # that prints this number is responsible for saying so.
 TOTAL = "frame"
 
-# Container extensions ``_open_writer``'s MJPG encoder is verified to open.
-# Checked, not assumed: .webm and any extension OpenCV does not recognise
-# fail to open at all, which is why ``trafficlens run`` refuses them up
-# front rather than after a model load and a frame of work.
-SAVE_VIDEO_SUFFIXES: tuple[str, ...] = (".avi", ".mkv", ".mov", ".mp4", ".m4v")
+# Container extensions ``_open_writer``'s MJPG encoder is verified to open,
+# on macOS (Apple silicon) and on Linux (x86-64) alike. Checked, not
+# assumed: .webm and any extension OpenCV does not recognise fail to open at
+# all, which is why ``trafficlens run`` refuses them up front rather than
+# after a model load and a frame of work. .m4v is left out on purpose: it
+# opens on macOS, but the FFmpeg inside the Linux opencv-python wheels will
+# not put an MJPG stream in that container, so offering it would be true on
+# one platform only.
+SAVE_VIDEO_SUFFIXES: tuple[str, ...] = (".avi", ".mkv", ".mov", ".mp4")
 
 # Frame rate assumed when a source reports none of its own (webcams, some
 # streams). It is used ONLY to bound the speed estimator's per-track

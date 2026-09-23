@@ -433,7 +433,9 @@ def test_every_advertised_save_video_container_actually_writes(
     assert video.is_file() and video.stat().st_size > 0
 
 
-@pytest.mark.parametrize("name", ["annotated.webm", "annotated.txt", "annotated"])
+@pytest.mark.parametrize(
+    "name", ["annotated.webm", "annotated.m4v", "annotated.txt", "annotated"]
+)
 def test_an_unwritable_save_video_container_is_refused_before_the_model_loads(
     session, tmp_path, monkeypatch, name
 ):
@@ -441,6 +443,8 @@ def test_an_unwritable_save_video_container_is_refused_before_the_model_loads(
     filename, so it must be refused up front -- not as an OSError traceback
     after a model has loaded and a frame has been analysed. `.webm` matters
     especially: it is the extension of this project's own flagship sample.
+    `.m4v` is refused on every platform because the Linux OpenCV wheels
+    cannot write it, even though the macOS ones can.
     """
     config, _ = session
 
