@@ -192,11 +192,12 @@ def test_gating_distance_single_and_batch_agree(kf):
     singles = np.array([kf.gating_distance(mean, cov, zs[i : i + 1])[0] for i in range(3)])
     # Equal to rounding, not bit for bit: the batch is one LAPACK solve with
     # three right-hand sides and the singles are three solves with one, and a
-    # BLAS is free to order that arithmetic differently. OpenBLAS on x86-64
-    # lands two of these three one ulp apart; Accelerate on Apple silicon
-    # happens to agree exactly. Four ulps still misses any real difference --
-    # a wrong row, a dropped square -- by many orders of magnitude.
-    np.testing.assert_allclose(batch, singles, rtol=4 * np.finfo(np.float64).eps, atol=0.0)
+    # BLAS is free to order that arithmetic differently. Measured: OpenBLAS on
+    # Linux x86-64 puts the three distances [0, 2, 1] ulps apart (largest
+    # relative gap 1.48 eps); Accelerate on Apple silicon gives [0, 0, 0].
+    # 1e-12 leaves headroom for other BLAS builds and still misses any real
+    # difference -- a wrong row, a dropped square -- by orders of magnitude.
+    np.testing.assert_allclose(batch, singles, rtol=1e-12, atol=0.0)
 
 
 # ---------------------------------------------------------------------------
