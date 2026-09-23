@@ -1084,8 +1084,16 @@ export const COMMANDS: readonly Command[] = [
     what: "Download the Creative Commons sample clips this project measures on.",
     implemented: true,
   },
-  { name: "serve", what: "Serve the browser dashboard.", implemented: false },
-  { name: "bench", what: "Point at the benchmark harness.", implemented: false },
+  {
+    name: "serve",
+    what: "Placeholder: says how to serve the site in docs/ with any static file server.",
+    implemented: false,
+  },
+  {
+    name: "bench",
+    what: "Placeholder: names the benchmark scripts under scripts/.",
+    implemented: false,
+  },
 ];
 
 interface ApiEntry {
@@ -1140,7 +1148,7 @@ function referenceSection(): readonly Child[] {
       COMMANDS.map((command) => [
         `trafficlens ${command.name}`,
         command.what,
-        command.implemented ? "works" : "not built",
+        command.implemented ? "works" : "placeholder",
       ]),
     ),
     table(

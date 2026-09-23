@@ -431,7 +431,7 @@ def _write_exports(result, export_dir: Path) -> None:
 @click.option("--host", default="127.0.0.1", show_default=True)
 @click.option("--port", default=8000, show_default=True, type=int)
 def serve(host: str, port: int) -> None:
-    """Serve the browser dashboard (not built yet)."""
+    """Placeholder: says how to serve the browser site in docs/."""
     click.echo(
         "`trafficlens serve` is a placeholder and serves nothing. The browser "
         "engine is a static site in docs/: serve that directory with any "
@@ -567,7 +567,7 @@ def _frame_size(config, width, height) -> tuple[int, int]:
 
 @cli.command()
 def bench() -> None:
-    """Point at the benchmark harness (not built yet)."""
+    """Placeholder: names the benchmark scripts under scripts/."""
     click.echo(
         "`trafficlens bench` is a placeholder. The benchmarks are the scripts "
         "under scripts/ -- bench_counting.py, bench_robustness.py, "

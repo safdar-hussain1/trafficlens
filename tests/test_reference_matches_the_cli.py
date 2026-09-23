@@ -41,10 +41,10 @@ _COMMAND = re.compile(
 
 _PYTHON_ENTRY = re.compile(r'python:\s*"(?P<path>[A-Za-z_][\w.]*)"')
 
-#: The phrase click's own help uses for a command that is a placeholder. Read from
+#: The word click's own help uses for a command that is a placeholder. Read from
 #: the CLI rather than hard-coded per command, so a command that gets implemented
-#: fails here until the page stops calling it unbuilt.
-_NOT_BUILT = "not built yet"
+#: fails here until the page stops calling it a placeholder.
+_PLACEHOLDER = "placeholder"
 
 
 def _page_commands() -> dict[str, bool]:
@@ -104,12 +104,12 @@ def test_a_command_the_cli_calls_unbuilt_is_not_shown_as_working():
     page = _page_commands()
     wrong = []
     for name, help_line in _cli_commands().items():
-        unbuilt = _NOT_BUILT in help_line.lower()
+        unbuilt = _PLACEHOLDER in help_line.lower()
         if page.get(name) is (not unbuilt):
             continue
         wrong.append(
-            f"{name}: --help says {'not built' if unbuilt else 'implemented'}, "
-            f"the page says {'works' if page.get(name) else 'not built'}"
+            f"{name}: --help says {'placeholder' if unbuilt else 'implemented'}, "
+            f"the page says {'works' if page.get(name) else 'placeholder'}"
         )
     assert wrong == [], wrong
 
@@ -122,7 +122,7 @@ def test_the_cli_really_does_carry_placeholders():
     that becomes true, because then the column can be dropped.
     """
     unbuilt = [
-        name for name, help_line in _cli_commands().items() if _NOT_BUILT in help_line.lower()
+        name for name, help_line in _cli_commands().items() if _PLACEHOLDER in help_line.lower()
     ]
     assert unbuilt, (
         "no command reports itself unbuilt any more, so the page's state column "

@@ -648,7 +648,7 @@ describe("the identity tiles are addressed by tracker name", () => {
 });
 
 describe("the reference section", () => {
-  test("marks the two placeholder commands as not built", () => {
+  test("marks the two placeholder commands as placeholders", () => {
     // The page must not claim a command works when --help says it does not.
     // `tests/test_reference_matches_the_cli.py` is what ties this list to the
     // real CLI, in both directions.
