@@ -425,12 +425,13 @@ def _write_exports(result, export_dir: Path) -> None:
 def serve(host: str, port: int) -> None:
     """Serve the browser dashboard (not built yet)."""
     click.echo(
-        "`trafficlens serve` is a placeholder. The web application -- the "
-        "API, the dashboard and the in-browser engine -- arrives in a later "
-        "task; this command will start it once it exists."
+        "`trafficlens serve` is a placeholder and serves nothing. The browser "
+        "engine is a static site in docs/: serve that directory with any "
+        "static file server, for example "
+        "`python3 -m http.server 4199 --bind 127.0.0.1 --directory docs`."
     )
-    click.echo(f"It will bind {host}:{port} when it does.")
-    click.echo("Until then, use `trafficlens run --export-dir ...` for results.")
+    click.echo(f"(--host {host} and --port {port} are accepted and not used.)")
+    click.echo("For results from the command line, use `trafficlens run --export-dir ...`.")
 
 
 @cli.command("fetch-samples")
@@ -560,13 +561,10 @@ def _frame_size(config, width, height) -> tuple[int, int]:
 def bench() -> None:
     """Point at the benchmark harness (not built yet)."""
     click.echo(
-        "`trafficlens bench` is a placeholder. Benchmarking -- accuracy "
-        "against labelled ground truth and throughput per backend -- lands "
-        "with the scripts under scripts/ in a later task."
-    )
-    click.echo(
-        "Meanwhile, `trafficlens run --export-dir ...` writes the session "
-        "JSON those scripts/ tools will score."
+        "`trafficlens bench` is a placeholder. The benchmarks are the scripts "
+        "under scripts/ -- bench_counting.py, bench_robustness.py, "
+        "bench_tracking.py and bench_speed.py -- and README.md gives the "
+        "order their shared detection cache requires."
     )
 
 

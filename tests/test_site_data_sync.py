@@ -388,11 +388,11 @@ def test_every_published_number_occurs_in_its_own_source_report():
 # key, byte equality reproduces it happily, the containment sweep only says it came
 # from the right report, and COVERAGE names figures a claim rests on -- which by
 # definition these are not. So a key that nothing renders would be published,
-# unread and unguarded, and a later task would find it and trust it.
+# unread and unguarded, and a later change would find it and trust it.
 #
 # The rule adopted: no baked key may be referenced by nothing AND guarded by
 # nothing. These are guarded here instead of trimmed, because trimming risks
-# removing something a later task wants and pinning is the cheaper guarantee.
+# removing something a later change wants and pinning is the cheaper guarantee.
 # Each entry pins the key's baked value to the report cell it came from, which is
 # what COVERAGE does for the figures the page does print.
 

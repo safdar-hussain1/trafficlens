@@ -500,10 +500,11 @@ def test_a_writer_failure_is_reported_without_a_traceback(
 # --- serve / bench stubs ------------------------------------------------------
 
 
-def test_serve_says_the_web_app_arrives_in_a_later_task():
+def test_serve_says_it_is_a_placeholder_and_where_the_site_is():
     result = CliRunner().invoke(cli, ["serve"])
     assert result.exit_code == 0, result.output
-    assert "later task" in result.output.lower()
+    assert "placeholder" in result.output.lower()
+    assert "docs" in result.output
 
 
 def test_bench_points_at_the_benchmark_scripts():

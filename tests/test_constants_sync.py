@@ -187,7 +187,7 @@ def test_constants_source_holds_only_upper_case_literal_assignments():
         # An annotation is not a second target, so this must not be reported as
         # a multi-target assignment; the message has to name the real rule.
         ("annotated", "A_BAD: float = 1.0", "has a type annotation"),
-        # Deliberately unsupported, and a later task may well reach for one, so
+        # Deliberately unsupported, and a later change may well reach for one, so
         # the message says what to do instead rather than calling -1.5 "not a
         # literal", which reads as simply wrong.
         ("negated", "A_BAD = -1.5", "move the sign to the point of use"),

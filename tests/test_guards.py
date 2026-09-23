@@ -293,7 +293,7 @@ def test_vendored_runtime_assets_stay_excluded_from_the_content_guards():
     """_VENDORED_SUFFIXES is belt-and-braces, and is tested as such.
 
     Today these extensions never reach _is_skipped -- _TEXT_SUFFIXES drops them
-    first -- so this pins the second line of defence: if a later task adds .mjs
+    first -- so this pins the second line of defence: if a later change adds .mjs
     to _TEXT_SUFFIXES (reasonable, it is JavaScript), the vendored files must
     still not be scanned, and must still never be edited to appease a guard.
 
@@ -327,7 +327,7 @@ def test_the_vendored_exclusion_still_discriminates_once_mjs_is_scannable(
 
     _VENDORED_SUFFIXES does nothing today because _TEXT_SUFFIXES drops those
     extensions first. This exercises the exact future the comment above names --
-    a later task adds .mjs to _TEXT_SUFFIXES because it is JavaScript -- and
+    a later change adds .mjs to _TEXT_SUFFIXES because it is JavaScript -- and
     asserts the pair: the vendored copy under web/public/ stays excluded, and an
     authored .mjs anywhere else is scanned. An unscoped extension rule passes the
     first half and fails the second.
