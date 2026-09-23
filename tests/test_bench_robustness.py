@@ -39,6 +39,7 @@ import copy
 import importlib.util
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -1895,11 +1896,14 @@ def _png_pixels(path: Path):
     image. matplotlib stamps its own version into an ancillary ``tEXt``
     chunk -- the committed figures carry ``Software\\0Matplotlib
     version3.11.1`` -- while ``pyproject.toml`` permits anything in
-    ``matplotlib>=3.8,<4``. Any other version inside that cap therefore
-    fails a byte comparison on a render that is pixel-for-pixel correct,
-    which would turn a clean-clone install into a false alarm and make
-    "regenerate the figures" the prescribed remedy for a problem the
-    figures do not have.
+    ``matplotlib>=3.8,<4``. Another patch release of the same minor
+    version renders the same pixels (3.11.2 matches 3.11.1 exactly on the
+    machine that drew them) yet stamps a different version, so a byte
+    comparison would fail on a correct render, turn a clean-clone install
+    into a false alarm and make "regenerate the figures" the prescribed
+    remedy for a problem the figures do not have. A different MINOR version
+    is another matter -- it lays the figure out differently -- and is
+    handled where the comparison is made.
 
     Pillow is a hard dependency of matplotlib, so decoding costs nothing.
     """
@@ -1909,7 +1913,77 @@ def _png_pixels(path: Path):
         return np.asarray(image.convert("RGBA"))
 
 
-def test_each_committed_figure_is_the_one_its_own_report_renders(tmp_path):
+#: How far a fresh render may sit from a committed figure, in 8-bit levels per
+#: channel. Not zero, because anti-aliasing is floating-point arithmetic that a
+#: different CPU is free to round differently: matplotlib 3.11.2 on Linux x86-64
+#: puts between 0 and 84 edge pixels per figure exactly one level away from the
+#: Apple-silicon renders committed here, and none further. A figure drawn from
+#: different numbers moves by far more: the control below changes one plotted F1
+#: and moves about 1,200 pixels by up to 224 levels.
+PIXEL_TOLERANCE_LEVELS = 2
+
+
+def _max_level_difference(a, b) -> int:
+    assert a.shape == b.shape, f"the figures differ in size: {a.shape} vs {b.shape}"
+    return int(np.abs(a.astype(np.int16) - b.astype(np.int16)).max())
+
+
+def _drawn_with(path: Path) -> tuple[int, int] | None:
+    """The matplotlib major.minor that rendered a PNG, read from the
+    ``Software`` text chunk matplotlib writes into every file it saves."""
+    from PIL import Image
+
+    with Image.open(path) as image:
+        software = image.info.get("Software", "")
+    found = re.search(r"Matplotlib version(\d+)\.(\d+)", software)
+    return (int(found.group(1)), int(found.group(2))) if found else None
+
+
+@pytest.fixture(scope="module")
+def fresh_figures(tmp_path_factory):
+    """The committed report rendered once on this machine, by name."""
+    pytest.importorskip("matplotlib")
+    pytest.importorskip("PIL")
+    script = _load_script("bench_robustness")
+    out = tmp_path_factory.mktemp("figures")
+    return {path.name: path for path in script.write_figures(_report(), out)}
+
+
+def test_the_figures_render_identically_twice_on_one_machine(fresh_figures, tmp_path):
+    """Rendering is deterministic wherever it runs, so the tolerance allowed
+    against the committed files below is for a different machine's rounding,
+    never for noise on this one."""
+    script = _load_script("bench_robustness")
+    again = {path.name: path for path in script.write_figures(_report(), tmp_path)}
+    assert sorted(again) == sorted(fresh_figures)
+    for name, path in fresh_figures.items():
+        assert np.array_equal(_png_pixels(path), _png_pixels(again[name])), name
+
+
+def test_changing_a_plotted_number_moves_the_figure_far_past_the_tolerance(
+    fresh_figures, tmp_path
+):
+    """The control that makes the comparison below capable of failing: if the
+    renderer ignored the numbers it plots, every figure would match every
+    report and that comparison would be decoration. Rendered here, on the same
+    machine, so it holds under any matplotlib version."""
+    script = _load_script("bench_robustness")
+    perturbed = copy.deepcopy(_report())
+    entry = perturbed["protocols"][PROTOCOL_FRAME_RATE]["entries"][-1]
+    entry["methods"]["engine+gate"]["f1"] = 0.5
+    rendered = {path.name: path for path in script.write_figures(perturbed, tmp_path)}
+    name = f"robustness_{PROTOCOL_FRAME_RATE}.png"
+    moved = _max_level_difference(
+        _png_pixels(rendered[name]), _png_pixels(fresh_figures[name])
+    )
+    assert moved > 10 * PIXEL_TOLERANCE_LEVELS, (
+        f"changing a plotted F1 moved {name} by at most {moved} levels, too "
+        f"close to the {PIXEL_TOLERANCE_LEVELS}-level tolerance for the "
+        f"comparison with the committed figures to mean anything"
+    )
+
+
+def test_each_committed_figure_is_the_one_its_own_report_renders(fresh_figures):
     """Ties every committed PNG to the JSON it claims to draw.
 
     Magic bytes and a size floor say a file is a PNG, not that it is a
@@ -1919,40 +1993,35 @@ def test_each_committed_figure_is_the_one_its_own_report_renders(tmp_path):
     check that sees that.
 
     The comparison is on decoded PIXELS, not on file bytes -- see
-    ``_png_pixels`` for why. That keeps the catch (a figure drawn from
-    different numbers differs in pixels) while dropping a sensitivity to
-    the encoder that has nothing to do with whether the figure is honest.
+    ``_png_pixels`` for why -- and allows ``PIXEL_TOLERANCE_LEVELS`` for
+    another CPU's anti-aliasing. It is made only under the matplotlib minor
+    version that drew the committed figures. A different minor version is a
+    different renderer rather than a sign of a stale figure: under 3.10.9,
+    the newest release for Python 3.10, text and ticks land elsewhere and 13
+    to 15 per cent of the pixels change. The skip says so rather than letting
+    that pass as a check.
     """
-    pytest.importorskip("matplotlib")
-    pytest.importorskip("PIL")
-    script = _load_script("bench_robustness")
-    report = _report()
+    import matplotlib
 
-    for path in script.write_figures(report, tmp_path):
-        committed = FIGURE_DIR / path.name
-        assert np.array_equal(_png_pixels(path), _png_pixels(committed)), (
-            f"{committed.relative_to(ROOT)} is not the picture "
-            f"robustness.json renders: the committed figure is stale "
+    installed = tuple(int(part) for part in matplotlib.__version__.split(".")[:2])
+    for name, path in sorted(fresh_figures.items()):
+        committed = FIGURE_DIR / name
+        drawn_with = _drawn_with(committed)
+        assert drawn_with is not None, f"{name} does not record the matplotlib that drew it"
+        if drawn_with != installed:
+            pytest.skip(
+                f"the committed figures were drawn by matplotlib "
+                f"{drawn_with[0]}.{drawn_with[1]} and this environment has "
+                f"{matplotlib.__version__}, which lays a figure out "
+                f"differently; the committed figures are UNCHECKED in this run"
+            )
+        difference = _max_level_difference(_png_pixels(path), _png_pixels(committed))
+        assert difference <= PIXEL_TOLERANCE_LEVELS, (
+            f"{committed.relative_to(ROOT)} is not the picture robustness.json "
+            f"renders ({difference} levels apart): the committed figure is stale "
             f"against the report it claims to draw. Regenerate both with "
             f"scripts/bench_robustness.py."
         )
-
-    # ... and the comparison must be capable of failing: if the renderer
-    # ignored the numbers it plots, every figure would match every report
-    # and the assertion above would be decoration.
-    perturbed = copy.deepcopy(report)
-    entry = perturbed["protocols"][PROTOCOL_FRAME_RATE]["entries"][-1]
-    entry["methods"]["engine+gate"]["f1"] = 0.5
-    altered = tmp_path / "altered"
-    rendered = {path.name: path for path in script.write_figures(perturbed, altered)}
-    name = f"robustness_{PROTOCOL_FRAME_RATE}.png"
-    assert not np.array_equal(
-        _png_pixels(rendered[name]), _png_pixels(FIGURE_DIR / name)
-    ), (
-        "changing a plotted F1 left the rendered figure identical, so the "
-        "figure is not a function of the report and pinning it proves "
-        "nothing"
-    )
 
 
 # -- the report assembler ----------------------------------------------------
