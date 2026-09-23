@@ -18,7 +18,6 @@
     "web/public/ort-wasm-simd-threaded.asyncify.mjs": "7236653b8565da4046e459cd0e274123419a1d9f1f8f18fd36c28058346ca655",
     "web/public/ort-wasm-simd-threaded.asyncify.wasm": "7e83cd6cee77e478bc96a7e91b198144fb5e4126287daf1f9b54bb195ebcd55a",
     "web/public/ort.webgpu.mjs": "177cf67f3e6c25e951a76a981a857e6af53b1571016685cc2480e1e6e47b1d46",
-    "web/public/robots.txt": "40af0edcacdb9ba7726ab16893cf3ffe26c8bc0923621fde371a23e6aa86429f",
     "web/public/sitemap.xml": "19a9f4a79afb41f89b31a04fe3fa36605b4bf32c23e521c7b95f96d9708bdff4",
     "web/src/engine/associate.ts": "83556d9e548a041634f5a73f404927a574ed032a4bd135152616a020baf74d9a",
     "web/src/engine/gate.ts": "1cdead9d1427403aa1b3081e2beef9489fab8d5f4c93f23d42b695e5bc1bbd73",
@@ -105,7 +104,6 @@
     "docs/ort-wasm-simd-threaded.asyncify.mjs": "7236653b8565da4046e459cd0e274123419a1d9f1f8f18fd36c28058346ca655",
     "docs/ort-wasm-simd-threaded.asyncify.wasm": "7e83cd6cee77e478bc96a7e91b198144fb5e4126287daf1f9b54bb195ebcd55a",
     "docs/ort.webgpu.mjs": "177cf67f3e6c25e951a76a981a857e6af53b1571016685cc2480e1e6e47b1d46",
-    "docs/robots.txt": "40af0edcacdb9ba7726ab16893cf3ffe26c8bc0923621fde371a23e6aa86429f",
     "docs/sitemap.xml": "19a9f4a79afb41f89b31a04fe3fa36605b4bf32c23e521c7b95f96d9708bdff4"
   }
 }
