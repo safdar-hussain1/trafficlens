@@ -23,8 +23,19 @@ dependencies = [
 [project.optional-dependencies]
 detect = ["ultralytics>=8.4,<8.5", "torch>=2.2,<3"]
 onnx = ["onnxruntime>=1.19,<2"]
-serve = ["fastapi>=0.110,<1", "uvicorn[standard]>=0.29,<1"]
-dev = ["pytest>=8.0,<9", "httpx>=0.27,<1", "onnx>=1.16,<2", "onnxslim>=0.1,<1", "matplotlib>=3.8,<4"]
+# matplotlib is pinned to the minor version that drew the committed figures,
+# 3.11, because another minor version lays a figure out differently and the
+# test that checks each figure against its report then has to skip. 3.11 needs
+# Python 3.11+, so 3.10 gets the newest release it can install and that check
+# skips there, saying so.
+dev = [
+    "pytest>=8.0,<9",
+    "httpx>=0.27,<1",
+    "onnx>=1.16,<2",
+    "onnxslim>=0.1,<1",
+    "matplotlib>=3.11,<3.12; python_version >= '3.11'",
+    "matplotlib>=3.8,<3.11; python_version < '3.11'",
+]
 
 [project.scripts]
 trafficlens = "trafficlens.cli:cli"
