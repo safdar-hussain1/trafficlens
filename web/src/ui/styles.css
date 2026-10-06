@@ -74,6 +74,15 @@
   --font: "Overpass", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
+  /* The night hero, identical in both themes: a motorway after dark. */
+  --night-0: #04070b;
+  --night-1: #0a111a;
+  --night-text: #f4f3ee;
+  --night-text-2: #b3bdc8;
+  /* How far above the hero's bottom the night ends: the lower part of the demo
+     sits on the page, so the console reads as an object resting on both. */
+  --band-tail: 210px;
+
   --gutter: clamp(16px, 4vw, 40px);
   --radius-console: 22px;
   --radius-panel: 14px;
@@ -213,14 +222,21 @@ button {
 
 /* -- navigation ------------------------------------------------------------- */
 
+/* Dark in both themes: at the top it is part of the night hero, and below it
+   it reads as the same bar, carried down the page. */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  background: rgb(4 7 11 / 80%);
   backdrop-filter: saturate(1.4) blur(14px);
   -webkit-backdrop-filter: saturate(1.4) blur(14px);
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-bottom: 1px solid rgb(241 240 234 / 8%);
+  color: var(--night-text);
+}
+
+.site-nav :focus-visible {
+  outline-color: var(--accent);
 }
 
 .site-nav__inner {
@@ -234,7 +250,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: var(--text);
+  color: var(--night-text);
   text-decoration: none;
   font-weight: 800;
   font-size: 19px;
@@ -242,23 +258,14 @@ button {
   margin-right: auto;
 }
 
+/* The header is dark, so the mark's dark tile would vanish into it and leave
+   its two strokes floating; a hairline keeps it a tile. */
 .brand__mark {
   width: 30px;
   height: 30px;
   display: block;
   border-radius: 8px;
-}
-
-/* On a dark page the mark's dark tile would vanish into the header and leave
-   its two strokes floating; a hairline keeps it a tile. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .brand__mark {
-    box-shadow: 0 0 0 1px var(--line-strong);
-  }
-}
-
-:root[data-theme="dark"] .brand__mark {
-  box-shadow: 0 0 0 1px var(--line-strong);
+  box-shadow: 0 0 0 1px rgb(241 240 234 / 16%);
 }
 
 .site-nav__links {
@@ -273,7 +280,7 @@ button {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 10px;
-  color: var(--text-2);
+  color: rgb(241 240 234 / 74%);
   font-weight: 600;
   font-size: 15px;
   text-decoration: none;
@@ -281,13 +288,13 @@ button {
 }
 
 .site-nav__links a:hover {
-  background: var(--surface-2);
-  color: var(--text);
+  background: rgb(241 240 234 / 8%);
+  color: var(--night-text);
 }
 
 .site-nav__links a[aria-current="page"] {
-  color: var(--text);
-  background: var(--surface-2);
+  color: var(--night-text);
+  background: rgb(241 240 234 / 10%);
 }
 
 .site-nav__source svg {
@@ -302,16 +309,16 @@ button {
   height: 42px;
   padding: 0;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid rgb(241 240 234 / 14%);
+  background: rgb(241 240 234 / 5%);
+  color: var(--night-text);
   cursor: pointer;
   transition: background-color 0.15s, border-color 0.15s;
 }
 
 .icon-button:hover {
-  background: var(--surface-2);
-  border-color: var(--line-strong);
+  background: rgb(241 240 234 / 11%);
+  border-color: rgb(241 240 234 / 24%);
 }
 
 .icon-button svg {
@@ -336,7 +343,20 @@ button {
 /* -- hero ------------------------------------------------------------------- */
 
 .hero {
-  padding-top: clamp(24px, 3.6vw, 48px);
+  position: relative;
+  isolation: isolate;
+  /* The pool of light under the demo is wider than the demo; it must never
+     widen the page. Clip, not hidden: no scroll container, and nothing clipped
+     vertically. */
+  overflow-x: clip;
+  padding-top: clamp(28px, 4vw, 56px);
+  color: var(--night-text);
+  background: linear-gradient(
+    to bottom,
+    var(--night-0) 0,
+    var(--night-1) calc(100% - var(--band-tail)),
+    var(--bg) calc(100% - var(--band-tail))
+  );
 }
 
 .hero__head {
@@ -348,27 +368,243 @@ button {
 }
 
 .hero h1 {
-  font-size: clamp(2.1rem, 1.2rem + 2.6vw, 3.35rem);
-  line-height: 1.04;
+  font-size: clamp(2.2rem, 1.2rem + 2.9vw, 3.6rem);
+  line-height: 1.06;
   letter-spacing: -0.03em;
   max-width: 19ch;
+  color: var(--night-text);
+  /* A dark halo, so a light trail passing behind the words never cuts them. */
+  text-shadow: 0 0 22px rgb(4 7 11 / 90%), 0 0 6px rgb(4 7 11 / 85%);
+  animation: rise 0.8s var(--ease-out) 0.05s both;
 }
 
 .hero__lede {
   font-size: clamp(1.02rem, 0.94rem + 0.32vw, 1.2rem);
   line-height: 1.55;
-  color: var(--text-2);
+  color: var(--night-text-2);
   max-width: 46ch;
+  text-shadow: 0 0 16px rgb(4 7 11 / 95%), 0 0 4px rgb(4 7 11 / 90%);
+  animation: rise 0.8s var(--ease-out) 0.18s both;
+}
+
+/* The product, drawn into its own headline: a counting line laid under the
+   words, and the "+1" it fires. Generated content with empty alternative text,
+   so a screen reader hears the sentence and nothing else. */
+.hero__mark {
+  position: relative;
+  white-space: nowrap;
+}
+
+.hero__mark::after {
+  content: "";
+  position: absolute;
+  left: -0.02em;
+  right: -0.02em;
+  bottom: -0.04em;
+  height: 0.1em;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 24px rgb(247 181 0 / 55%);
+  transform-origin: left center;
+  animation: mark-draw 0.9s var(--ease-out) 0.55s both;
+}
+
+/* Rises from the right end of the line, the way a count rises from the line in
+   the demo itself. */
+.hero__mark::before {
+  content: "+1" / "";
+  position: absolute;
+  right: -0.3em;
+  bottom: -0.2em;
+  padding: 0.22em 0.55em 0.12em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.3em;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  box-shadow: 0 8px 18px -6px rgb(247 181 0 / 70%);
+  pointer-events: none;
+  animation: mark-plus 2.8s var(--ease-out) 1.35s both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise-stage {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mark-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes mark-plus {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(-1.4em) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-1.9em);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2.6em);
+  }
+}
+
+/* Long-exposure light trails over a road in perspective: headlights coming
+   toward the camera on the left, tail-lights leaving on the right, as on the
+   motorway clip, and one amber streak for a counted vehicle. Each streak is a
+   single dash run along its path; they pause while the detector runs, so they
+   never compete with it for the GPU, and while the hero is off screen. */
+.hero__backdrop {
+  position: absolute;
+  inset: 0 0 var(--band-tail) 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  /* Faint where the words are, full where the road opens out beside the demo. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 50%) 14%, #000 46%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 50%) 14%, #000 46%, #000 78%, transparent 100%);
+  transition: opacity 0.8s ease;
+}
+
+.trails {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.road__edge,
+.road__median,
+.road__lane {
+  fill: none;
+  stroke-width: 2;
+}
+
+.road__edge {
+  stroke: rgb(241 240 234 / 8%);
+}
+
+.road__median {
+  stroke: rgb(241 240 234 / 5%);
+}
+
+.road__lane {
+  stroke: rgb(241 240 234 / 6%);
+  stroke-dasharray: 22 30;
+}
+
+.trail path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 150 1100;
+  stroke-dashoffset: 150;
+  animation: trail-run var(--dur, 8s) linear var(--delay, 0s) infinite;
+}
+
+.trail__glow {
+  stroke-width: 10;
+  opacity: 0.14;
+}
+
+.trail__core {
+  stroke-width: 2.4;
+  opacity: 0.7;
+}
+
+.trail--head path {
+  stroke: #fff2d6;
+}
+
+.trail--tail path {
+  stroke: #ff4d3d;
+}
+
+.trail--tail .trail__core {
+  opacity: 0.6;
+}
+
+.trail--amber path {
+  stroke: var(--accent);
+}
+
+@keyframes trail-run {
+  from {
+    stroke-dashoffset: 150;
+  }
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+.hero.is-offscreen .trail path,
+:root[data-detecting="true"] .trail path {
+  animation-play-state: paused;
+}
+
+:root[data-detecting="true"] .hero__backdrop {
+  opacity: 0.4;
+}
+
+/* The demo rises in last, over a pool of light from the road. */
+.hero__stage {
+  position: relative;
+  isolation: isolate;
+  animation: rise-stage 0.9s var(--ease-out) 0.28s both;
+}
+
+.hero__stage::before {
+  content: "";
+  position: absolute;
+  inset: 4% -5% 22% -5%;
+  z-index: -1;
+  background:
+    radial-gradient(50% 60% at 50% 58%, rgb(247 181 0 / 20%), transparent 70%),
+    radial-gradient(34% 46% at 12% 42%, rgb(57 135 229 / 18%), transparent 70%),
+    radial-gradient(34% 46% at 90% 46%, rgb(255 77 61 / 11%), transparent 70%);
+  filter: blur(30px);
+  pointer-events: none;
 }
 
 /* -- the console ------------------------------------------------------------ */
 
 .console {
-  background: var(--console);
+  background: linear-gradient(180deg, #0e141b 0%, var(--console) 46%);
   color: var(--console-text);
   border-radius: var(--radius-console);
-  border: 1px solid var(--console-edge);
-  box-shadow: var(--shadow-console);
+  border: 1px solid rgb(241 240 234 / 10%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    0 60px 120px -50px rgb(0 0 0 / 75%),
+    var(--shadow-console);
   padding: 10px;
 }
 
@@ -420,6 +656,9 @@ button {
 .tabs button[aria-pressed="true"] {
   background: var(--console-text);
   color: var(--console);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 70%),
+    0 2px 6px rgb(0 0 0 / 40%);
 }
 
 .tabs button:focus-visible,
@@ -463,6 +702,8 @@ button {
 
 .status[data-state="live"] .status__dot {
   background: var(--live);
+  outline: 1px solid rgb(47 191 113 / 35%);
+  outline-offset: 2px;
   box-shadow: 0 0 0 0 rgb(47 191 113 / 55%);
   animation: live-ring 1.8s ease-out infinite;
 }
@@ -763,10 +1004,14 @@ button {
   min-width: 96px;
   background: var(--accent);
   color: var(--accent-ink);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 45%),
+    0 10px 22px -12px rgb(247 181 0 / 70%);
 }
 
 .button--primary:hover {
   background: var(--accent-hover);
+  transform: translateY(-1px);
 }
 
 .button--quiet {
@@ -816,10 +1061,21 @@ button {
   position: relative;
   padding: 14px 16px;
   border-radius: 12px;
-  background: #040608;
+  background: radial-gradient(120% 90% at 50% 0%, #0b0f14 0%, #030507 70%);
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 6%),
-    inset 0 10px 24px rgb(0 0 0 / 70%);
+    inset 0 10px 24px rgb(0 0 0 / 70%),
+    0 0 0 1px rgb(0 0 0 / 60%);
+}
+
+/* The sign's glass: a faint sheen across the top of the lens. */
+.vms::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 6%) 0%, transparent 38%);
+  pointer-events: none;
 }
 
 .vms svg {
@@ -827,7 +1083,7 @@ button {
   width: 100%;
   height: auto;
   overflow: visible;
-  filter: drop-shadow(0 0 5px rgb(255 179 26 / 50%));
+  filter: drop-shadow(0 0 5px rgb(255 179 26 / 55%)) drop-shadow(0 0 16px rgb(255 179 26 / 22%));
   transition: filter 0.25s;
 }
 
@@ -842,7 +1098,7 @@ button {
 }
 
 .vms.is-bump svg {
-  filter: drop-shadow(0 0 9px rgb(255 179 26 / 85%)) brightness(1.18);
+  filter: drop-shadow(0 0 9px rgb(255 179 26 / 90%)) drop-shadow(0 0 26px rgb(255 179 26 / 40%)) brightness(1.18);
 }
 
 .readout__since {
@@ -2130,6 +2386,443 @@ table.data tbody tr:last-child td {
   fill: var(--text-dim);
 }
 
+/* -- "How it works", playing ------------------------------------------- */
+/* Each illustration loops every 6s while it is on screen, and holds a still of
+   its key moment otherwise -- including for a visitor who asked for less motion,
+   since the class that starts it is never added for them. The percentages
+   below follow the geometry: a trail dot appears just after a car passes its
+   position, and the count fires exactly when the car's centre reaches the
+   line. */
+.step__art .art-before {
+  opacity: 0;
+}
+
+.step__art .art-snap,
+.step__art .art-dot,
+.step__art .art-trace,
+.step__art .art-ring,
+.step__art .art-plus {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.step__art .art-led {
+  filter: drop-shadow(0 0 4px rgb(255 179 26 / 60%));
+}
+
+.step__art--detect.is-playing .art-lanes {
+  animation: art-lanes 0.9s linear infinite;
+}
+
+@keyframes art-lanes {
+  to {
+    stroke-dashoffset: 26;
+  }
+}
+
+.step__art--detect.is-playing .art-snap--1 {
+  animation: art-snap-1 6s ease-out infinite;
+}
+
+@keyframes art-snap-1 {
+  0%,
+  12% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+  19% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  88% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.step__art--detect.is-playing .art-snap--2 {
+  animation: art-snap-2 6s ease-out infinite;
+}
+
+@keyframes art-snap-2 {
+  0%,
+  22% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+  29% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  88% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.step__art--detect.is-playing .art-snap--3 {
+  animation: art-snap-3 6s ease-out infinite;
+}
+
+@keyframes art-snap-3 {
+  0%,
+  32% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+  39% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  88% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.step__art--track.is-playing .art-scene,
+.step__art--count.is-playing .art-scene {
+  animation: art-scene 6s linear infinite;
+}
+
+@keyframes art-scene {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  93% {
+    opacity: 1;
+  }
+  98%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.step__art--track.is-playing .art-drive {
+  animation: art-drive-track 6s linear infinite;
+}
+
+@keyframes art-drive-track {
+  0% {
+    transform: translateX(-110px);
+  }
+  90%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.step__art--track.is-playing .art-dot--1 {
+  animation: art-dot-1 6s linear infinite;
+}
+
+@keyframes art-dot-1 {
+  0%,
+  2.0% {
+    transform: scale(0);
+  }
+  5.0%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--track.is-playing .art-dot--2 {
+  animation: art-dot-2 6s linear infinite;
+}
+
+@keyframes art-dot-2 {
+  0%,
+  23.3% {
+    transform: scale(0);
+  }
+  26.3%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--track.is-playing .art-dot--3 {
+  animation: art-dot-3 6s linear infinite;
+}
+
+@keyframes art-dot-3 {
+  0%,
+  44.5% {
+    transform: scale(0);
+  }
+  47.5%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--track.is-playing .art-dot--4 {
+  animation: art-dot-4 6s linear infinite;
+}
+
+@keyframes art-dot-4 {
+  0%,
+  65.8% {
+    transform: scale(0);
+  }
+  68.8%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-drive--count {
+  animation: art-drive-count 6s linear infinite;
+}
+
+@keyframes art-drive-count {
+  0% {
+    transform: translateX(-108px);
+  }
+  94%,
+  100% {
+    transform: translateX(72px);
+  }
+}
+
+.step__art--count.is-playing .art-trace--1 {
+  animation: art-trace-1 6s linear infinite;
+}
+
+@keyframes art-trace-1 {
+  0%,
+  2.0% {
+    transform: scale(0);
+  }
+  5.0%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--2 {
+  animation: art-trace-2 6s linear infinite;
+}
+
+@keyframes art-trace-2 {
+  0%,
+  12.4% {
+    transform: scale(0);
+  }
+  15.4%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--3 {
+  animation: art-trace-3 6s linear infinite;
+}
+
+@keyframes art-trace-3 {
+  0%,
+  22.9% {
+    transform: scale(0);
+  }
+  25.9%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--4 {
+  animation: art-trace-4 6s linear infinite;
+}
+
+@keyframes art-trace-4 {
+  0%,
+  33.3% {
+    transform: scale(0);
+  }
+  36.3%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--5 {
+  animation: art-trace-5 6s linear infinite;
+}
+
+@keyframes art-trace-5 {
+  0%,
+  43.8% {
+    transform: scale(0);
+  }
+  46.8%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--6 {
+  animation: art-trace-6 6s linear infinite;
+}
+
+@keyframes art-trace-6 {
+  0%,
+  64.7% {
+    transform: scale(0);
+  }
+  67.7%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-trace--7 {
+  animation: art-trace-7 6s linear infinite;
+}
+
+@keyframes art-trace-7 {
+  0%,
+  75.1% {
+    transform: scale(0);
+  }
+  78.1%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.step__art--count.is-playing .art-line-glow {
+  animation: art-glow 6s linear infinite;
+}
+
+@keyframes art-glow {
+  0%,
+  46.5% {
+    opacity: 0;
+  }
+  48.0% {
+    opacity: 0.4;
+  }
+  62.0%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.step__art--count.is-playing .art-ring {
+  animation: art-ring 6s ease-out infinite;
+}
+
+@keyframes art-ring {
+  0%,
+  46.5% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  48.0% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  64.0%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+.step__art--count.is-playing .art-plus {
+  animation: art-plus 6s ease-out infinite;
+}
+
+@keyframes art-plus {
+  0%,
+  47.0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.7);
+  }
+  51.0% {
+    opacity: 1;
+    transform: none;
+  }
+  76.0% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+  86.0%,
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.step__art--count.is-playing .art-before {
+  animation: art-before 6s steps(1, end) infinite;
+}
+
+.step__art--count.is-playing .art-after {
+  animation: art-after 6s steps(1, end) infinite;
+}
+
+@keyframes art-before {
+  0% {
+    opacity: 1;
+  }
+  48.0%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes art-after {
+  0% {
+    opacity: 0;
+  }
+  48.0%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The tally fills in square by square the first time it is seen: sixteen
+   counted, the miss, then the two extra counts. Only once JavaScript has said
+   it will run the reveal, so the squares are never hidden without it. */
+.tally.will-reveal .tally__units .unit {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.tally.will-reveal.is-visible .tally__units .unit {
+  animation: unit-in 0.42s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@keyframes unit-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* -- motion ----------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -2140,6 +2833,20 @@ table.data tbody tr:last-child td {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     transition-delay: 0s !important;
+  }
+
+  /* Still streaks rather than none: the picture stays, the motion goes. */
+  .trail path {
+    animation: none !important;
+    stroke-dasharray: none;
+  }
+
+  .trail__core {
+    opacity: 0.32;
+  }
+
+  .trail__glow {
+    opacity: 0.06;
   }
 }
 

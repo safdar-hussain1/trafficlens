@@ -87,6 +87,9 @@ const RADIUS = 3.7;
 /** How long the sign stays brighter after the count goes up, in ms. */
 const BUMP_MS = 260;
 
+/** How long every LED stays lit when the sign powers up, in ms. */
+const BOOT_MS = 520;
+
 /** A sign mounted in `host`. Recreated only when its width changes; otherwise a
  * new count flips exactly the dots that differ. */
 export class VmsSign {
@@ -96,12 +99,42 @@ export class VmsSign {
   private shown: string | null = null;
   private value: number | null = null;
   private bumpTimer: ReturnType<typeof setTimeout> | null = null;
+  /** What the sign should show once it has finished powering up. */
+  private pending = 0;
+  private booting = false;
 
   constructor(host: HTMLElement) {
     this.host = host;
   }
 
+  /** Light every LED, as a real sign does when it powers up, then let the
+   * refresh sweep down to the count. The caller skips it for a visitor who has
+   * asked for less motion. */
+  boot(): void {
+    const matrix = matrixFor(signText(this.pending));
+    if (matrix.columns !== this.columns) {
+      this.build(matrix.columns, matrix.rows);
+    }
+    for (const dot of this.dots) {
+      dot.setAttribute("data-on", "");
+    }
+    this.booting = true;
+    this.shown = null;
+    setTimeout(() => {
+      this.booting = false;
+      this.draw(this.pending);
+    }, BOOT_MS);
+  }
+
   show(value: number): void {
+    this.pending = value;
+    if (this.booting) {
+      return;
+    }
+    this.draw(value);
+  }
+
+  private draw(value: number): void {
     const text = signText(value);
     if (text === this.shown) {
       return;

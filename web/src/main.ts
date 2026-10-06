@@ -41,6 +41,9 @@ async function boot(): Promise<void> {
   } catch (error) {
     console.error("the accuracy tally did not mount; the live demo is unaffected", error);
   }
+  // After the tally, so its squares exist to be revealed.
+  const { startPageMotion } = await import("./ui/motion");
+  startPageMotion();
 
   const { mountControlRoom } = await import("./ui/app");
   const room = await mountControlRoom();

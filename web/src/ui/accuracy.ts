@@ -147,11 +147,19 @@ export function mountAccuracy(): void {
   const strip = document.createElement("ul");
   strip.className = "tally__units";
   strip.setAttribute("aria-hidden", "true");
-  strip.append(...squares.labelled.map((kind) => unit(kind)));
+  // Each square carries its place, so the reveal can fill them in order:
+  // counted, missed, then the extra counts after the gap.
+  const placed = (kind: UnitKind, index: number): HTMLElement => {
+    const node = unit(kind);
+    node.style.setProperty("--i", String(index));
+    return node;
+  };
+  strip.append(...squares.labelled.map((kind, index) => placed(kind, index)));
   if (squares.extra.length > 0) {
     const gap = document.createElement("li");
     gap.className = "unit-gap";
-    strip.append(gap, ...squares.extra.map((kind) => unit(kind)));
+    const offset = squares.labelled.length + 2;
+    strip.append(gap, ...squares.extra.map((kind, index) => placed(kind, offset + index)));
   }
 
   const legend = document.createElement("ul");

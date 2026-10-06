@@ -97,6 +97,9 @@ export class ControlRoom {
    * open leaves this false: nothing is drawn, the line is hidden, and Start
    * stays disabled until another source is chosen. */
   private sourceReady = false;
+  /** Whether the demo is on screen, which is when the clip may play as a
+   * preview before the detector has been started. */
+  private stageVisible = true;
   private runState: RunState = "checking";
   /** True once the visitor has paused this source; the button then resumes. */
   private pausedHere = false;
@@ -173,6 +176,10 @@ export class ControlRoom {
       this.resetCounts();
     });
     this.installGateControls();
+    this.installPreview();
+    if (!this.reducedMotion) {
+      this.readout.boot();
+    }
     this.setRunState("checking");
 
     // Probed before anything is downloaded: the page can say what this machine
@@ -233,6 +240,7 @@ export class ControlRoom {
       await this.run();
     } else {
       this.renderControls();
+      this.syncPreview();
     }
     this.renderFrame();
   }
@@ -740,8 +748,46 @@ export class ControlRoom {
 
   private setRunState(state: RunState): void {
     this.runState = state;
+    // The page's decorative motion stands still while the detector works, so
+    // it never competes with inference for the GPU.
+    document.documentElement.dataset["detecting"] = String(state === "live");
     this.renderControls();
     this.renderStatus(true);
+  }
+
+  /** Play the clip as a silent preview while the demo is on screen and nothing
+   * has been started, so the page moves from the first second; the detector
+   * still downloads only when the visitor presses Start. Off screen, in a
+   * hidden tab, or after the visitor has paused, the preview stops. */
+  private installPreview(): void {
+    if (typeof IntersectionObserver !== "undefined") {
+      new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            this.stageVisible = entry.isIntersecting;
+          }
+          this.syncPreview();
+        },
+        { threshold: 0.15 },
+      ).observe(this.elements.stage);
+    }
+    document.addEventListener("visibilitychange", () => {
+      this.syncPreview();
+    });
+  }
+
+  private syncPreview(): void {
+    if (this.running || this.source.kind !== "clip" || !this.sourceReady) {
+      return;
+    }
+    if (this.pausedHere || !this.stageVisible || document.hidden) {
+      this.video.pause();
+      return;
+    }
+    if (this.video.paused) {
+      // A refused autoplay only means the preview stays on its first frame.
+      void this.video.play().catch(() => undefined);
+    }
   }
 
   private renderStatus(force = false): void {

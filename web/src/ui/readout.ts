@@ -116,6 +116,11 @@ export class Readout {
     this.sign = new VmsSign(elements.vms);
   }
 
+  /** Power the sign up: every LED lit for a moment, then the count. */
+  boot(): void {
+    this.sign.boot();
+  }
+
   render(state: ReadoutState): void {
     this.sign.show(state.total);
     setText(this.elements.totalCount, formatCount(state.total));
