@@ -180,7 +180,8 @@
                       <span>Start live counting</span>
                     </button>
                     <p class="launch__note" id="empty-text">
-                      Downloads a 10.7 MB detector once, then runs on your device. No video leaves this tab.
+                      Downloads the detector and its runtime once, then runs on your device. No video
+                      leaves this tab.
                     </p>
                     <progress class="progress" id="load-progress" hidden max="1" value="0"></progress>
                   </div>
@@ -196,7 +197,7 @@
                 <p class="status-line" id="status-line" role="alert"></p>
               </div>
 
-              <aside class="readout" aria-label="Live counts">
+              <section class="readout" aria-label="Live counts">
                 <section class="readout__total" aria-labelledby="total-label">
                   <h3 class="readout__label" id="total-label">Vehicles counted</h3>
                   <div class="vms" id="vms" aria-hidden="true"></div>
@@ -215,7 +216,7 @@
                   <h3 class="readout__label" id="feed-label">Just crossed</h3>
                   <ol class="feed" id="feed"></ol>
                 </section>
-              </aside>
+              </section>
             </div>
           </div>
         </div>

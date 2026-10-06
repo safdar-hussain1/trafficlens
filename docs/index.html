@@ -108,9 +108,9 @@
         // then follows the operating system, which is the right default anyway.
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-D2EmB2hK.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/styles-C3-YtYKd.js">
-    <link rel="stylesheet" crossorigin href="./assets/styles-CoEveCyC.css">
+    <script type="module" crossorigin src="./assets/index-RCS5ZwHl.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/styles-B9lDCJA5.js">
+    <link rel="stylesheet" crossorigin href="./assets/styles-DgXM6G42.css">
   </head>
   <body>
     <a class="skip-link" href="#control-room">Skip to the live demo</a>
@@ -183,7 +183,8 @@
                       <span>Start live counting</span>
                     </button>
                     <p class="launch__note" id="empty-text">
-                      Downloads a 10.7 MB detector once, then runs on your device. No video leaves this tab.
+                      Downloads the detector and its runtime once, then runs on your device. No video
+                      leaves this tab.
                     </p>
                     <progress class="progress" id="load-progress" hidden max="1" value="0"></progress>
                   </div>
@@ -199,7 +200,7 @@
                 <p class="status-line" id="status-line" role="alert"></p>
               </div>
 
-              <aside class="readout" aria-label="Live counts">
+              <section class="readout" aria-label="Live counts">
                 <section class="readout__total" aria-labelledby="total-label">
                   <h3 class="readout__label" id="total-label">Vehicles counted</h3>
                   <div class="vms" id="vms" aria-hidden="true"></div>
@@ -218,7 +219,7 @@
                   <h3 class="readout__label" id="feed-label">Just crossed</h3>
                   <ol class="feed" id="feed"></ol>
                 </section>
-              </aside>
+              </section>
             </div>
           </div>
         </div>

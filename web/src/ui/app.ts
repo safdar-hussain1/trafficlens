@@ -101,6 +101,10 @@ export class ControlRoom {
   private grab: Grab | null = null;
 
   private readonly trails = new Map<number, Sample[]>();
+  /** The type each trail belongs to, kept as long as the trail is: a trail
+   * outlives its track by up to `TRAIL_SECONDS`, and it should keep its
+   * vehicle's colour rather than turn grey when the tracker loses it. */
+  private readonly trailTypes = new Map<number, string>();
   private tracks: readonly TrackView[] = [];
   private events: CrossingEvent[] = [];
   private feed: FeedEntry[] = [];
@@ -167,7 +171,7 @@ export class ControlRoom {
     this.setRunState("checking");
 
     // Probed before anything is downloaded: the page can say what this machine
-    // will run before it asks the visitor to pay 10.7 MB to find out.
+    // will run before it asks the visitor to download the detector to find out.
     this.probe = await probeBackend();
     this.setRunState("ready");
 
@@ -199,6 +203,9 @@ export class ControlRoom {
           ? `The camera could not be opened: ${describe(error)}. The two clips still run.`
           : `That clip could not be loaded: ${describe(error)}.`,
       );
+      // Nothing is running on this source, and a "Paused" left over from the
+      // one before would describe a session that has gone.
+      this.setRunState(this.probe === null ? "checking" : "ready");
       return;
     }
 
@@ -320,6 +327,7 @@ export class ControlRoom {
 
   private clearSession(): void {
     this.trails.clear();
+    this.trailTypes.clear();
     this.tracks = [];
     this.events = [];
     this.feed = [];
@@ -483,6 +491,7 @@ export class ControlRoom {
     // and markers are stamped in clip time and would sit in its future.
     if (timestamp < this.lastTimestamp - 0.5) {
       this.trails.clear();
+      this.trailTypes.clear();
       this.events = [];
       this.wrongWayIds.clear();
       this.counted.clear();
@@ -499,11 +508,13 @@ export class ControlRoom {
         trail.shift();
       }
       this.trails.set(track.trackId, trail);
+      this.trailTypes.set(track.trackId, track.className);
     }
     for (const [trackId, trail] of this.trails) {
       const last = trail[trail.length - 1];
       if (last === undefined || timestamp - last.t > HISTORY_S) {
         this.trails.delete(trackId);
+        this.trailTypes.delete(trackId);
       }
     }
 
@@ -550,6 +561,7 @@ export class ControlRoom {
         },
         tracks: this.tracks,
         trails: this.trailsForOverlay(),
+        trailTypes: this.trailTypes,
         events: this.events,
         now: this.video.currentTime,
         dpr,

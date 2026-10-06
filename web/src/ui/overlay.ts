@@ -98,6 +98,8 @@ export interface OverlayScene {
   readonly gateLabels: { readonly positive: string; readonly negative: string };
   readonly tracks: readonly TrackView[];
   readonly trails: ReadonlyMap<number, Trail>;
+  /** The vehicle type of each trail, which outlives the track it came from. */
+  readonly trailTypes: ReadonlyMap<number, string>;
   readonly events: readonly CrossingEvent[];
   readonly now: number;
   /** The device pixel ratio the canvas backing store was sized at. */
@@ -267,8 +269,7 @@ export function drawOverlay(
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  const classOf = new Map(scene.tracks.map((track) => [track.trackId, track.className]));
-  drawTrails(ctx, scene, fit, palette, classOf);
+  drawTrails(ctx, scene, fit, palette);
   drawBoxes(ctx, scene, fit, palette, box.width);
   drawGate(ctx, scene, fit, palette);
   drawPops(ctx, scene, fit, palette);
@@ -284,7 +285,6 @@ function drawTrails(
   scene: OverlayScene,
   fit: Fit,
   palette: Palette,
-  classOf: ReadonlyMap<number, string>,
 ): void {
   ctx.lineWidth = 2.5;
   for (const [trackId, trail] of scene.trails) {
@@ -294,7 +294,7 @@ function drawTrails(
     }
     ctx.strokeStyle = scene.wrongWay.has(trackId)
       ? palette.wrongWay
-      : typeColour(palette, classOf.get(trackId));
+      : typeColour(palette, scene.trailTypes.get(trackId));
     for (let index = 1; index < visible.length; index += 1) {
       const from = frameToBox((visible[index - 1] as { p: Point }).p, fit);
       const to = frameToBox((visible[index] as { p: Point }).p, fit);

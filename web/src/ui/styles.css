@@ -246,6 +246,19 @@ button {
   width: 30px;
   height: 30px;
   display: block;
+  border-radius: 8px;
+}
+
+/* On a dark page the mark's dark tile would vanish into the header and leave
+   its two strokes floating; a hairline keeps it a tile. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand__mark {
+    box-shadow: 0 0 0 1px var(--line-strong);
+  }
+}
+
+:root[data-theme="dark"] .brand__mark {
+  box-shadow: 0 0 0 1px var(--line-strong);
 }
 
 .site-nav__links {
@@ -999,6 +1012,17 @@ button {
   font-weight: 500;
 }
 
+.feed__dir svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--gate);
+}
+
+.feed__item[data-wrong="true"] .feed__dir svg {
+  color: currentcolor;
+}
+
 .feed__item[data-wrong="true"] {
   background: rgb(208 59 59 / 14%);
 }
@@ -1015,18 +1039,18 @@ button {
   padding: 2px 0;
 }
 
+/* A slide and a yellow edge that fades, but no fade and no wash on the row
+   itself: its text keeps the same contrast from the first frame it exists. */
 @keyframes feed-in {
   0% {
-    opacity: 0;
     transform: translateY(-6px);
-    background: rgb(247 181 0 / 22%);
+    box-shadow: inset 3px 0 0 rgb(247 181 0 / 100%);
   }
   35% {
-    opacity: 1;
     transform: none;
   }
   100% {
-    background: rgb(247 181 0 / 0%);
+    box-shadow: inset 3px 0 0 rgb(247 181 0 / 0%);
   }
 }
 
@@ -1457,6 +1481,12 @@ button {
 .toc a:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+
+.toc a[aria-current="location"] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--structure);
 }
 
 #results {

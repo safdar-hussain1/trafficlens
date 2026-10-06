@@ -122,7 +122,7 @@ export class Readout {
     setText(this.elements.countingSince, countingSinceText(state.countingSince));
     this.renderDirections(state);
     this.renderClasses(state);
-    this.renderFeed(state.feed);
+    this.renderFeed(state);
   }
 
   /** Forget what has been shown, so a new source starts with nothing marked
@@ -192,8 +192,11 @@ export class Readout {
     }
   }
 
-  private renderFeed(feed: readonly FeedEntry[]): void {
-    const key = feed.map((entry) => entry.id).join(",");
+  private renderFeed(state: ReadoutState): void {
+    const { feed } = state;
+    // The arrows follow the line, so the key carries its angle as well as the
+    // crossings: a turned line has to turn the arrows already listed.
+    const key = `${feed.map((entry) => entry.id).join(",")}@${state.positiveAngleDeg.toFixed(0)}`;
     if (key === this.feedKey) {
       return;
     }
@@ -206,12 +209,19 @@ export class Readout {
       return;
     }
     const newest = this.newestShown;
+    const positive = state.perDirection[0]?.[0];
     this.elements.feed.replaceChildren(
       ...feed.slice(0, FEED_LENGTH).map((entry) => {
         const item = el("li", entry.id > newest ? "feed__item is-new" : "feed__item");
         item.dataset["class"] = entry.className;
         item.dataset["wrong"] = String(entry.wrongWay);
-        const direction = el("span", "feed__dir", entry.wrongWay ? "wrong way" : entry.direction);
+        // The same arrow the direction counts and the video's tags show, so a
+        // crossing reads the same way in all three places.
+        const arrow = arrowIcon();
+        const angle = state.positiveAngleDeg + (entry.direction === positive ? 0 : 180);
+        arrow.style.transform = `rotate(${angle.toFixed(1)}deg)`;
+        const direction = el("span", "feed__dir");
+        direction.append(arrow, el("span", "", entry.wrongWay ? "wrong way" : entry.direction));
         item.append(
           el("span", "feed__time", formatClock(entry.timestamp)),
           el("span", "feed__swatch"),

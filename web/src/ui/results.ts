@@ -985,7 +985,7 @@ function architectureSection(): readonly Child[] {
         `${model.nmsIou}, over ${model.sampledFrames} frames sampled every ` +
         `${model.sampleStride}th from the motorway clip.`,
       [
-        { head: "" },
+        { head: "measure" },
         { head: "float32, shipped", numeric: true },
         { head: "int8 dynamic, refused", numeric: true },
       ],

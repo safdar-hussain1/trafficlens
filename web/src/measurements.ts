@@ -25,3 +25,58 @@ try {
 } catch (error) {
   console.error("the measured-results sections did not mount", error);
 }
+
+markCurrentSection();
+
+/** Mark the contents entry of the section being read, so a long page always
+ * says where the reader is in it. Watched with an IntersectionObserver rather
+ * than a scroll handler: no work happens while nothing crosses a boundary. */
+function markCurrentSection(): void {
+  const links = new Map<string, HTMLAnchorElement>();
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('.toc a[href^="#"]')) {
+    links.set(link.hash.slice(1), link);
+  }
+  const sections = [...links.keys()]
+    .map((id) => document.getElementById(id))
+    .filter((section): section is HTMLElement => section !== null);
+  if (sections.length === 0 || typeof IntersectionObserver === "undefined") {
+    return;
+  }
+  const inView = new Set<string>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          inView.add(entry.target.id);
+        } else {
+          inView.delete(entry.target.id);
+        }
+      }
+      // The first section, in reading order, that overlaps the band below the
+      // sticky header is the one being read.
+      const current = sections.find((section) => inView.has(section.id));
+      if (current === undefined) {
+        // Between two sections the last mark stands; above the first one --
+        // back at the page's own heading -- nothing is being read yet.
+        const first = sections[0] as HTMLElement;
+        if (first.getBoundingClientRect().top > innerHeight * 0.45) {
+          for (const link of links.values()) {
+            link.removeAttribute("aria-current");
+          }
+        }
+        return;
+      }
+      for (const [id, link] of links) {
+        if (id === current.id) {
+          link.setAttribute("aria-current", "location");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      }
+    },
+    { rootMargin: "-90px 0px -55% 0px" },
+  );
+  for (const section of sections) {
+    observer.observe(section);
+  }
+}

@@ -137,9 +137,11 @@ its last off-line origin. Crossing decisions agree exactly; speeds agree to 1e-0
 
 ## The page
 
-`web/src/ui/` has no framework, no chart library and no font CDN. The charts are
-inline SVG built from the same numbers as the tables, the fonts are served from the
-repository, and the results sections do not contain a single typed figure: they read
+The site is two pages: the live demo (`web/index.html`), and the measurements behind
+it (`web/measurements.html`). `web/src/ui/` has no framework, no chart library and no
+font CDN. The charts are inline SVG built from the same numbers as the tables, the
+typeface is served from the repository, and no measured figure on either page is
+typed: the demo's accuracy tally and every results section read
 `web/src/generated/reports.ts`, which `scripts/build_site_data.py` bakes from
 `reports/*.json`.
 
