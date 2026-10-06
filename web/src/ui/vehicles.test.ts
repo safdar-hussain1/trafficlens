@@ -1,5 +1,7 @@
 /** One name and one colour per vehicle type, wherever it is drawn. */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, test } from "vitest";
 
 import { SOURCES } from "./sources";
@@ -22,17 +24,28 @@ describe("colourToken", () => {
     expect(COLOURED_TYPES.length).toBeLessThanOrEqual(3);
   });
 
-  test("every type a source counts resolves, and to the same colour on every source", () => {
-    const seen = new Map<string, string>();
+  test("every type a source counts is drawn in a colour the stylesheet defines", () => {
+    // The canvas reads these tokens off the document, and the readout's bars
+    // and the feed pick their colour by `data-class` in the stylesheet. Two
+    // spellings of one mapping, so they are checked against each other: a type
+    // whose rule or token went missing would be one colour on the video and
+    // another beside it.
+    const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+    const defined = (token: string): boolean =>
+      new RegExp(`${token}:\\s*#[0-9a-f]{6};`).test(css);
+    expect(defined("--class-other")).toBe(true);
+    for (const type of COLOURED_TYPES) {
+      const token = colourToken(type);
+      expect(defined(token), token).toBe(true);
+      const rule = new RegExp(`\\[data-class="${type}"\\]\\s*\\{\\s*--swatch:\\s*var\\(${token}\\);`);
+      expect(css, `the [data-class="${type}"] rule`).toMatch(rule);
+    }
+    // And every type a source can count resolves to one of those tokens.
     for (const source of SOURCES) {
       for (const [, name] of source.classes) {
-        const token = colourToken(name);
-        expect(token).toMatch(/^--class-/);
-        expect(seen.get(name) ?? token).toBe(token);
-        seen.set(name, token);
+        expect(defined(colourToken(name)), name).toBe(true);
       }
     }
-    expect(seen.size).toBeGreaterThan(3);
   });
 });
 

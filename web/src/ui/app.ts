@@ -44,6 +44,7 @@ import {
 import type { Elements, RunState } from "./controls";
 import { RollingMedian, decideCadence } from "./format";
 import type { Cadence } from "./format";
+import { sizeCanvas } from "./canvas-size";
 import { GATE_HANDLE_RADIUS_PX, applyDrag, beginDrag, moveGate } from "./gate-drag";
 import type { Grab, GrabKind, Segment } from "./gate-drag";
 import { POP_SECONDS, boxToFrame, drawOverlay, frameToBox, gateNormal, readPalette } from "./overlay";
@@ -92,6 +93,10 @@ export class ControlRoom {
     | null = null;
 
   private running = false;
+  /** True once the selected source has frames to show. A source that failed to
+   * open leaves this false: nothing is drawn, the line is hidden, and Start
+   * stays disabled until another source is chosen. */
+  private sourceReady = false;
   private runState: RunState = "checking";
   /** True once the visitor has paused this source; the button then resumes. */
   private pausedHere = false;
@@ -185,10 +190,14 @@ export class ControlRoom {
     const wasRunning = this.running;
     this.stop();
     this.pausedHere = false;
-    if (!wasRunning && this.runState === "paused") {
+    if (this.runState === "paused") {
       // A pause belonged to the clip being left; the new one has not started.
+      // If it is about to resume, `run` says Live once it has.
       this.setRunState("ready");
     }
+    // Until the new source has frames there is nothing to count and no picture
+    // for the line to sit on.
+    this.setPlayable(false);
     this.source = source;
     markSelectedSource(this.elements.switcher, source.id);
     this.elements.videoCaption.textContent = source.caption;
@@ -204,14 +213,20 @@ export class ControlRoom {
           : `That clip could not be loaded: ${describe(error)}.`,
       );
       // Nothing is running on this source, and a "Paused" left over from the
-      // one before would describe a session that has gone.
+      // one before would describe a session that has gone. The previous clip
+      // is detached too: left in the player it would keep playing under this
+      // source's name, and Start would count it with this source's settings.
+      this.detachVideo();
       this.setRunState(this.probe === null ? "checking" : "ready");
+      this.setPlayable(false);
+      this.renderPanels();
       return;
     }
 
     this.frameSize = { width: this.video.videoWidth, height: this.video.videoHeight };
     this.gate = gateSegment(source, this.frameSize);
     this.pipeline = this.buildPipeline();
+    this.setPlayable(true);
     this.setStatus("");
     this.renderPanels();
     if (wasRunning) {
@@ -287,7 +302,7 @@ export class ControlRoom {
   }
 
   private async run(): Promise<void> {
-    if (this.pipeline === null) {
+    if (this.pipeline === null || !this.sourceReady) {
       return;
     }
     this.setBusy(true);
@@ -444,7 +459,7 @@ export class ControlRoom {
       } catch (error) {
         this.setStatus(`Inference stopped: ${describe(error)}`);
         this.stop();
-        this.renderControls();
+        this.setRunState("ready");
         return;
       }
     }
@@ -549,6 +564,16 @@ export class ControlRoom {
     const dpr = Math.min(3, globalThis.devicePixelRatio || 1);
 
     const videoBox = sizeCanvas(this.elements.videoCanvas, dpr);
+    if (!this.sourceReady) {
+      // No frames and no line to draw: the stage stays dark, with the status
+      // line saying why.
+      this.videoCtx.save();
+      this.videoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.videoCtx.fillStyle = "#000";
+      this.videoCtx.fillRect(0, 0, videoBox.width, videoBox.height);
+      this.videoCtx.restore();
+      return;
+    }
     this.fit = drawOverlay(
       this.videoCtx,
       videoBox,
@@ -670,7 +695,13 @@ export class ControlRoom {
     this.gate = next;
     this.hasDragged = true;
     if (this.pipeline !== null) {
-      this.pipeline.replaceGates([this.gateObject()], this.video.currentTime);
+      if (this.frameIndex === 0) {
+        // Nothing has been detected yet, so the move restarts nothing: a fresh
+        // pipeline at the new line, with no "counting since" to explain.
+        this.pipeline = this.buildPipeline();
+      } else {
+        this.pipeline.replaceGates([this.gateObject()], this.video.currentTime);
+      }
       // The counts restart at the new line, so everything that described the
       // old one goes with them.
       this.feed = [];
@@ -699,8 +730,9 @@ export class ControlRoom {
       node.style.top = `${y}px`;
     }
     // The hint teaches the one interaction the page has, until it is used.
-    if (this.elements.gateHint.hidden !== this.hasDragged) {
-      this.elements.gateHint.hidden = this.hasDragged;
+    const hideHint = this.hasDragged || !this.sourceReady;
+    if (this.elements.gateHint.hidden !== hideHint) {
+      this.elements.gateHint.hidden = hideHint;
     }
   }
 
@@ -736,8 +768,33 @@ export class ControlRoom {
   }
 
   private setBusy(busy: boolean): void {
-    this.elements.startButton.disabled = busy;
-    this.elements.launchButton.disabled = busy;
+    this.elements.startButton.disabled = busy || !this.sourceReady;
+    this.elements.launchButton.disabled = busy || !this.sourceReady;
+  }
+
+  /** Whether the selected source can be counted: it gates Start and shows or
+   * hides the line's handles, which have nothing to sit on without frames. */
+  private setPlayable(playable: boolean): void {
+    this.sourceReady = playable;
+    this.setBusy(false);
+    for (const node of [
+      this.elements.handles.start,
+      this.elements.handles.body,
+      this.elements.handles.end,
+    ]) {
+      node.hidden = !playable;
+    }
+    this.elements.gateHint.hidden = !playable || this.hasDragged;
+  }
+
+  /** Stop and empty the player, so nothing keeps playing under a source that
+   * failed to open. */
+  private detachVideo(): void {
+    this.video.pause();
+    this.releaseCamera();
+    this.video.srcObject = null;
+    this.video.removeAttribute("src");
+    this.video.load();
   }
 
   private renderPanels(): void {
@@ -763,9 +820,7 @@ export class ControlRoom {
       total: pipeline?.total() ?? 0,
       perClass,
       perDirection,
-      // Only once something has been detected: a line moved before the first
-      // frame changes nothing that was counted, so there is nothing to explain.
-      countingSince: this.frameIndex > 0 ? (pipeline?.countingSinceTimestamp ?? null) : null,
+      countingSince: pipeline?.countingSinceTimestamp ?? null,
       feed: this.feed,
       positiveAngleDeg: (Math.atan2(normal[1], normal[0]) * 180) / Math.PI,
     });
@@ -798,17 +853,6 @@ function gateSegment(source: SourceSpec, frame: { width: number; height: number 
     start: [source.gate.start[0] * frame.width, source.gate.start[1] * frame.height],
     end: [source.gate.end[0] * frame.width, source.gate.end[1] * frame.height],
   };
-}
-
-function sizeCanvas(canvas: HTMLCanvasElement, dpr: number): { width: number; height: number } {
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
-  if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-  }
-  return { width, height };
 }
 
 function nextFrame(): Promise<void> {

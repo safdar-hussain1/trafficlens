@@ -1,7 +1,7 @@
 /** The measured results: the sections of the measurements page.
  *
- * The division of labour with `index.html` is deliberate and it is the rule this
- * module is built around:
+ * The division of labour with `measurements.html` is deliberate, and it is the
+ * rule this module is built around:
  *
  *   **The markup carries the argument. This module carries the figures.**
  *
@@ -25,9 +25,8 @@
  *
  * Where a number could not be sourced from a report, it is absent rather than
  * approximated. The whole-loop backend timings are the case that came up: they
- * are measured in the visitor's own tab and reported by the badge at the top of
- * the page, and there is no report file holding them, so no results section
- * quotes one.
+ * are measured in the visitor's own tab and reported in the live demo's status,
+ * and there is no report file holding them, so no results section quotes one.
  *
  * Split three ways, and the seams are about who knows what: `kit.ts` decides how
  * a figure may look and knows nothing about any benchmark; `figures.ts` draws the

@@ -2287,8 +2287,16 @@ table.data tbody tr:last-child td {
     flex: 1;
   }
 
+  /* Smaller, not gone: on a phone the note is where a visitor learns that
+     Start downloads the detector, and where the download's progress appears. */
+  .launch {
+    gap: 8px;
+    padding-top: 14px;
+  }
+
   .launch__note {
-    display: none;
+    max-width: 30ch;
+    font-size: 12.5px;
   }
 
   /* On a phone-sized picture the hint lands on the direction tags; the round
@@ -2331,7 +2339,15 @@ table.data tbody tr:last-child td {
     display: none;
   }
 
+  /* The icon alone on the narrowest screens, with the word kept for a screen
+     reader: the GitHub mark is decorative and cannot name the link itself. */
   .site-nav__source span {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

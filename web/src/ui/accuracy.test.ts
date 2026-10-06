@@ -5,6 +5,8 @@
  * squares add up to the labelled crossings, the extra counts are the
  * predictions that matched nothing, and the rates are the report's own. */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, test } from "vitest";
 
 import { REPORTS } from "../generated/reports";
@@ -69,5 +71,23 @@ describe("modelName", () => {
   test("names a weights file the way prose does", () => {
     expect(modelName("yolo11s.pt")).toBe("YOLO11s");
     expect(modelName("yolo11n-480.onnx")).toBe("YOLO11n-480");
+  });
+});
+
+describe("the tally and the page are two halves of one figure", () => {
+  // `main.ts` mounts the tally inside a guard, so a renamed slot would leave an
+  // empty figure on the published page and only a console error behind it.
+  // This is what notices instead.
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./accuracy.ts", import.meta.url), "utf8");
+
+  test("the demo page has exactly one slot for it, on a figure", () => {
+    const slots = [...html.matchAll(/<(\w+)[^>]*\bdata-accuracy="([^"]+)"/g)];
+    expect(slots.map((match) => match[2])).toEqual(["tally"]);
+    expect(slots[0]?.[1]).toBe("figure");
+  });
+
+  test("and the module fills that slot by the same name", () => {
+    expect(source).toContain(`'[data-accuracy="tally"]'`);
   });
 });
