@@ -1,42 +1,37 @@
 # Fonts shipped with this site
 
 > This notice lives in `web/public/fonts/` so that it is COPIED INTO THE
-> PUBLISHED SITE. It used to sit beside the sources in `web/src/ui/fonts/`,
-> which the build does not copy, so the four woff2 files were served from
-> `assets/` with no notice anywhere near them — and the OFL asks this notice to
-> travel with the files. The bundler renames each file with a content hash on
-> its way into `assets/`, so match them by family below rather than by filename.
+> PUBLISHED SITE. The font file itself sits beside the sources in
+> `web/src/ui/fonts/`, and the bundler serves it from `assets/` with a content
+> hash in its name; the OFL asks this notice to travel with the file, so it is
+> published here, next to the page. Match the file by family below rather than
+> by filename.
 
-Three families are served from this repository rather than from a font CDN.
-That is a consequence of the product's own claim: the page says nothing about a
-frame leaves your device after load, and a request to a third-party font host on
-every page view would make that claim false.
+One family is served from this repository rather than from a font CDN. That is
+a consequence of the product's own claim: the page says nothing about a frame
+leaves your device after load, and a request to a third-party font host on every
+page view would make that claim false.
 
-Each file below is the LATIN SUBSET published by Google Fonts, downloaded
-verbatim from the URL beside it. Archivo and IBM Plex Sans are variable fonts,
-so one file covers their whole weight range; IBM Plex Mono is shipped as two
-static weights.
+Overpass is an open typeface derived from Highway Gothic, the lettering on
+North American highway signs, which is why a traffic counter is set in it. The
+file below is the LATIN SUBSET published by Google Fonts, downloaded verbatim
+from the URL beside it. It is a variable font, so one file covers the whole
+weight range the site uses.
 
 | File | Family | Weights | Source |
 |---|---|---|---|
-| `archivo-latin.woff2` | Archivo | 100–900 variable | https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2 |
-| `ibm-plex-sans-latin.woff2` | IBM Plex Sans | 100–700 variable | https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxeKYbSB4Zh.woff2 |
-| `ibm-plex-mono-400-latin.woff2` | IBM Plex Mono | 400 | https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n1i8q131nj-o.woff2 |
-| `ibm-plex-mono-600-latin.woff2` | IBM Plex Mono | 600 | https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3vAOwlBFgsAXHNk.woff2 |
+| `overpass-latin.woff2` | Overpass | 100–900 variable | https://fonts.gstatic.com/s/overpass/v19/qFdH35WCmI96Ajtm81GlU9vgwBcI.woff2 |
 
 ## Licence
 
-Both families are under the SIL Open Font License, Version 1.1, which requires
-this notice to travel with the files.
+Overpass is under the SIL Open Font License, Version 1.1, which requires this
+notice to travel with the file.
 
-Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
-
-Copyright (c) 2017 IBM Corp. with Reserved Font Name "Plex"
+Copyright 2021 The Overpass Project Authors (https://github.com/RedHatOfficial/Overpass)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
-
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

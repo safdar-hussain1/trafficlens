@@ -1,18 +1,17 @@
-/** The control room.
+/** The live demo.
  *
- * Everything the previous tasks measured exists so this page can be true, so
- * the rules it is built to are about truth rather than polish:
+ * The rules it is built to are about truth first and polish second:
  *
  *   - Detection is decoupled from render. The page draws every frame and runs
- *     the detector on the cadence the MEASURED backend can sustain, and says
- *     which it is doing rather than quietly dropping to a slideshow.
+ *     the detector on the cadence the MEASURED backend can sustain, and says so
+ *     whenever that is less than every frame rather than quietly dropping to a
+ *     slideshow.
  *   - Nothing is reported that was not measured in this tab, in this session.
- *     The backend badge carries the renderer string beside every timing.
- *   - The gate is the visitor's. Moving it recomputes the counts from that
- *     moment, and the interface says so instead of showing a total that mixes
- *     two different geometries.
- *   - Where the engine refuses to answer -- a speed on an unsurveyed camera --
- *     the interface refuses in the same words.
+ *   - The line is the visitor's. Moving it restarts the counts from that
+ *     moment, and the readout says so instead of showing a total that mixes two
+ *     different geometries.
+ *   - A count is shown where it happened: the "+1" rises from the exact point
+ *     on the line the engine says the path crossed.
  *
  * The frame loop and the detection loop are separate on purpose. The render
  * loop is a `requestAnimationFrame` chain that only ever draws; the detect loop
@@ -35,43 +34,40 @@ import { letterbox } from "../runtime/preprocess";
 import { decodeYolo } from "../runtime/postprocess";
 import { ORT_ENTRY, browserDeps, createSession, vendoredUrl } from "../runtime/session";
 import type { RuntimeSession } from "../runtime/session";
-import { drawDiagram } from "./charts";
-import type { DiagramTrace } from "./charts";
 import {
-  applyTheme,
   collectElements,
-  currentTheme,
+  installThemeToggle,
   markSelectedSource,
-  renderBadge,
-  renderPanels,
+  renderStatus,
   renderSwitcher,
-  renderThemeToggle,
 } from "./controls";
-import type { Elements } from "./controls";
-import { RollingMedian, decideCadence, formatClock } from "./format";
+import type { Elements, RunState } from "./controls";
+import { RollingMedian, decideCadence } from "./format";
 import type { Cadence } from "./format";
 import { GATE_HANDLE_RADIUS_PX, applyDrag, beginDrag, moveGate } from "./gate-drag";
 import type { Grab, GrabKind, Segment } from "./gate-drag";
-import { boxToFrame, drawOverlay, frameToBox, readPalette } from "./overlay";
+import { POP_SECONDS, boxToFrame, drawOverlay, frameToBox, gateNormal, readPalette } from "./overlay";
 import type { Fit, Palette, Trail } from "./overlay";
+import { FEED_LENGTH, Readout } from "./readout";
+import type { FeedEntry } from "./readout";
 import { SOURCES, keepClassesOf, sourceById } from "./sources";
 import type { SourceSpec } from "./sources";
-import { signedDistanceToGate, withinGateSpan } from "./timespace";
+import { displayOrder } from "./vehicles";
 
-/** Seconds of history the diagram shows. Long enough for a vehicle to cross
- * the frame at motorway speed, short enough that the lines stay separable. */
-const DIAGRAM_WINDOW_S = 12;
+/** Trajectory history kept per track, in seconds: a little longer than the
+ * trail the overlay draws, so a trail never starts mid-air. */
+const HISTORY_S = 3;
 
-/** Trajectory history kept per track, in seconds. Slightly longer than the
- * diagram window so a line entering from the left edge is already drawn. */
-const HISTORY_S = DIAGRAM_WINDOW_S + 2;
+/** How long a crossing is kept for drawing: its "+1" and the line's glow. */
+const EVENT_KEEP_S = POP_SECONDS + 1;
 
 /** Samples the rolling backend median is taken over: about four seconds of
  * WebGPU inference, so the figure settles quickly and still forgets a stall. */
 const TIMING_WINDOW = 120;
 
-/** The diagram never zooms in past this, in image pixels either side. */
-const DIAGRAM_FLOOR_SPAN_PX = 150;
+/** The status figures change every detection; a visitor can read them twice a
+ * second, not thirty times. */
+const STATUS_REFRESH_MS = 500;
 
 interface Sample {
   readonly t: number;
@@ -80,9 +76,9 @@ interface Sample {
 
 export class ControlRoom {
   private readonly elements: Elements;
+  private readonly readout: Readout;
   private readonly video: HTMLVideoElement;
   private readonly videoCtx: CanvasRenderingContext2D;
-  private readonly chartCtx: CanvasRenderingContext2D;
   private readonly reducedMotion: boolean;
 
   private source: SourceSpec = SOURCES[0] as SourceSpec;
@@ -96,6 +92,10 @@ export class ControlRoom {
     | null = null;
 
   private running = false;
+  private runState: RunState = "checking";
+  /** True once the visitor has paused this source; the button then resumes. */
+  private pausedHere = false;
+  private hasDragged = false;
   private detectGeneration = 0;
   private fit: Fit = { scale: 1, dx: 0, dy: 0 };
   private grab: Grab | null = null;
@@ -103,22 +103,22 @@ export class ControlRoom {
   private readonly trails = new Map<number, Sample[]>();
   private tracks: readonly TrackView[] = [];
   private events: CrossingEvent[] = [];
-  private wrongWay: string[] = [];
+  private feed: FeedEntry[] = [];
+  private feedSerial = 0;
+  private readonly counted = new Set<number>();
   private readonly wrongWayIds = new Set<number>();
 
   private readonly frameMs = new RollingMedian(TIMING_WINDOW);
   private detectionTimes: number[] = [];
   private cadence: Cadence = decideCadence(null, 30);
+  private statusAt = 0;
   private status = "";
   /** The pipeline's frame clock, and it belongs to the PIPELINE, not to a run
-   * of the detect loop. It used to be a local in `detectLoop`, initialised to 0
-   * every time the loop started -- but `stop()` and `run()` deliberately keep
-   * the pipeline, so a visitor who stopped and restarted handed a fresh 0 to a
-   * pipeline whose `lastSeen` entries were at frame 400. `frameIndex - seen` is
-   * then negative, `SessionPipeline`'s reaping test never fires, and the stale
-   * `_counted` entries and previous anchors of long-gone vehicles sit there
-   * suppressing legitimate re-counts until the clock catches up. It is reset
-   * where the pipeline is constructed again, and only there. */
+   * of the detect loop: `stop()` and `run()` keep the pipeline, so a clock
+   * restarted at 0 on resume would hand it frame indices behind its own
+   * `lastSeen` entries, reaping would stop, and long-gone vehicles would
+   * suppress legitimate re-counts. It is reset where the pipeline is
+   * constructed again, and only there. */
   private frameIndex = 0;
   private lastTimestamp = 0;
   private palette: Palette | null = null;
@@ -126,6 +126,7 @@ export class ControlRoom {
 
   constructor() {
     this.elements = collectElements();
+    this.readout = new Readout(this.elements);
     this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.video = document.createElement("video");
     this.video.playsInline = true;
@@ -135,12 +136,10 @@ export class ControlRoom {
     this.video.crossOrigin = "anonymous";
 
     const videoCtx = this.elements.videoCanvas.getContext("2d");
-    const chartCtx = this.elements.chartCanvas.getContext("2d");
-    if (videoCtx === null || chartCtx === null) {
+    if (videoCtx === null) {
       throw new Error("this browser has no 2d canvas context");
     }
     this.videoCtx = videoCtx;
-    this.chartCtx = chartCtx;
   }
 
   /** The live video element, exposed for the headless webcam check: the stub
@@ -151,35 +150,26 @@ export class ControlRoom {
   }
 
   async start(): Promise<void> {
-    renderThemeToggle(this.elements.themeToggle);
-    this.elements.themeToggle.addEventListener("click", () => {
-      applyTheme(currentTheme() === "dark" ? "light" : "dark");
-      renderThemeToggle(this.elements.themeToggle);
-    });
+    installThemeToggle(this.elements.themeToggle);
 
     renderSwitcher(this.elements.switcher, this.source.id, (id) => {
       void this.selectSource(sourceById(id));
     });
-    this.elements.startButton.addEventListener("click", () => {
-      void this.toggleRunning();
-    });
+    for (const button of [this.elements.startButton, this.elements.launchButton]) {
+      button.addEventListener("click", () => {
+        void this.toggleRunning();
+      });
+    }
     this.elements.resetButton.addEventListener("click", () => {
       this.resetCounts();
     });
     this.installGateControls();
-
-    renderBadge(this.elements.badge, {
-      probe: null,
-      ep: null,
-      msPerFrame: null,
-      fps: null,
-      cadence: null,
-    });
+    this.setRunState("checking");
 
     // Probed before anything is downloaded: the page can say what this machine
     // will run before it asks the visitor to pay 10.7 MB to find out.
     this.probe = await probeBackend();
-    this.renderBadge();
+    this.setRunState("ready");
 
     await this.selectSource(this.source);
     this.renderFrame();
@@ -190,17 +180,23 @@ export class ControlRoom {
   private async selectSource(source: SourceSpec): Promise<void> {
     const wasRunning = this.running;
     this.stop();
+    this.pausedHere = false;
+    if (!wasRunning && this.runState === "paused") {
+      // A pause belonged to the clip being left; the new one has not started.
+      this.setRunState("ready");
+    }
     this.source = source;
     markSelectedSource(this.elements.switcher, source.id);
     this.elements.videoCaption.textContent = source.caption;
     this.clearSession();
+    this.readout.reset();
 
     try {
       await this.attachSource(source);
     } catch (error) {
       this.setStatus(
         source.kind === "camera"
-          ? `The camera could not be opened: ${describe(error)}. The clips below still run.`
+          ? `The camera could not be opened: ${describe(error)}. The two clips still run.`
           : `That clip could not be loaded: ${describe(error)}.`,
       );
       return;
@@ -213,6 +209,8 @@ export class ControlRoom {
     this.renderPanels();
     if (wasRunning) {
       await this.run();
+    } else {
+      this.renderControls();
     }
     this.renderFrame();
   }
@@ -273,6 +271,8 @@ export class ControlRoom {
   private async toggleRunning(): Promise<void> {
     if (this.running) {
       this.stop();
+      this.pausedHere = true;
+      this.renderControls();
       this.renderFrame();
       return;
     }
@@ -283,19 +283,20 @@ export class ControlRoom {
     if (this.pipeline === null) {
       return;
     }
-    this.elements.startButton.disabled = true;
+    this.setBusy(true);
     try {
       await this.ensureSession();
     } catch (error) {
       this.setStatus(`The detector could not start: ${describe(error)}`);
-      this.elements.startButton.disabled = false;
+      this.setBusy(false);
+      this.setRunState("ready");
       return;
     }
-    this.elements.startButton.disabled = false;
-    this.elements.startButton.textContent = "Stop";
+    this.setBusy(false);
     this.elements.emptyState.hidden = true;
-    this.elements.videoNote.textContent = "running";
     this.running = true;
+    this.pausedHere = false;
+    this.setRunState("live");
     this.detectGeneration += 1;
     try {
       await this.video.play();
@@ -307,19 +308,22 @@ export class ControlRoom {
   }
 
   private stop(): void {
+    const wasRunning = this.running;
     this.running = false;
     this.grab = null;
     this.detectGeneration += 1;
     this.video.pause();
-    this.elements.startButton.textContent = "Start";
-    this.elements.videoNote.textContent = "stopped";
+    if (wasRunning) {
+      this.setRunState("paused");
+    }
   }
 
   private clearSession(): void {
     this.trails.clear();
     this.tracks = [];
     this.events = [];
-    this.wrongWay = [];
+    this.feed = [];
+    this.counted.clear();
     this.wrongWayIds.clear();
     this.frameMs.reset();
     this.detectionTimes = [];
@@ -329,20 +333,17 @@ export class ControlRoom {
     // against the current frame index, so a pipeline carried across a clock
     // reset holds tracks stamped hundreds of frames in the future: nothing
     // reaps them, and the next crossing they are matched to is counted against
-    // a stale identity.
-    //
-    // This used to be a comment asserting that "both callers construct a new
-    // pipeline". They did not. `selectSource` calls this and then RETURNS on
-    // the error path -- a denied camera, an unloadable clip -- before it
-    // reaches `buildPipeline`, so pressing Start afterwards ran the old
-    // pipeline against a clock that had just gone back to zero. Making the two
-    // one statement is why that cannot come back.
+    // a stale identity. `selectSource` calls this and can then return early --
+    // a denied camera, an unloadable clip -- before it builds a pipeline of its
+    // own, so the two are one statement pair rather than a promise that every
+    // caller will remember the second half.
     this.frameIndex = 0;
     this.pipeline = this.buildPipeline();
   }
 
   private resetCounts(): void {
     this.clearSession();
+    this.readout.reset();
     this.renderPanels();
     this.renderFrame();
   }
@@ -352,8 +353,9 @@ export class ControlRoom {
       return;
     }
     const probe = this.probe;
+    this.setRunState("loading");
     this.elements.progress.hidden = false;
-    this.elements.emptyText.textContent = "Downloading the detector — this happens once.";
+    this.elements.emptyText.textContent = "Downloading the detector. This happens once.";
 
     const session = await createSession(
       new URL(MODEL_URL, document.baseURI).href,
@@ -367,7 +369,7 @@ export class ControlRoom {
         }
         this.elements.emptyText.textContent = progress.fromCache
           ? "Detector loaded from this browser's cache."
-          : `Downloading the detector — ${(progress.loaded / 1e6).toFixed(1)} MB.`;
+          : `Downloading the detector: ${(progress.loaded / 1e6).toFixed(1)} MB.`;
       },
       browserDeps({ contentVersion: MODEL_CONTENT_VERSION }),
     );
@@ -381,7 +383,6 @@ export class ControlRoom {
     };
     this.tensorFactory = (data, dims) => new ort.Tensor("float32", data, dims);
     this.elements.progress.hidden = true;
-    this.renderBadge();
   }
 
   // -- the detect loop --------------------------------------------------------
@@ -435,6 +436,7 @@ export class ControlRoom {
       } catch (error) {
         this.setStatus(`Inference stopped: ${describe(error)}`);
         this.stop();
+        this.renderControls();
         return;
       }
     }
@@ -451,7 +453,7 @@ export class ControlRoom {
       this.detectionTimes.shift();
     }
     this.cadence = decideCadence(this.frameMs.value(), this.source.fps);
-    this.renderBadge();
+    this.renderStatus();
   }
 
   /** Measured detections per second, over the last two seconds of wall clock.
@@ -477,13 +479,13 @@ export class ControlRoom {
       return;
     }
     // The clips loop, so the clip clock jumps backwards. Counts carry across --
-    // those vehicles really did cross -- but the drawn history cannot: the
-    // diagram's axis IS clip time, and trajectories from before the loop would
-    // sit in the future of the axis and never age out.
+    // those vehicles really did cross -- but the drawn history cannot: trails
+    // and markers are stamped in clip time and would sit in its future.
     if (timestamp < this.lastTimestamp - 0.5) {
       this.trails.clear();
       this.events = [];
       this.wrongWayIds.clear();
+      this.counted.clear();
     }
     this.lastTimestamp = timestamp;
 
@@ -508,15 +510,22 @@ export class ControlRoom {
     const expected = this.source.gate.expectedDirection;
     for (const event of step.events) {
       this.events.push(event);
-      if (expected !== null && event.direction !== expected) {
+      this.counted.add(event.trackId);
+      const wrongWay = expected !== null && event.direction !== expected;
+      if (wrongWay) {
         this.wrongWayIds.add(event.trackId);
-        this.wrongWay.unshift(
-          `${formatClock(event.timestamp)}  ${event.className} ${event.trackId} went ${event.direction}`,
-        );
-        this.wrongWay = this.wrongWay.slice(0, 6);
       }
+      this.feedSerial += 1;
+      this.feed.unshift({
+        id: this.feedSerial,
+        timestamp: event.timestamp,
+        className: event.className,
+        direction: event.direction,
+        wrongWay,
+      });
     }
-    this.events = this.events.filter((event) => timestamp - event.timestamp <= HISTORY_S);
+    this.feed = this.feed.slice(0, FEED_LENGTH);
+    this.events = this.events.filter((event) => timestamp - event.timestamp <= EVENT_KEEP_S);
     this.renderPanels();
   }
 
@@ -527,7 +536,6 @@ export class ControlRoom {
   renderFrame(): void {
     const palette = this.themePalette();
     const dpr = Math.min(3, globalThis.devicePixelRatio || 1);
-    const now = this.video.currentTime;
 
     const videoBox = sizeCanvas(this.elements.videoCanvas, dpr);
     this.fit = drawOverlay(
@@ -543,38 +551,24 @@ export class ControlRoom {
         tracks: this.tracks,
         trails: this.trailsForOverlay(),
         events: this.events,
-        now,
+        now: this.video.currentTime,
         dpr,
         source: this.video.readyState >= 2 ? this.video : null,
         reducedMotion: this.reducedMotion,
         wrongWay: this.wrongWayIds,
+        counted: this.counted,
       },
       palette,
     );
-    const chartBox = sizeCanvas(this.elements.chartCanvas, dpr);
-    drawDiagram(
-      this.chartCtx,
-      chartBox,
-      {
-        now,
-        windowS: DIAGRAM_WINDOW_S,
-        traces: this.diagramTraces(),
-        events: this.events,
-        floorSpanPx: DIAGRAM_FLOOR_SPAN_PX,
-        dpr,
-        running: this.running,
-      },
-      palette,
-    );
-    // Last, after both canvases have been measured: these writes invalidate
+    // Last, after the canvas has been measured: these writes invalidate
     // layout, and doing them earlier would force a synchronous recalculation on
     // the next `getBoundingClientRect` every single frame.
     this.positionHandles();
   }
 
-  /** The theme's colours, recomputed only when the theme actually changes.
-   * `getComputedStyle` is a layout read, and doing nine of them per frame beside
-   * the handle writes below is the classic way to make a canvas page stutter. */
+  /** The canvas colours, recomputed only when the theme actually changes.
+   * `getComputedStyle` is a layout read, and doing it per frame beside the
+   * handle writes below is the classic way to make a canvas page stutter. */
   private themePalette(): Palette {
     const key = `${document.documentElement.getAttribute("data-theme") ?? "system"}:${
       matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
@@ -594,29 +588,7 @@ export class ControlRoom {
     return out;
   }
 
-  /** Trajectories in diagram space, recomputed from stored image positions
-   * every frame.
-   *
-   * Recomputed rather than accumulated because the vertical axis is distance
-   * from THIS gate: when the visitor moves the gate, every trajectory already
-   * drawn has to move with it, or the two views would be showing different
-   * geometry and the page's claim that they are one truth would be false. */
-  private diagramTraces(): DiagramTrace[] {
-    const traces: DiagramTrace[] = [];
-    for (const [trackId, samples] of this.trails) {
-      traces.push({
-        trackId,
-        samples: samples.map((sample) => ({
-          t: sample.t,
-          d: signedDistanceToGate(this.gate, sample.p),
-        })),
-        inSpan: samples.map((sample) => withinGateSpan(this.gate, sample.p)),
-      });
-    }
-    return traces;
-  }
-
-  // -- the gate ---------------------------------------------------------------
+  // -- the line ---------------------------------------------------------------
 
   private installGateControls(): void {
     const stage = this.elements.stage;
@@ -684,9 +656,13 @@ export class ControlRoom {
 
   private setGate(next: Segment): void {
     this.gate = next;
+    this.hasDragged = true;
     if (this.pipeline !== null) {
       this.pipeline.replaceGates([this.gateObject()], this.video.currentTime);
-      this.wrongWay = [];
+      // The counts restart at the new line, so everything that described the
+      // old one goes with them.
+      this.feed = [];
+      this.counted.clear();
       this.wrongWayIds.clear();
       this.events = [];
     }
@@ -695,28 +671,42 @@ export class ControlRoom {
   }
 
   private positionHandles(): void {
-    const points: [HTMLButtonElement, Point][] = [
+    const middle: Point = [
+      (this.gate.start[0] + this.gate.end[0]) / 2,
+      (this.gate.start[1] + this.gate.end[1]) / 2,
+    ];
+    const points: [HTMLElement, Point][] = [
       [this.elements.handles.start, this.gate.start],
       [this.elements.handles.end, this.gate.end],
-      [
-        this.elements.handles.body,
-        [
-          (this.gate.start[0] + this.gate.end[0]) / 2,
-          (this.gate.start[1] + this.gate.end[1]) / 2,
-        ],
-      ],
+      [this.elements.handles.body, middle],
+      [this.elements.gateHint, middle],
     ];
-    for (const [button, point] of points) {
+    for (const [node, point] of points) {
       const [x, y] = frameToBox(point, this.fit);
-      button.style.left = `${x}px`;
-      button.style.top = `${y}px`;
+      node.style.left = `${x}px`;
+      node.style.top = `${y}px`;
+    }
+    // The hint teaches the one interaction the page has, until it is used.
+    if (this.elements.gateHint.hidden !== this.hasDragged) {
+      this.elements.gateHint.hidden = this.hasDragged;
     }
   }
 
   // -- rendering the markup ---------------------------------------------------
 
-  private renderBadge(): void {
-    renderBadge(this.elements.badge, {
+  private setRunState(state: RunState): void {
+    this.runState = state;
+    this.renderControls();
+    this.renderStatus(true);
+  }
+
+  private renderStatus(force = false): void {
+    const now = performance.now();
+    if (!force && now - this.statusAt < STATUS_REFRESH_MS) {
+      return;
+    }
+    this.statusAt = now;
+    renderStatus(this.elements, this.runState, {
       probe: this.probe,
       ep: this.session?.ep ?? null,
       msPerFrame: this.frameMs.value(),
@@ -725,12 +715,25 @@ export class ControlRoom {
     });
   }
 
+  private renderControls(): void {
+    this.elements.startButton.textContent = this.running
+      ? "Pause"
+      : this.pausedHere
+        ? "Resume"
+        : "Start";
+  }
+
+  private setBusy(busy: boolean): void {
+    this.elements.startButton.disabled = busy;
+    this.elements.launchButton.disabled = busy;
+  }
+
   private renderPanels(): void {
     const pipeline = this.pipeline;
     const counts = pipeline?.counts() ?? {};
     const gateCounts = counts[this.source.gate.name] ?? {};
 
-    const perClass = this.source.classes.map(
+    const perClass = displayOrder(this.source.classes, ([, name]) => name).map(
       ([, name]) =>
         [name, Object.values(gateCounts[name] ?? {}).reduce((a, b) => a + b, 0)] as const,
     );
@@ -742,18 +745,18 @@ export class ControlRoom {
       }
       return [direction, total] as const;
     });
+    const normal = gateNormal(this.gate.start, this.gate.end);
 
-    renderPanels(this.elements, {
-      source: this.source,
+    this.readout.render({
       total: pipeline?.total() ?? 0,
       perClass,
       perDirection,
-      countingSince: pipeline?.countingSinceTimestamp ?? null,
-      wrongWay: this.wrongWay,
+      // Only once something has been detected: a line moved before the first
+      // frame changes nothing that was counted, so there is nothing to explain.
+      countingSince: this.frameIndex > 0 ? (pipeline?.countingSinceTimestamp ?? null) : null,
+      feed: this.feed,
+      positiveAngleDeg: (Math.atan2(normal[1], normal[0]) * 180) / Math.PI,
     });
-    // `renderPanels` owns the incidents panel now, alerts included. It used to
-    // be written twice -- a refusal, then the alerts over the top of it -- and
-    // the two disagreed about whether an incident was even possible.
   }
 
   private setStatus(message: string): void {
@@ -823,7 +826,7 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Boot the control room and keep drawing. */
+/** Boot the demo and keep drawing. */
 export async function mountControlRoom(): Promise<ControlRoom> {
   const room = new ControlRoom();
   await room.start();

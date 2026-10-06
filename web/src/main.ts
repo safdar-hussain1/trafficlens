@@ -1,7 +1,7 @@
-/** The entry point, and the three things this bundle can be asked to do.
+/** The entry point of the demo page, and the three things it can be asked to do.
  *
- * The control room is the page. The other two modes exist so that claims made
- * on it can be checked from outside the browser: `?selftest=1` replays the
+ * The live demo is the page. The other two modes exist so that claims made on
+ * it can be checked from outside the browser: `?selftest=1` replays the
  * committed parity fixtures through the shipped engine and writes a verdict
  * into the tab title, and `?measure=1` times the real per-frame path and writes
  * the figures there too. Both are loaded lazily -- the fixture alone is 435 kB,
@@ -26,27 +26,20 @@ async function boot(): Promise<void> {
     await runMeasurePage(params);
     return;
   }
-  // The results sections first, and before anything is awaited on the hardware:
-  // they are static, they need no GPU and no download, and they are the half of
-  // the page that still means something on a machine that cannot run the
-  // detector at all. The control room's own probe takes as long as it takes.
+  // The accuracy tally first, and before anything is awaited on the hardware:
+  // it is static, needs no GPU and no download, and it still means something
+  // on a machine that cannot run the detector at all.
   //
-  // Guarded, because `mountResults` throws by design -- on a missing slot, and on
-  // a measurement it cannot address in the bake -- and the two halves of this page
-  // share no data path at all. A slot that has been renamed in the static half is
-  // no reason a visitor cannot count vehicles, and before this guard it was: the
-  // rejected promise stopped `boot` before the control room mounted. The failure
-  // is reported rather than swallowed, and `results.test.ts` asserts the slots and
-  // the sections still agree -- the guard keeps the demo alive, the test is what
-  // notices. Neither substitutes for the other.
+  // Guarded, because `mountAccuracy` throws by design -- on a missing slot, and
+  // on a method it cannot address in the bake -- and the tally and the demo
+  // share no data path. A renamed slot is no reason a visitor cannot count
+  // vehicles; the failure is reported rather than swallowed, and
+  // `accuracy.test.ts` is what notices it.
   try {
-    const { mountResults } = await import("./ui/results");
-    mountResults();
+    const { mountAccuracy } = await import("./ui/accuracy");
+    mountAccuracy();
   } catch (error) {
-    console.error(
-      "the measured-results sections did not mount; the control room is unaffected",
-      error,
-    );
+    console.error("the accuracy tally did not mount; the live demo is unaffected", error);
   }
 
   const { mountControlRoom } = await import("./ui/app");

@@ -436,7 +436,7 @@ describe("addressing the bake by name must fail loudly, not print a dash", () =>
 });
 
 describe("the slots and the sections are two halves of one document", () => {
-  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../../measurements.html", import.meta.url), "utf8");
   const inMarkup = [...html.matchAll(/data-results="([^"]+)"/g)].map((match) => match[1] ?? "");
 
   test("the tracker negative carries the resolution it is inside", () => {
@@ -469,10 +469,9 @@ describe("the slots and the sections are two halves of one document", () => {
 
   test("every slot in the markup is filled, and every section has a slot", () => {
     // Nothing compared these two sets before. `mountResults` throws on a missing
-    // slot -- which, before the guard in `main.ts`, also took the live demo down
-    // -- and `?selftest=1` returns before the results mount, so `verify_page.sh`
-    // could not see a mismatch either. The guard keeps the demo alive; this is
-    // what notices.
+    // slot, and the measurements page's entry reports that to the console
+    // rather than failing loudly; `?selftest=1` never loads that page, so
+    // `verify_page.sh` cannot see a mismatch either. This is what notices.
     expect([...inMarkup].sort()).toEqual([...slotNames()].sort());
   });
 
@@ -483,7 +482,7 @@ describe("the slots and the sections are two halves of one document", () => {
     expect(new Set(inMarkup).size).toBe(inMarkup.length);
   });
 
-  // The four figures spelled out in the authored prose of the results half, found
+  // The four figures spelled out in the authored prose of the measurements page, found
   // by re-reading every honest-negative sentence against the numbers printed under
   // it. A word is as much a figure as a numeral: "Nine findings" over eight
   // findings is the same defect as a stale F1, and the markup carries no test of

@@ -1,24 +1,23 @@
-/** The static figures below the control room, drawn as SVG.
+/** The static figures on the measurements page, drawn as SVG.
  *
  * Three of them, and each one exists because a claim on this page is easier to
  * check as a picture than as a sentence:
  *
- *   - `crossingRuleDiagram` is the counting rule itself, in the same geometry the
- *     live diagram uses -- a gate at zero, time to the right, one line per
- *     vehicle. The explanation and the running chart are therefore the same
- *     picture rather than two things a reader has to trust agree. It carries all
- *     four cases at once: a counted crossing, a band stepped clean over, a band
- *     sat inside, and a vehicle past the segment's ends.
+ *   - `crossingRuleDiagram` is the counting rule itself, drawn as a time-space
+ *     diagram -- a gate at zero, time to the right, one line per vehicle -- so a
+ *     count is visibly a path changing sides. It carries all four cases at
+ *     once: a counted crossing, a band stepped clean over, a band sat inside,
+ *     and a vehicle past the segment's ends.
  *   - `robustnessSmallMultiples` is four degradation protocols side by side, one
  *     panel each, three trackers per panel.
  *   - `matchedControlsChart` is the scale survey's negative result WITH its
  *     controls, which is what makes "not measurable" a measurement.
  *
- * Why SVG and not canvas, when the live diagram is canvas: these figures never
- * change, and an SVG's marks can be coloured by CSS class. That means the theme
- * toggle recolours them with no redraw, they survive with the engine stopped, and
- * they scale to a phone without a device-pixel-ratio dance. The live diagram
- * redraws sixty times a second and canvas is right for that; nothing here does.
+ * Why SVG and not canvas, when the live demo draws on canvas: these figures
+ * never change, and an SVG's marks can be coloured by CSS class. That means the
+ * theme toggle recolours them with no redraw, they need no engine at all, and
+ * they scale to a phone without a device-pixel-ratio dance. The live demo
+ * redraws every frame and canvas is right for that; nothing here does.
  *
  * No chart library. The page's headline claim is that nothing leaves the device
  * after load, so a chart fetched from another origin would make it false -- and
@@ -439,7 +438,7 @@ export function crossingRuleDiagram(): SVGSVGElement {
 }
 
 /** A triangle on the gate line: direction is shape, so it survives greyscale,
- * colour blindness and a printout. The same mark the live diagram draws. */
+ * colour blindness and a printout. */
 function markerPath(at: Point): string {
   const size = 6;
   return (

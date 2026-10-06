@@ -59,6 +59,7 @@ function digestsOf(paths) {
 
 const inputs = [
   join(web, "index.html"),
+  join(web, "measurements.html"),
   join(web, "vite.config.ts"),
   join(web, "tsconfig.json"),
   join(web, "package.json"),

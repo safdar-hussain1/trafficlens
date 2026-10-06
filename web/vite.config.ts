@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { defineConfig } from "vite";
 
 // docs/ is the GitHub Pages site root, so the production build lands there and
@@ -29,5 +31,14 @@ export default defineConfig({
     // does reach the build may become a data: URL, because an inlined copy of
     // a file is no longer that file.
     assetsInlineLimit: 0,
+    // Two pages: the live demo, and the measurements behind it. Each has its
+    // own entry, so the demo never downloads the results code and the
+    // measurements page never downloads the detector runtime.
+    rollupOptions: {
+      input: {
+        index: resolve(import.meta.dirname, "index.html"),
+        measurements: resolve(import.meta.dirname, "measurements.html"),
+      },
+    },
   },
 });

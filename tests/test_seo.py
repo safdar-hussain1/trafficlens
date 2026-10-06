@@ -215,12 +215,66 @@ def test_the_page_has_exactly_one_h1(side):
     assert _parse(side).h1 == 1
 
 
+MEASUREMENTS = SITE + "measurements.html"
+
+
 @pytest.mark.parametrize("base", [ROOT / "web" / "public", ROOT / "docs"], ids=["template", "published"])
-def test_the_sitemap_lists_the_page_with_a_literal_lastmod(base):
+def test_the_sitemap_lists_both_pages_each_with_a_literal_lastmod(base):
     text = (base / "sitemap.xml").read_text(encoding="utf-8")
-    assert f"<loc>{SITE}</loc>" in text
-    dates = re.findall(r"<lastmod>([^<]*)</lastmod>", text)
-    assert len(dates) == 1, dates
-    # A real calendar date written into the file, so the build stays
-    # byte-reproducible; the parse fails on anything else.
-    dt.date.fromisoformat(dates[0])
+    entries = re.findall(r"<url>(.*?)</url>", text, re.DOTALL)
+    locations = [re.search(r"<loc>([^<]*)</loc>", entry).group(1) for entry in entries]
+    assert locations == [SITE, MEASUREMENTS]
+    for entry in entries:
+        dates = re.findall(r"<lastmod>([^<]*)</lastmod>", entry)
+        assert len(dates) == 1, dates
+        # A real calendar date written into the file, so the build stays
+        # byte-reproducible; the parse fails on anything else.
+        dt.date.fromisoformat(dates[0])
+
+
+#: The second page, on both sides. Its head follows the same standard as the
+#: demo page's, with its own canonical URL and an article, not an application.
+MEASURE_SIDES = {
+    "template": ROOT / "web" / "measurements.html",
+    "published": ROOT / "docs" / "measurements.html",
+}
+
+
+def _parse_measurements(side: str) -> _Page:
+    parser = _Page()
+    parser.feed(MEASURE_SIDES[side].read_text(encoding="utf-8"))
+    return parser
+
+
+@pytest.mark.parametrize("side", sorted(MEASURE_SIDES))
+def test_the_measurements_page_has_a_complete_head_of_its_own(side):
+    page = _parse_measurements(side)
+    assert page.lang == "en"
+    assert page.title and len(page.title) <= 60, (len(page.title or ""), page.title)
+    assert page.title.startswith("TrafficLens — ")
+    description = page.one("description")
+    assert 120 <= len(description) <= 160, (len(description), description)
+    assert page.one("author") == "Safdar Hussain"
+    assert page.one("google-site-verification") == SEARCH_CONSOLE_TOKEN
+    canonical = [link.get("href") for link in page.links if link.get("rel") == "canonical"]
+    assert canonical == [MEASUREMENTS]
+    assert page.one("og:url") == MEASUREMENTS
+    for key in ("og:title", "twitter:title"):
+        assert page.one(key) == page.title, key
+    for key in ("og:description", "twitter:description"):
+        assert page.one(key) == description, key
+    assert page.one("og:image") == SITE + "og-image.png"
+    assert page.one("twitter:card") == "summary_large_image"
+    assert page.h1 == 1
+
+
+@pytest.mark.parametrize("side", sorted(MEASURE_SIDES))
+def test_the_measurements_page_names_its_author_in_structured_data(side):
+    page = _parse_measurements(side)
+    assert len(page.ld) == 1, "expected one JSON-LD block"
+    article = json.loads(page.ld[0])
+    assert article["@type"] == "TechArticle"
+    assert article["url"] == MEASUREMENTS
+    assert article["description"] == page.one("description")
+    assert article["author"]["name"] == "Safdar Hussain"
+    assert set(article["author"]["sameAs"]) == {PROFILE, LINKEDIN}

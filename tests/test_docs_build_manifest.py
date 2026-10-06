@@ -122,3 +122,25 @@ def test_the_published_index_references_only_files_that_shipped(manifest: dict) 
     assert referenced, "docs/index.html references no assets at all"
     for target in referenced:
         assert f"docs/{target}" in outputs, f"index.html points at {target}, which is not in docs/"
+
+
+def test_the_measurements_page_references_only_files_that_shipped(manifest: dict) -> None:
+    """The second page, checked the same way.
+
+    Its links back to the demo page -- "./", "./#how", "./?selftest=1" -- name a
+    page rather than a file, so they are resolved to the page they open: the
+    demo page's own index.html, which must have shipped too.
+    """
+    page = (DOCS / "measurements.html").read_text()
+    outputs = set(manifest["outputs"])
+    referenced = [
+        fragment.split('"')[0]
+        for marker in ('src="./', 'href="./')
+        for fragment in page.split(marker)[1:]
+    ]
+    assert referenced, "docs/measurements.html references no assets at all"
+    for target in referenced:
+        path = target.split("#")[0].split("?")[0] or "index.html"
+        assert f"docs/{path}" in outputs, (
+            f"measurements.html points at {target}, which is not in docs/"
+        )

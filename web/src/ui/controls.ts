@@ -1,13 +1,13 @@
-/** The parts of the control room that are markup rather than canvas: the
- * backend badge, the panels, the source switcher and the theme.
+/** The parts of the demo that are markup rather than canvas: the status pill,
+ * the source tabs, the theme and the element lookup.
  *
  * Every writer here takes what was actually measured and prints it, or prints
  * nothing. There is no default number anywhere in this file. */
 
 import type { BackendProbe } from "../runtime/backend";
-import { formatCount, formatMs, formatFps, formatClock, NO_VALUE } from "./format";
+import { formatFps, formatMs } from "./format";
 import type { Cadence } from "./format";
-import type { SourceSpec } from "./sources";
+import type { ReadoutElements } from "./readout";
 import { SOURCES } from "./sources";
 
 export const THEME_STORAGE_KEY = "trafficlens-theme";
@@ -22,31 +22,24 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
-export interface Elements {
+export interface Elements extends ReadoutElements {
   readonly badge: HTMLElement;
+  readonly runState: HTMLElement;
+  readonly perf: HTMLElement;
   readonly themeToggle: HTMLButtonElement;
   readonly videoCanvas: HTMLCanvasElement;
-  readonly chartCanvas: HTMLCanvasElement;
   readonly stage: HTMLElement;
   readonly handles: {
     readonly start: HTMLButtonElement;
     readonly body: HTMLButtonElement;
     readonly end: HTMLButtonElement;
   };
+  readonly gateHint: HTMLElement;
   readonly emptyState: HTMLElement;
+  readonly launchButton: HTMLButtonElement;
   readonly emptyText: HTMLElement;
   readonly progress: HTMLProgressElement;
-  readonly videoNote: HTMLElement;
   readonly videoCaption: HTMLElement;
-  readonly chartNote: HTMLElement;
-  readonly totalCount: HTMLElement;
-  readonly totalUnit: HTMLElement;
-  readonly countingSince: HTMLElement;
-  readonly classCounts: HTMLTableElement;
-  readonly directionCounts: HTMLTableElement;
-  readonly speedReadout: HTMLElement;
-  readonly speedReason: HTMLElement;
-  readonly incidents: HTMLElement;
   readonly switcher: HTMLElement;
   readonly startButton: HTMLButtonElement;
   readonly resetButton: HTMLButtonElement;
@@ -56,29 +49,28 @@ export interface Elements {
 export function collectElements(): Elements {
   return {
     badge: element("backend-badge"),
+    runState: element("run-state"),
+    perf: element("perf"),
     themeToggle: element<HTMLButtonElement>("theme-toggle"),
     videoCanvas: element<HTMLCanvasElement>("video-canvas"),
-    chartCanvas: element<HTMLCanvasElement>("chart-canvas"),
     stage: element("stage-video"),
     handles: {
       start: element<HTMLButtonElement>("handle-start"),
       body: element<HTMLButtonElement>("handle-body"),
       end: element<HTMLButtonElement>("handle-end"),
     },
+    gateHint: element("gate-hint"),
     emptyState: element("empty-state"),
+    launchButton: element<HTMLButtonElement>("launch-button"),
     emptyText: element("empty-text"),
     progress: element<HTMLProgressElement>("load-progress"),
-    videoNote: element("video-note"),
     videoCaption: element("video-caption"),
-    chartNote: element("chart-note"),
+    vms: element("vms"),
     totalCount: element("total-count"),
-    totalUnit: element("total-unit"),
     countingSince: element("counting-since"),
-    classCounts: element<HTMLTableElement>("class-counts"),
-    directionCounts: element<HTMLTableElement>("direction-counts"),
-    speedReadout: element("speed-readout"),
-    speedReason: element("speed-reason"),
-    incidents: element("incidents"),
+    directionCounts: element("direction-counts"),
+    classCounts: element("class-counts"),
+    feed: element("feed"),
     switcher: element("source-switcher"),
     startButton: element<HTMLButtonElement>("start-button"),
     resetButton: element<HTMLButtonElement>("reset-button"),
@@ -121,14 +113,26 @@ export function currentTheme(): Theme {
   return attribute === "light" || attribute === "dark" ? attribute : systemTheme();
 }
 
+/** The toggle names where it goes, and its icon shows it: a moon while the page
+ * is light, a sun while it is dark. */
 export function renderThemeToggle(button: HTMLButtonElement): void {
   const theme = currentTheme();
   const next = theme === "dark" ? "light" : "dark";
-  button.textContent = theme === "dark" ? "Light theme" : "Dark theme";
+  button.dataset["theme"] = theme;
   button.setAttribute("aria-label", `Switch to the ${next} theme`);
+  button.title = `Switch to the ${next} theme`;
 }
 
-// -- badge --------------------------------------------------------------------
+/** Wire a theme toggle. Shared by both pages. */
+export function installThemeToggle(button: HTMLButtonElement): void {
+  renderThemeToggle(button);
+  button.addEventListener("click", () => {
+    applyTheme(currentTheme() === "dark" ? "light" : "dark");
+    renderThemeToggle(button);
+  });
+}
+
+// -- status -------------------------------------------------------------------
 
 export interface BadgeState {
   readonly probe: BackendProbe | null;
@@ -147,13 +151,14 @@ export interface BadgeState {
  * attribution that was never performed -- measured, and corrected in the
  * numbers file as C12: a run forced onto a software renderer moved the WASM
  * figure by about 2 % while the renderer string changed completely. So on the
- * WASM path the badge says so, rather than naming a GPU that is not running
+ * WASM path the status says so, rather than naming a GPU that is not running
  * anything. */
 const RENDERER_NOT_APPLICABLE = "n/a (wasm path)";
 
-/** What the badge says, decided before any of it is turned into elements.
+/** What the status pill says, decided before any of it is turned into
+ * elements.
  *
- * Separated from `renderBadge` because the decision is what can be wrong: the
+ * Separated from `renderStatus` because the decision is what can be wrong: the
  * renderer attribution above is a claim about a measurement, and a claim needs
  * a test. The suite runs without a DOM, so the DOM half stays a thin mapping
  * over this. */
@@ -161,8 +166,13 @@ export interface BadgeContent {
   readonly ep: "WebGPU" | "WASM";
   /** Empty while the probe is still running. */
   readonly renderer: string;
-  /** ms/frame, fps and cadence, in the order they are shown. */
-  readonly figures: readonly string[];
+  /** The per-frame time, or null before one has been measured. */
+  readonly msPerFrame: string | null;
+  /** Measured detections per second, or null before there are any. */
+  readonly fps: string | null;
+  /** Said only when the detector is NOT running on every frame: that is the
+   * case a visitor would otherwise mistake for a broken demo. */
+  readonly cadence: string | null;
   /** Whether the software-renderer caveat applies to the number beside it. */
   readonly softwareWarning: boolean;
   readonly probed: boolean;
@@ -173,27 +183,24 @@ export function badgeContent(state: BadgeState): BadgeContent {
   if (probe === null) {
     return {
       ep: "WASM",
-      renderer: "Checking what this machine can run…",
-      figures: [],
+      renderer: "",
+      msPerFrame: null,
+      fps: null,
+      cadence: null,
       softwareWarning: false,
       probed: false,
     };
   }
   const onGpu = (state.ep ?? probe.ep) === "webgpu";
-  const figures: string[] = [];
-  if (state.msPerFrame !== null) {
-    figures.push(`${formatMs(state.msPerFrame)} ms/frame`);
-  }
-  if (state.fps !== null) {
-    figures.push(`${formatFps(state.fps)} fps`);
-  }
-  if (state.cadence !== null) {
-    figures.push(`detecting ${state.cadence.label}`);
-  }
   return {
     ep: onGpu ? "WebGPU" : "WASM",
     renderer: onGpu ? probe.renderer : RENDERER_NOT_APPLICABLE,
-    figures,
+    msPerFrame: state.msPerFrame === null ? null : `${formatMs(state.msPerFrame)} ms/frame`,
+    fps: state.fps === null ? null : `${formatFps(state.fps)} fps`,
+    cadence:
+      state.cadence === null || state.cadence.stride === 1
+        ? null
+        : `detecting ${state.cadence.label}`,
     // Only on the path the renderer can affect. Beside a WASM figure the
     // caveat would be describing a device that ran none of it.
     softwareWarning: onGpu && !probe.isHardwareRenderer,
@@ -201,152 +208,100 @@ export function badgeContent(state: BadgeState): BadgeContent {
   };
 }
 
-/** The badge names what is running and what it measured, on this machine, in
- * this session. A software renderer invalidates any hardware claim, so it is
- * called out rather than printed as if it were a GPU -- but only on the path
- * whose timing it can affect; see RENDERER_NOT_APPLICABLE. */
-export function renderBadge(badge: HTMLElement, state: BadgeState): void {
+export type RunState = "checking" | "ready" | "loading" | "live" | "paused";
+
+const RUN_TEXT: Record<RunState, string> = {
+  checking: "Checking this device…",
+  ready: "Ready",
+  loading: "Loading the detector",
+  live: "Live",
+  paused: "Paused",
+};
+
+/** The status pill: a traffic-light dot, the state in words, then what this
+ * machine is running and what it measured. The run state is the live region;
+ * the figures are not, so a screen reader hears "Live" once rather than a frame
+ * rate thirty times a second. */
+export function renderStatus(
+  elements: Pick<Elements, "badge" | "runState" | "perf">,
+  run: RunState,
+  state: BadgeState,
+): void {
   const content = badgeContent(state);
+  elements.badge.dataset["state"] = run;
+  elements.badge.dataset["software"] = String(content.softwareWarning);
+  if (elements.runState.textContent !== RUN_TEXT[run]) {
+    elements.runState.textContent = RUN_TEXT[run];
+  }
   if (!content.probed) {
-    badge.replaceChildren(text("span", "badge__renderer", content.renderer));
+    elements.perf.replaceChildren();
     return;
   }
-  const parts: HTMLElement[] = [
-    text("b", "", content.ep),
-    text("span", "badge__renderer", content.renderer),
-    ...content.figures.map((figure) => text("span", "", figure)),
-  ];
-  if (content.softwareWarning) {
-    parts.push(text("span", "badge__warn", "software renderer — not a hardware timing"));
+
+  const engine = document.createElement("b");
+  engine.textContent = content.ep === "WebGPU" ? "WebGPU" : "WebAssembly";
+  const parts: HTMLElement[] = [engine];
+  const showFigures = run === "live" || run === "paused";
+  if (showFigures && content.fps !== null) {
+    parts.push(span(content.fps));
   }
-  badge.dataset["software"] = String(content.softwareWarning);
-  badge.replaceChildren(...parts);
+  if (showFigures && content.cadence !== null) {
+    parts.push(span(content.cadence));
+  }
+  if (content.softwareWarning) {
+    const warn = span("software renderer");
+    warn.className = "status__warn";
+    warn.title = "Not a hardware timing";
+    parts.push(warn);
+  }
+  elements.perf.replaceChildren(...parts);
+  // The detail a visitor only wants when they ask for it.
+  elements.perf.title = [
+    content.renderer === "" ? null : `Renderer: ${content.renderer}`,
+    showFigures ? content.msPerFrame : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join("\n");
 }
 
-function text(tag: string, className: string, content: string): HTMLElement {
-  const node = document.createElement(tag);
-  if (className !== "") {
-    node.className = className;
-  }
-  node.textContent = content;
+function span(text: string): HTMLElement {
+  const node = document.createElement("span");
+  node.textContent = text;
   return node;
 }
 
-// -- panels -------------------------------------------------------------------
+// -- source tabs ----------------------------------------------------------------
 
-function renderFigures(
-  table: HTMLTableElement,
-  rows: readonly (readonly [string, number])[],
-): void {
-  const body = table.tBodies[0] ?? table.createTBody();
-  body.replaceChildren(
-    ...rows.map(([label, value]) => {
-      const row = document.createElement("tr");
-      row.dataset["zero"] = String(value === 0);
-      const th = document.createElement("th");
-      th.scope = "row";
-      th.textContent = label;
-      const td = document.createElement("td");
-      td.textContent = formatCount(value);
-      row.append(th, td);
-      return row;
-    }),
-  );
-}
+const SVG_NS = "http://www.w3.org/2000/svg";
 
-export interface PanelState {
-  readonly source: SourceSpec;
-  readonly total: number;
-  readonly perClass: readonly (readonly [string, number])[];
-  readonly perDirection: readonly (readonly [string, number])[];
-  readonly countingSince: number | null;
-  readonly wrongWay: readonly string[];
-}
+/** One small line icon per source, drawn as paths rather than an icon font. */
+const SOURCE_ICONS: Readonly<Record<string, readonly string[]>> = {
+  motorway: ["M6.5 3 3 17", "M13.5 3 17 17", "M10 3.5v2.4", "M10 8.8v2.4", "M10 14.1v2.4"],
+  street: ["M3 6.5h14", "M3 13.5h14", "M5 8.5v3", "M8.3 8.5v3", "M11.7 8.5v3", "M15 8.5v3"],
+  webcam: ["M3.2 6.5h9.6a1.2 1.2 0 0 1 1.2 1.2v4.6a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 12.3V7.7a1.2 1.2 0 0 1 1.2-1.2Z", "M14 9.2 18 7v6l-4-2.2"],
+};
 
-/** What the incidents panel is entitled to say.
- *
- * Split out from the rendering, and pure, because the panel used to contradict
- * itself: an uncalibrated source printed "none possible" and returned, but the
- * two incident kinds do not have the same precondition. Stopped-vehicle
- * detection compares a CALIBRATED speed against a threshold, so it really is
- * impossible without a survey. A wrong-way crossing needs no speed at all --
- * only a gate that names the direction it expects, which the motorway gate
- * does. So the panel would declare incidents impossible on the very source that
- * can produce one, and then be overwritten with the list of them. */
-export type IncidentState =
-  | { readonly kind: "alerts"; readonly lines: readonly string[] }
-  | { readonly kind: "none"; readonly reason: string }
-  | { readonly kind: "impossible"; readonly reason: string };
-
-const WRONG_WAY_WATCHED =
-  "Stopped-vehicle detection needs a calibrated speed and this camera has none, so only wrong-way crossings are watched for here.";
-
-const NOTHING_WATCHED =
-  "Stopped-vehicle detection needs a calibrated speed, and this gate names no expected direction, so there is nothing here to flag.";
-
-export function incidentState(state: {
-  readonly calibrated: boolean;
-  readonly expectedDirection: string | null;
-  readonly wrongWay: readonly string[];
-}): IncidentState {
-  if (state.wrongWay.length > 0) {
-    return { kind: "alerts", lines: state.wrongWay };
+function sourceIcon(id: string): SVGSVGElement | null {
+  const paths = SOURCE_ICONS[id];
+  if (paths === undefined) {
+    return null;
   }
-  if (state.calibrated) {
-    return { kind: "none", reason: "" };
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 20 20");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  for (const d of paths) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.8");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.append(path);
   }
-  return state.expectedDirection === null
-    ? { kind: "impossible", reason: NOTHING_WATCHED }
-    : { kind: "none", reason: WRONG_WAY_WATCHED };
+  return svg;
 }
-
-export function renderPanels(elements: Elements, state: PanelState): void {
-  elements.totalCount.textContent = formatCount(state.total);
-  elements.totalUnit.textContent = `crossings of ${state.source.gate.name}`;
-  elements.countingSince.textContent =
-    state.countingSince === null
-      ? ""
-      : `Counting from ${formatClock(state.countingSince)}, when the gate last moved.`;
-
-  renderFigures(elements.classCounts, state.perClass);
-  renderFigures(elements.directionCounts, state.perDirection);
-
-  // The refusal, in words, exactly as the engine makes it. An uncalibrated
-  // source has no speed at all -- not a zero, not a blank.
-  elements.speedReadout.textContent = state.source.calibrated ? NO_VALUE : "no speed";
-  elements.speedReason.textContent = state.source.speedNote;
-
-  const incidents = incidentState({
-    calibrated: state.source.calibrated,
-    expectedDirection: state.source.gate.expectedDirection,
-    wrongWay: state.wrongWay,
-  });
-  if (incidents.kind === "alerts") {
-    renderAlerts(elements, incidents.lines);
-    return;
-  }
-  elements.incidents.replaceChildren(
-    text("span", "refusal", incidents.kind === "impossible" ? "none possible" : "none"),
-    ...(incidents.reason === "" ? [] : [text("p", "reason", incidents.reason)]),
-  );
-}
-
-/** Wrong-way crossings are alerts and get the amber treatment, on any source:
- * they need no calibration, only a gate that names the direction it expects. */
-export function renderAlerts(elements: Elements, lines: readonly string[]): void {
-  if (lines.length === 0) {
-    return;
-  }
-  const list = document.createElement("ul");
-  list.className = "alert-list";
-  list.append(...lines.map((line) => text("li", "", line)));
-  elements.incidents.replaceChildren(
-    text("span", "alert", `${lines.length} wrong-way crossing${lines.length === 1 ? "" : "s"}`),
-    list,
-  );
-}
-
-// -- source switcher ----------------------------------------------------------
 
 export function renderSwitcher(
   container: HTMLElement,
@@ -357,7 +312,10 @@ export function renderSwitcher(
     ...SOURCES.map((source) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = source.label;
+      const icon = sourceIcon(source.id);
+      const label = document.createElement("span");
+      label.textContent = source.label;
+      button.append(...(icon === null ? [] : [icon]), label);
       button.setAttribute("aria-pressed", String(source.id === selected));
       button.addEventListener("click", () => {
         onSelect(source.id);

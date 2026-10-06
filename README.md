@@ -13,9 +13,11 @@ it, WebAssembly where it does not) and no frame is ever uploaded.
 
 **Live demo: <https://safdar-hussain1.github.io/trafficlens/>** — pick one of the
 two bundled clips or your own webcam, press Start, drag the gate where you want
-it, and watch the count. Everything runs locally in the tab.
+it, and watch the count. Everything runs locally in the tab. The measured results
+behind it have a page of their own:
+<https://safdar-hussain1.github.io/trafficlens/measurements.html>.
 
-![The TrafficLens control room counting the motorway clip: a gate drawn across the road with detection boxes on the cars, and a time-space diagram marking each counted crossing](web/public/og-image.png)
+![The TrafficLens live demo counting the motorway clip: a yellow counting line across the road, detection boxes on the cars, and an amber LED counter beside the video](web/public/og-image.png)
 
 Every number below is read from a JSON file under [`reports/`](reports/), and
 `tests/test_docs_numbers.py` fails if this file and those reports disagree.
@@ -787,16 +789,18 @@ src/trafficlens/
   samples.py     the sample-clip fetcher
   cli.py         run / calibrate / fetch-samples / export-model, and the serve and bench placeholders
 web/
-  index.html     the page template: head, section slots, footer
+  index.html     the demo page: the live demo, how it works, the accuracy tally
+  measurements.html  the measurements page: head and the section slots the results fill
   public/        copied into docs/ as-is: the ONNX graph, the onnxruntime-web runtime, the clips,
                  fonts, the three cards, favicon, share image and sitemap
   src/
     engine/      the TypeScript mirror: geometry, gate, kalman, associate, tracker, homography, speed
     runtime/     onnxruntime-web session, preprocessing, decoding, model cache
-    ui/          the page: controls, overlay, charts, results sections
+    ui/          the pages: controls, overlay, LED counter, readout, results sections
     generated/   constants.ts and reports.ts, both generated and never hand-edited
     fixtures/    the parity fixture the Python engine writes
-    main.ts      the entry point: the page, ?selftest=1 and ?measure=1
+    main.ts      the demo page's entry: the demo, ?selftest=1 and ?measure=1
+    measurements.ts  the measurements page's entry
 configs/         motorway, street and webcam session configs
 data/            the hand-labelled crossings, their protocol, the scale-survey fixture; samples/ is fetched
 tests/           the Python suite, including the guards over reports/, the documents and docs/
@@ -836,10 +840,10 @@ boundary cases are fixtures too, replayed in the browser on the live site.
 | vite | >=8.2.0 <9.0.0 | the site build; output is `docs/` |
 | vitest | >=3.2.0 <4.0.0 | the browser engine's suite |
 
-The page has no UI framework, no chart library and no font CDN. Fonts are served
-from the repository because the page claims that nothing about a frame you load
-leaves your device, and a request to a third-party font host on every view would
-make that claim false.
+The site has no UI framework, no chart library and no font CDN. Its typeface is
+served from the repository because the page claims that nothing about a frame you
+load leaves your device, and a request to a third-party font host on every view
+would make that claim false.
 
 ---
 
@@ -941,7 +945,7 @@ assets are not, and each carries its own notice beside the file.
 | `web/public/models/yolo11n-480.onnx` | **AGPL-3.0** | An ONNX export of Ultralytics YOLO11n. Ultralytics publishes YOLO11 and its pretrained checkpoints under the GNU Affero General Public License v3.0, and exporting a checkpoint to another file format does not change its licence. The AGPL's network clause is the part that matters for a hosted page. Full statement in [MODEL_CARD.md](web/public/models/MODEL_CARD.md). |
 | `motorway-a40` clip | CC BY 3.0 | "Motorway A40 – on bridge above the traffic", by the *Sounds of Changes* project, via Wikimedia Commons. **Changed:** excerpted to 20.0 s, scaled to 960x540, re-encoded to H.264, audio removed. |
 | `street-aisle` clip | CC BY 4.0 | `person-bicycle-car-detection` from Intel Corporation's IoT DevKit `sample-videos`. **Changed:** excerpted to 30.0 s, re-encoded, audio removed, renamed. |
-| Archivo, IBM Plex Sans, IBM Plex Mono | SIL OFL 1.1 | Latin subsets downloaded verbatim from Google Fonts. Copyright 2020 The Archivo Project Authors; copyright 2017 IBM Corp. with Reserved Font Name "Plex". Licence text and source URLs in [fonts/NOTICE.md](web/public/fonts/NOTICE.md). |
+| Overpass | SIL OFL 1.1 | The latin subset, downloaded verbatim from Google Fonts. Copyright 2021 The Overpass Project Authors. Licence text and source URL in [fonts/NOTICE.md](web/public/fonts/NOTICE.md). |
 
 Both clips are Creative Commons **Attribution** licences, and both files served here
 were **transcoded and excerpted** — a modification the licence requires be

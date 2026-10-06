@@ -292,14 +292,14 @@ export function figures(items: readonly (readonly [string, string])[]): HTMLElem
   );
 }
 
-/** One stat tile: a label, a figure set large in mono, and an optional note.
+/** One stat tile: a label, a figure set large, and an optional note.
  *
- * The same vocabulary the control room above uses for a live count -- an
- * uppercase label over a big mono figure -- so a measurement taken last month
- * and a measurement taken in this tab read as one instrument rather than as a
- * dashboard and a report stapled together. `lead` marks the one figure a row is
- * about; it is drawn as a rule in the structural accent, which is the only
- * colour this page spends on anything that is not a chart mark. */
+ * A label over a large figure, which is how the demo page shows a live count
+ * too, so a measurement taken last month and a count taken in the visitor's tab
+ * read as one instrument rather than as a dashboard and a report stapled
+ * together. `lead` marks the one figure a row is about; it is drawn as a rule in
+ * the structural accent, which is the only colour this page spends on anything
+ * that is not a chart mark. */
 export interface Tile {
   readonly label: string;
   readonly value: string;

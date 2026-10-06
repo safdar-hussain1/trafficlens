@@ -396,13 +396,15 @@ def test_every_published_number_occurs_in_its_own_source_report():
 # Each entry pins the key's baked value to the report cell it came from, which is
 # what COVERAGE does for the figures the page does print.
 
-#: The TypeScript that renders the results half. A baked key counts as read if its
+#: The TypeScript that renders baked figures: the measurements page's sections,
+#: and the accuracy tally on the demo page. A baked key counts as read if its
 #: name appears in one of these.
 RENDERING_SOURCES = (
     "web/src/ui/kit.ts",
     "web/src/ui/figures.ts",
     "web/src/ui/results.ts",
     "web/src/ui/results-speed.ts",
+    "web/src/ui/accuracy.ts",
 )
 
 #: (baked key, exact path in the baked object, pointer into the source report).
@@ -431,7 +433,6 @@ UNRENDERED = [
     ("meanPeriodU", "speedReal/guardrailControls/bands/5/meanPeriodU", "anchor_candidates/0/matched_controls/5/mean_period_u"),
     ("methodsCompared", "robustness/trackerSeparation/methodsCompared", "questions/tracker_separation/methods_compared"),
     ("monotonic", "speedSynthetic/monotonic", "monotonic"),
-    ("nGroundTruth", "counting/methods/0/nGroundTruth", "methods/engine+gate/full/n_ground_truth"),
     ("publishedHalfWidthPx", "tracking/gateRegionSweep/publishedHalfWidthPx", "gate_region_sweep/published_half_width_px"),
     ("recallCeiling", "robustness/protocols/0/entries/5/recallCeiling", "protocols/frame_rate/entries/5/resolution/reachability/recall_ceiling"),
     ("separateUndegraded", "robustness/trackerSeparation/separateUndegraded", "questions/tracker_separation/trackers_separate_on_undegraded_footage"),
@@ -534,17 +535,20 @@ def test_the_flagship_clip_speed_is_in_the_reports_but_not_on_the_page():
     "path",
     [
         "web/index.html",
+        "web/measurements.html",
         "web/src/ui/kit.ts",
         "web/src/ui/results.ts",
         "web/src/ui/results-speed.ts",
         "web/src/ui/figures.ts",
+        "web/src/ui/accuracy.ts",
         "docs/index.html",
+        "docs/measurements.html",
     ],
 )
 def test_no_authored_or_published_surface_carries_that_speed(path):
-    """The prohibition is about the page, so it is asserted over the page --
-    the authored markup, the modules that write the results sections, and the
-    published entry point."""
+    """The prohibition is about the pages, so it is asserted over the pages --
+    the authored markup, the modules that write baked figures into them, and the
+    published copies."""
     target = ROOT / path
     assert target.exists(), f"{path} is missing; the guard must not pass by absence"
     text = target.read_text(encoding="utf-8", errors="ignore")
@@ -558,6 +562,8 @@ def test_no_authored_or_published_surface_carries_that_speed(path):
 REDACTION_PROSE = (
     "web/index.html",
     "docs/index.html",
+    "web/measurements.html",
+    "docs/measurements.html",
     "web/public/CALIBRATION.md",
     "docs/CALIBRATION.md",
     "README.md",

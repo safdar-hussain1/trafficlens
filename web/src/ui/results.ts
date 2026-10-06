@@ -1,4 +1,4 @@
-/** The measured results, below the control room.
+/** The measured results: the sections of the measurements page.
  *
  * The division of labour with `index.html` is deliberate and it is the rule this
  * module is built around:
@@ -14,14 +14,14 @@
  * four figures restated where they had stopped being true.
  *
  * What changed, and why the shape of this module changed with it: the results
- * half read as an article. It is a dashboard now. Each section leads with a row
- * of stat tiles -- the same uppercase-label-over-big-mono-figure the control room
- * uses for a live count -- then the chart or the compact table, then a
- * single-line caption. The protocol strips, the report's own verdict prose, the
- * level-by-level tables and the caveats have not been deleted; they are behind a
- * disclosure per section. **The words moved. The numbers did not.** A visitor who
- * never opens one still gets every headline figure, and one who is checking gets
- * every condition it was measured under.
+ * read as an article. They are a dashboard now. Each section leads with a row of
+ * stat tiles -- a label over a large figure, the way the demo page shows a live
+ * count -- then the chart or the compact table, then a single-line caption. The
+ * protocol strips, the report's own verdict prose, the level-by-level tables and
+ * the caveats have not been deleted; they are behind a disclosure per section.
+ * **The words moved. The numbers did not.** A visitor who never opens one still
+ * gets every headline figure, and one who is checking gets every condition it
+ * was measured under.
  *
  * Where a number could not be sourced from a report, it is absent rather than
  * approximated. The whole-loop backend timings are the case that came up: they

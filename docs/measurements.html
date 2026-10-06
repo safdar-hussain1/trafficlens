@@ -1,0 +1,351 @@
+<!doctype html>
+<!-- TrafficLens · built by Safdar Hussain · https://github.com/safdar-hussain1 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="author" content="Safdar Hussain" />
+    <title>TrafficLens — measured accuracy, robustness and limits</title>
+    <meta
+      name="description"
+      content="How accurately TrafficLens counts, scored against hand-labelled crossings, plus robustness to worse video, tracking identity, speed and what it does badly."
+    />
+    <meta name="google-site-verification" content="0SIEfExLTSQj1qvnHWF5A5fY58KVl2lpIEnePP9CtI0" />
+    <link rel="canonical" href="https://safdar-hussain1.github.io/trafficlens/measurements.html" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0a0e12" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Safdar Hussain" />
+    <meta property="og:title" content="TrafficLens — measured accuracy, robustness and limits" />
+    <meta
+      property="og:description"
+      content="How accurately TrafficLens counts, scored against hand-labelled crossings, plus robustness to worse video, tracking identity, speed and what it does badly."
+    />
+    <meta property="og:url" content="https://safdar-hussain1.github.io/trafficlens/measurements.html" />
+    <meta property="og:image" content="https://safdar-hussain1.github.io/trafficlens/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The TrafficLens live demo counting a motorway clip: a yellow counting line across the road, detection boxes on the cars, and an amber LED counter beside the video."
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TrafficLens — measured accuracy, robustness and limits" />
+    <meta
+      name="twitter:description"
+      content="How accurately TrafficLens counts, scored against hand-labelled crossings, plus robustness to worse video, tracking identity, speed and what it does badly."
+    />
+    <meta name="twitter:image" content="https://safdar-hussain1.github.io/trafficlens/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "How well TrafficLens counts",
+        "description": "How accurately TrafficLens counts, scored against hand-labelled crossings, plus robustness to worse video, tracking identity, speed and what it does badly.",
+        "url": "https://safdar-hussain1.github.io/trafficlens/measurements.html",
+        "image": "https://safdar-hussain1.github.io/trafficlens/og-image.png",
+        "isPartOf": { "@type": "WebSite", "url": "https://safdar-hussain1.github.io/trafficlens/" },
+        "author": {
+          "@type": "Person",
+          "name": "Safdar Hussain",
+          "url": "https://github.com/safdar-hussain1",
+          "sameAs": [
+            "https://github.com/safdar-hussain1",
+            "https://www.linkedin.com/in/safdar-hussain-a8a61b248"
+          ]
+        }
+      }
+    </script>
+
+    <script>
+      // Ahead of first paint: the stored theme, exactly as on the demo page.
+      try {
+        var stored = localStorage.getItem("trafficlens-theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {
+        // Storage unavailable: the page follows the operating system.
+      }
+    </script>
+    <script type="module" crossorigin src="./assets/measurements-BqH6IH4N.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/styles-C3-YtYKd.js">
+    <link rel="modulepreload" crossorigin href="./assets/sources-BoAOmvsF.js">
+    <link rel="modulepreload" crossorigin href="./assets/controls-C27mn1vl.js">
+    <link rel="modulepreload" crossorigin href="./assets/kit-o5pvAdGf.js">
+    <link rel="stylesheet" crossorigin href="./assets/styles-CoEveCyC.css">
+  </head>
+  <body class="page-measure">
+    <a class="skip-link" href="#results">Skip to the measurements</a>
+
+    <header class="site-nav">
+      <div class="wrap site-nav__inner">
+        <a class="brand" href="./">
+          <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <rect width="32" height="32" rx="8" fill="#0a0e12" />
+            <path d="M6 18h20" stroke="#f7b500" stroke-width="4" stroke-linecap="round" />
+            <path d="M7 25h4M14 25h4M21 25h4" stroke="#f1f0ea" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+          <span class="brand__name">TrafficLens</span>
+        </a>
+        <nav class="site-nav__links" aria-label="Site">
+          <a href="./">Live demo</a>
+          <a href="./#how">How it works</a>
+          <a href="measurements.html" aria-current="page">Measurements</a>
+          <a class="site-nav__source" href="https://github.com/safdar-hussain1/trafficlens">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+            <span>Source</span>
+          </a>
+        </nav>
+        <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="Switch theme">
+          <svg class="theme-toggle__moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
+          <svg class="theme-toggle__sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></g></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <header class="measure-head">
+        <div class="wrap">
+          <h1>How well TrafficLens counts</h1>
+          <p class="measure-head__lede">
+            Every figure on this page was produced by a benchmark script in the repository and is read
+            from its report when the site is built, so the page cannot drift from the measurement. The
+            numbers in the live demo are different: those are measured in your own browser.
+          </p>
+          <a class="text-link" href="./">Back to the live demo</a>
+        </div>
+      </header>
+
+      <div class="wrap measure__layout">
+        <!-- Not a numbered sequence: these are the questions the project asked, and
+             they were not asked in this order. The list is for jumping, nothing
+             more. -->
+        <nav class="toc" aria-label="On this page">
+          <p class="toc__label">On this page</p>
+          <ul>
+            <li><a href="#crossing-rule">How a crossing is decided</a></li>
+            <li><a href="#counting-accuracy">Counting accuracy</a></li>
+            <li><a href="#robustness">Worse input</a></li>
+            <li><a href="#identity">Identity at the line</a></li>
+            <li><a href="#speed">Speed</a></li>
+            <li><a href="#negatives">What it does badly</a></li>
+            <li><a href="#architecture">How it is built</a></li>
+            <li><a href="#reference">Reference</a></li>
+          </ul>
+        </nav>
+
+          <div id="results">
+            <section class="section" id="crossing-rule">
+              <h2>How a crossing is decided</h2>
+              <p class="lede">
+                A gate is a directed line <strong>segment</strong>, not a line. Every frame, each
+                tracked vehicle's anchor moves from one point to the next; if that step's path meets
+                the segment, the vehicle is counted once and never again.
+              </p>
+              <div data-results="rule-diagram"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="counting-accuracy">
+              <h2>Counting accuracy</h2>
+              <p class="lede">
+                Every crossing scored one by one against a hand-labelled set, and the gate rule
+                measured against the two shortcuts it replaces.
+              </p>
+              <div data-results="counting"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="robustness">
+              <h2>What happens when the input gets worse</h2>
+              <p class="lede">
+                The same stream degraded four ways — decimated, dropped, starved of detections and
+                jittered — with every method re-scored at every level.
+              </p>
+              <div data-results="robustness"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="identity">
+              <h2>What identities cost at the gate</h2>
+              <p class="lede">
+                Crossing accuracy can hide an identity problem: a split track still produces one
+                count. This scores the identities themselves, around the gate, with the counting rule
+                held fixed.
+              </p>
+              <div data-results="tracking"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="speed">
+              <h2>Speed, in two tiers</h2>
+              <p class="lede">
+                Against a synthetic scene the truth is exact and the answer is a number. Against the
+                real motorway clip the answer is that no absolute speed can honestly be published at
+                all.
+              </p>
+
+              <h3 class="tier">Tier one: exact truth, and what it excludes</h3>
+              <div data-results="speed-tier-1"></div>
+
+              <hr class="leitlinie leitlinie--tight" />
+
+              <h3 class="tier">Tier two: the real clip has no scale, and here is the proof</h3>
+              <p class="prose-p">
+                <strong>The flagship clip cannot be given a speed at all.</strong> A dedicated survey
+                found no along-road anchor that survives its own controls, so the engine returns
+                nothing for speed on it and no km/h figure derived from it appears anywhere on this
+                page. The parity record carries one, from a matrix reconstructed there to hand two
+                engines the same plane: an instrument, not a calibration.
+              </p>
+              <div data-results="speed-tier-2"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="negatives">
+              <h2>What this does badly</h2>
+              <p class="lede">
+                Nine findings that went against what the project expected. Anyone can publish the
+                number that came out well, and a reader has no way to tell which numbers were not
+                published.
+              </p>
+
+              <div class="findings">
+                <div class="finding">
+                  <h3>The engine's own tracker does not pay for itself on this clip</h3>
+                  <p class="finding__claim">
+                    On clean footage it scores <strong>below</strong> both simpler baselines — by one
+                    event, so read that one as a tie — and lowest of the three at every degraded level
+                    where they differ.
+                  </p>
+                  <div data-results="negative-tracker"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>It stops counting entirely at a low frame rate, and mild box jitter costs it real accuracy</h3>
+                  <p class="finding__claim">
+                    At two frames a second it makes no predictions at all. Per-corner jitter of two
+                    pixels costs it many times the one-event resolution.
+                  </p>
+                  <div data-results="negative-collapse"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>The one degradation it handles gracefully has an undiagnosed cause</h3>
+                  <p class="finding__claim">
+                    The association-floor ablation explains its other collapses and explicitly does
+                    <strong>not</strong> explain this one. It is <strong>undiagnosed</strong>.
+                  </p>
+                  <div data-results="negative-dropout"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>Nothing measures the shipped association floor as better than SORT's, except under detection dropout</h3>
+                  <p class="finding__claim">
+                    Loosening the floor recovers a large amount of accuracy the moment the input
+                    degrades, and nothing at all on undegraded footage, where the two tie exactly.
+                  </p>
+                  <div data-results="negative-floor"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>Quantising the detector was measured and refused</h3>
+                  <p class="finding__claim">
+                    A real saving on download and a real loss of detections. In a counting product a
+                    missed detection is a missed count, so the page pays the full weight.
+                  </p>
+                  <div data-results="negative-int8"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>The band rule fails on crossing time, not crossing count</h3>
+                  <p class="finding__claim">
+                    Its totals look almost right and it lands hardly any of them on the frame the
+                    crossing happened. The per-frame rule fails the other way and over-counts wildly.
+                  </p>
+                  <div data-results="negative-band"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>Every accuracy figure here is an upper bound</h3>
+                  <p class="finding__claim">
+                    One clip, one gate, and that gate was chosen for label reliability — the easiest
+                    case for association as well as for labelling.
+                  </p>
+                  <div data-results="negative-one-clip"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>The flagship clip cannot be given a speed at all</h3>
+                  <p class="finding__claim">
+                    A scale uncertainty this wide is not a speed figure, so the engine returns nothing
+                    and the config ships with no calibration block.
+                  </p>
+                  <div data-results="negative-scale"></div>
+                </div>
+
+                <div class="finding">
+                  <h3>Four identity claims this project does not make</h3>
+                  <p class="finding__claim">
+                    Rendered from the tracking benchmark's own record rather than paraphrased.
+                  </p>
+                  <div data-results="negative-tracking"></div>
+                </div>
+              </div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="architecture">
+              <h2>How it is built</h2>
+              <p class="lede">
+                One core, written twice. The Python engine is where the measurement happens; the
+                TypeScript engine is what runs in this tab. Committed fixtures written by the Python
+                engine are replayed through the browser engine in your own browser at
+                <a href="./?selftest=1">?selftest=1</a>.
+              </p>
+              <div data-results="architecture"></div>
+            </section>
+
+            <hr class="leitlinie" />
+
+            <section class="section" id="reference">
+              <h2>Reference</h2>
+              <p class="lede">
+                The command line, and the objects worth reaching for from either language.
+              </p>
+              <div data-results="reference"></div>
+            </section>
+          </div>
+      </div>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap site-foot__inner">
+        <p class="site-foot__credit">
+          <a href="https://github.com/safdar-hussain1">Built by Safdar Hussain</a>. Source on
+          <a href="https://github.com/safdar-hussain1/trafficlens">GitHub</a>.
+        </p>
+        <p class="site-foot__legal">
+          Engine and site MIT. The detector weights are an export of Ultralytics YOLO11n and are
+          AGPL-3.0; see the <a href="models/MODEL_CARD.md">model card</a> beside the graph. Clips:
+          “Motorway A40 – on bridge above the traffic”, the Sounds of Changes project via Wikimedia
+          Commons (CC&nbsp;BY&nbsp;3.0), and Intel IoT DevKit <em>sample-videos</em>
+          (CC&nbsp;BY&nbsp;4.0), both excerpted and re-encoded for this page; details in
+          <a href="clips/NOTICE.md">clips/NOTICE.md</a>. The typeface is Overpass under the SIL OFL
+          1.1; see <a href="fonts/NOTICE.md">fonts/NOTICE.md</a>.
+        </p>
+      </div>
+    </footer>
+
+  </body>
+</html>

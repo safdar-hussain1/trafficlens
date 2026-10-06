@@ -3,8 +3,8 @@
  * Every field here is a claim the interface will make, so the honest ones are
  * the important ones. `calibrated` is false on all three and that is not an
  * omission: no camera reachable from this page has an independent along-road
- * survey, so the engine returns `null` for every speed and the interface says
- * `no speed` rather than showing a pixel-derived guess. The motorway clip is
+ * survey, so the engine returns `null` for every speed and the interface shows
+ * none rather than a pixel-derived guess. The motorway clip is
  * the case worth naming -- a lane-marking survey exists for it, but its
  * along-road scale rests on an assumed 18 m dash period with no independent
  * corroboration, so no km/h figure derived from that clip appears anywhere on
@@ -39,8 +39,6 @@ export interface SourceSpec {
   readonly classes: readonly (readonly [number, string])[];
   readonly gate: GateSpec;
   readonly calibrated: boolean;
-  /** Why there is no speed, in the interface's own words. */
-  readonly speedNote: string;
   /** One line under the video saying what the visitor is looking at. */
   readonly caption: string;
 }
@@ -75,9 +73,8 @@ export const SOURCES: readonly SourceSpec[] = [
       expectedDirection: "toward",
     },
     calibrated: false,
-    speedNote:
-      "This camera has no independent along-road survey, so the engine reports no speed rather than a pixel-derived guess.",
-    caption: "German A40, filmed from an overpass. Three lanes per carriageway.",
+    caption:
+      "German A40, filmed from an overpass. The line spans the three lanes coming toward the camera.",
   },
   {
     id: "street",
@@ -95,12 +92,11 @@ export const SOURCES: readonly SourceSpec[] = [
       expectedDirection: null,
     },
     calibrated: false,
-    speedNote: "This camera has not been surveyed, so the engine reports no speed.",
     caption: "An open paved area from above. A car, a cyclist and a pedestrian cross the aisle.",
   },
   {
     id: "webcam",
-    label: "Webcam",
+    label: "Your camera",
     kind: "camera",
     url: null,
     fps: 30,
@@ -120,8 +116,7 @@ export const SOURCES: readonly SourceSpec[] = [
       expectedDirection: null,
     },
     calibrated: false,
-    speedNote: "An arbitrary camera view has no surveyed geometry, so there is no speed to report.",
-    caption: "Your own camera. The frames are read, detected and discarded in this tab.",
+    caption: "Your own camera. Every frame is read, detected and discarded inside this tab.",
   },
 ];
 
